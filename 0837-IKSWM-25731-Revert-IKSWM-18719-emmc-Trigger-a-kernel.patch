@@ -1,0 +1,37 @@
+From 1325dd70f27cab67c4d0e00f535f42b4cec98500 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Thu, 31 Mar 2016 11:43:18 -0700
+Subject: [PATCH 837/959] IKSWM-25731: Revert "IKSWM-18719:emmc: Trigger a
+ kernel panic when card reports errors"
+
+ No longer needs this debug code.
+
+This reverts commit b4e89dabf8f58067b4fc215efa3703885fbb3b0f.
+
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Change-Id: I7c34c9a90f5c8b9c065c2ce6dae527371e1db1ff
+Reviewed-on: http://gerrit.mot.com/839409
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+---
+ drivers/mmc/host/cmdq_hci.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/drivers/mmc/host/cmdq_hci.c b/drivers/mmc/host/cmdq_hci.c
+index 4aaf03de8dd..7d503937c58 100644
+--- a/drivers/mmc/host/cmdq_hci.c
++++ b/drivers/mmc/host/cmdq_hci.c
+@@ -796,7 +796,6 @@ skip_cqterri:
+ 			mrq->cmdq_req->resp_err = true;
+ 			pr_err("%s: Response error (0x%08x) from card !!!",
+ 					mmc_hostname(mmc), status);
+-			BUG();
+ 		} else {
+ 			mrq->cmdq_req->resp_idx = cmdq_readl(cq_host, CQCRI);
+ 			mrq->cmdq_req->resp_arg = cmdq_readl(cq_host, CQCRA);
+-- 
+2.11.0
+

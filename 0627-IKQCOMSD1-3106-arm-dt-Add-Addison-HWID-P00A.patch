@@ -1,0 +1,31 @@
+From de333ff5aa35c6eeb218d9d38ac84b70e7014f84 Mon Sep 17 00:00:00 2001
+From: liyy13 <liyy13@motorola.com>
+Date: Wed, 20 Jan 2016 11:49:06 +0800
+Subject: [PATCH 627/959] IKQCOMSD1-3106: arm/dt: Add Addison HWID P00A
+
+Change-Id: I9fcea514909d413cdc3e7aafd2f63076dcd31ce6
+Signed-off-by: liyy13 <liyy13@motorola.com>
+Reviewed-on: http://gerrit.mot.com/814498
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-addison-p0.dts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-addison-p0.dts b/arch/arm/boot/dts/qcom/msm8952-addison-p0.dts
+index 5ebd1e237e4..ec9a31b5841 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-addison-p0.dts
++++ b/arch/arm/boot/dts/qcom/msm8952-addison-p0.dts
+@@ -16,5 +16,5 @@
+ #include "msm8952-addison.dtsi"
+ #include "msm8952-moto-fps.dtsi"
+ / {
+-	qcom,board-id = <0x51 0x8000>;
++	qcom,board-id = <0x51 0x8000>, <0x51 0x800a>;
+ };
+-- 
+2.11.0
+

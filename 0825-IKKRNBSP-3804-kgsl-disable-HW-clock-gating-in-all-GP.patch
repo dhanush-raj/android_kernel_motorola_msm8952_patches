@@ -1,0 +1,39 @@
+From 788a4e3eb81c946bec6f8c85584eb140b3c8b747 Mon Sep 17 00:00:00 2001
+From: Fred Fettinger <fettinge@motorola.com>
+Date: Thu, 24 Mar 2016 17:54:46 -0500
+Subject: [PATCH 825/959] IKKRNBSP-3804: kgsl: disable HW clock gating in all
+ GPU blocks
+
+This change is to help determine if HW clock gating is the cause
+of GPU hangs in SurfaceFlinger. According to Qualcomm, the power
+impact of this change should be negligible.
+
+Change-Id: Iec1216b516cc28972ce6e6500d380d309d06bf5c
+Reviewed-on: http://gerrit.mot.com/837469
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/gpu/msm/adreno_a4xx.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/gpu/msm/adreno_a4xx.c b/drivers/gpu/msm/adreno_a4xx.c
+index 01bf2415254..cad2fff34dd 100644
+--- a/drivers/gpu/msm/adreno_a4xx.c
++++ b/drivers/gpu/msm/adreno_a4xx.c
+@@ -551,6 +551,10 @@ static void a4xx_enable_hwcg(struct kgsl_device *device)
+ 		kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL, 0);
+ 	else
+ 		kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL, 0xAAAAAAAA);
++
++	/* MMI_STOPSHIP: Disable HW clock gating in all GPU blocks */
++	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL, 0);
++
+ 	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2, 0);
+ }
+ 
+-- 
+2.11.0
+

@@ -1,0 +1,42 @@
+From 19a6d37e4e09002acc096985bd7827b80659b49d Mon Sep 17 00:00:00 2001
+From: Zac Crosby <zac@motorola.com>
+Date: Wed, 2 Sep 2015 12:13:32 -0500
+Subject: [PATCH 166/959] IKKRNBSP-3366: arm/dts: 8952: Enable ESD detection
+ for TDI panel
+
+Enable ESD detection for TDI panel
+
+Change-Id: I97e899588c7216723b1be3f26a3cfc245e2e1102
+Signed-off-by: Zac Crosby <zac@motorola.com>
+Signed-off-by: Parasuraman <parasur@motorola.com>
+Reviewed-on: http://gerrit.mot.com/784119
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
+index de5bf982e68..b2de75bcfc3 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
+@@ -96,6 +96,12 @@ qcom,mdss-dsi-te-dcs-command = <1>;
+ qcom,mdss-dsi-te-check-enable;
+ qcom,mdss-dsi-te-using-te-pin;
+ 
++qcom,esd-check-enabled;
++qcom,mdss-dsi-panel-status-check-mode = "reg_read";
++qcom,mdss-dsi-panel-status-command = [06 01 00 01 00 00 01 0A];
++qcom,mdss-dsi-panel-status-command-state = "dsi_hs_mode";
++qcom,mdss-dsi-panel-status-value = <0x9c>;
++
+ qcom,panel-supply-entries {
+ 	#address-cells = <1>;
+ 	#size-cells = <0>;
+-- 
+2.11.0
+

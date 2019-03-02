@@ -1,0 +1,45 @@
+From 1d1e893a140582bbd620ae04b68ac915ccf14256 Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Thu, 4 Dec 2014 12:38:53 -0600
+Subject: [PATCH 100/959] IKLOCSEN-1842 drivers/misc/stml0xx: Fix headset
+ button devtree strings
+
+Some of the strings used to get headset detect settings from the
+device tree were incorrect. Replace them with the correct strings.
+
+Change-Id: I005c6c3438134eac14a0444f38b2e74b205ebd10
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/695052
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Hrycay <jason.hrycay@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 99c05500bf6..8f3b484a5ed 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -433,13 +433,13 @@ static struct stml0xx_platform_data *stml0xx_of_init(struct spi_device *spi)
+ 			     &pdata->headset_button_down_debounce);
+ 	of_property_read_u32(np, "headset_button_up_debounce",
+ 			     &pdata->headset_button_up_debounce);
+-	of_property_read_u32(np, "headset_button_0_1_threshold",
++	of_property_read_u32(np, "headset_button_0-1_threshold",
+ 			     &pdata->headset_button_0_1_threshold);
+-	of_property_read_u32(np, "headset_button_1_2_threshold",
++	of_property_read_u32(np, "headset_button_1-2_threshold",
+ 			     &pdata->headset_button_1_2_threshold);
+-	of_property_read_u32(np, "headset_button_2_3_threshold",
++	of_property_read_u32(np, "headset_button_2-3_threshold",
+ 			     &pdata->headset_button_2_3_threshold);
+-	of_property_read_u32(np, "headset_button_3_upper_threshold",
++	of_property_read_u32(np, "headset_button_3-upper_threshold",
+ 			     &pdata->headset_button_3_upper_threshold);
+ 	of_property_read_u32(np, "headset_button_1_keycode",
+ 			     &pdata->headset_button_1_keycode);
+-- 
+2.11.0
+

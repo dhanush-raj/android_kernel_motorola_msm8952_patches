@@ -1,0 +1,62 @@
+From a112aca56e525389a8e2ab84367e6aeaf8e4ea2f Mon Sep 17 00:00:00 2001
+From: Jiang-Li Yuan <jlyuan@motorola.com>
+Date: Fri, 20 May 2016 15:14:30 -0500
+Subject: [PATCH 894/959] IKSWM-39648: Revert "IKSWM-38800: 8952: Reduce the
+ APC voltage bump to 25mV"
+
+ 25mV is not enough to stablize MSM chipset.
+
+This reverts commit 378ae563e608915e76cc931634adce4646fbbbc8.
+Change-Id: I7dadfd49c6f3a5027f413a9b1006ceaed680e425
+
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Change-Id: I7dadfd49c6f3a5027f413a9b1006ceaed680e425
+Reviewed-on: http://gerrit.mot.com/859187
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Reviewed-by: David Ding <dding@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-regulator.dtsi | 24 ++++++++++++------------
+ 1 file changed, 12 insertions(+), 12 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-regulator.dtsi b/arch/arm/boot/dts/qcom/msm8952-regulator.dtsi
+index 75a3e228995..47fce053f8e 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-regulator.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-regulator.dtsi
+@@ -440,19 +440,19 @@
+ 			<0    16      33>, /* NOM + 10mv, TURBO + 20mv */
+ 			<0    0        0>;
+ 		cpr-virtual-corner-init-voltage-adjustment =
+-			<0 0 0 25000 25000 0 0 0>,
+-			<0 0 0 25000 25000 0 0 0>,
+-			<0 0 0 25000 25000 0 0 0>,
+-			<0 0 0 25000 25000 0 0 0>,
+-			<0 0 0 25000 25000 0 0 0>,
+-			<0 0 0 25000 25000 0 0 0>;
++			<0 0 0 50000 50000 0 0 0>,
++			<0 0 0 50000 50000 0 0 0>,
++			<0 0 0 50000 50000 0 0 0>,
++			<0 0 0 50000 50000 0 0 0>,
++			<0 0 0 50000 50000 0 0 0>,
++			<0 0 0 50000 50000 0 0 0>;
+ 		qcom,cpr-virtual-corner-quotient-adjustment =
+-			<0 0 0 41 41 0 0 0>,
+-			<0 0 0 41 41 0 0 0>,
+-			<0 0 0 41 41 0 0 0>,
+-			<0 0 0 41 41 0 0 0>,
+-			<0 0 0 41 41 0 0 0>,
+-			<0 0 0 41 41 0 0 0>;
++			<0 0 0 82 82 0 0 0>,
++			<0 0 0 82 82 0 0 0>,
++			<0 0 0 82 82 0 0 0>,
++			<0 0 0 82 82 0 0 0>,
++			<0 0 0 82 82 0 0 0>,
++			<0 0 0 82 82 0 0 0>;
+ 		qcom,cpr-floor-to-ceiling-max-range =
+ 			<(-1) 30000 30000 30000 30000 50000 50000 50000>,
+ 			<(-1) 30000 30000 30000 30000 50000 50000 50000>,
+-- 
+2.11.0
+

@@ -1,0 +1,214 @@
+From f28eaf7a57fa7e179e9c93e81a51c1547dfabf2b Mon Sep 17 00:00:00 2001
+From: Jaegeuk Kim <jaegeuk@motorola.com>
+Date: Mon, 21 Sep 2015 18:10:34 -0700
+Subject: [PATCH 355/959] IKSWM-3096 - esdfs: drop shared caches to reclaim
+ inodes
+
+There are three namespace mounted by esdfs:
+ - /mnt/runtime/read
+ - /mnt/runtime/write
+ - /mnt/runtime/default
+
+All the files are shared together by f2fs-mounted directory.
+
+Previously, when unlinking files or dirs on a specific namespace, we didn't
+notify to remove all other shared dentry and inode obejcts.
+That results in producing a lot of orphan inodes in f2fs.
+
+This patch removes the dangling objects from all the shared namespace.
+
+Change-Id: I113d3c2d1996cc301e62f4c32fa57bf3b6c74f6a
+Signed-off-by: Jaegeuk Kim <jaegeuk@motorola.com>
+Reviewed-on: http://gerrit.mot.com/785354
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Russell Knize <rknize@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/esdfs/esdfs.h |  6 ++++++
+ fs/esdfs/inode.c | 40 ++++++++++++++++++++++++++++++++++++++++
+ fs/esdfs/main.c  |  2 ++
+ fs/esdfs/super.c | 43 +++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 91 insertions(+)
+
+diff --git a/fs/esdfs/esdfs.h b/fs/esdfs/esdfs.h
+index fd2e4d6158e..e879bb5e665 100644
+--- a/fs/esdfs/esdfs.h
++++ b/fs/esdfs/esdfs.h
+@@ -158,6 +158,8 @@ struct esdfs_dentry_info {
+ /* esdfs super-block data in memory */
+ struct esdfs_sb_info {
+ 	struct super_block *lower_sb;
++	struct super_block *s_sb;
++	struct list_head s_list;
+ 	u32 lower_secid;
+ 	struct esdfs_perms lower_perms;
+ 	struct esdfs_perms upper_perms;	/* root in derived mode */
+@@ -168,6 +170,10 @@ struct esdfs_sb_info {
+ extern struct esdfs_perms esdfs_perms_table[ESDFS_PERMS_TABLE_SIZE];
+ extern unsigned esdfs_package_list_version;
+ 
++void esdfs_drop_shared_icache(struct super_block *, struct inode *);
++void esdfs_drop_sb_icache(struct super_block *, unsigned long);
++void esdfs_add_super(struct esdfs_sb_info *, struct super_block *);
++
+ #define ESDFS_INODE_IS_STALE(i) ((i)->version != esdfs_package_list_version)
+ #define ESDFS_INODE_CAN_LINK(i) (test_opt(ESDFS_SB((i)->i_sb), \
+ 					  DERIVE_LEGACY) || \
+diff --git a/fs/esdfs/inode.c b/fs/esdfs/inode.c
+index 0308e99c2f9..3b962b1e522 100644
+--- a/fs/esdfs/inode.c
++++ b/fs/esdfs/inode.c
+@@ -11,6 +11,7 @@
+  */
+ 
+ #include "esdfs.h"
++#include <linux/fsnotify.h>
+ 
+ static int esdfs_create(struct inode *dir, struct dentry *dentry,
+ 			 umode_t mode, bool want_excl)
+@@ -77,6 +78,8 @@ static int esdfs_unlink(struct inode *dir, struct dentry *dentry)
+ 	dget(lower_dentry);
+ 	lower_dir_dentry = lock_parent(lower_dentry);
+ 
++	esdfs_drop_shared_icache(dir->i_sb, lower_dentry->d_inode);
++
+ 	err = vfs_unlink(lower_dir_inode, lower_dentry);
+ 
+ 	/*
+@@ -104,6 +107,41 @@ out:
+ 	return err;
+ }
+ 
++/* drop all shared dentries from other superblocks */
++void esdfs_drop_sb_icache(struct super_block *sb, unsigned long ino)
++{
++	struct inode *inode = ilookup(sb, ino);
++	struct dentry *dentry, *dir_dentry;
++
++	if (!inode)
++		return;
++
++	dentry = d_find_any_alias(inode);
++
++	if (!dentry) {
++		iput(inode);
++		return;
++	}
++
++	dir_dentry = lock_parent(dentry);
++
++	mutex_lock(&inode->i_mutex);
++	set_nlink(inode, esdfs_lower_inode(inode)->i_nlink);
++	d_drop(dentry);
++	dont_mount(dentry);
++	mutex_unlock(&inode->i_mutex);
++
++	/* We don't d_delete() NFS sillyrenamed files--they still exist. */
++	if (!(dentry->d_flags & DCACHE_NFSFS_RENAMED)) {
++		fsnotify_link_count(inode);
++		d_delete(dentry);
++	}
++
++	unlock_dir(dir_dentry);
++	dput(dentry);
++	iput(inode);
++}
++
+ static int esdfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
+ {
+ 	int err = 0;
+@@ -165,6 +203,8 @@ static int esdfs_rmdir(struct inode *dir, struct dentry *dentry)
+ 	lower_dentry = lower_path.dentry;
+ 	lower_dir_dentry = lock_parent(lower_dentry);
+ 
++	esdfs_drop_shared_icache(dir->i_sb, lower_dentry->d_inode);
++
+ 	err = vfs_rmdir(lower_dir_dentry->d_inode, lower_dentry);
+ 	if (err)
+ 		goto out;
+diff --git a/fs/esdfs/main.c b/fs/esdfs/main.c
+index e91d5255353..e5bf1733758 100644
+--- a/fs/esdfs/main.c
++++ b/fs/esdfs/main.c
+@@ -342,6 +342,8 @@ static int esdfs_read_super(struct super_block *sb, const char *dev_name,
+ 	/* initialize root inode */
+ 	esdfs_derive_perms(sb->s_root);
+ 
++	esdfs_add_super(sbi, sb);
++
+ 	goto out;
+ 
+ out_freeroot:
+diff --git a/fs/esdfs/super.c b/fs/esdfs/super.c
+index 5b9dacbe5fd..baf011be495 100644
+--- a/fs/esdfs/super.c
++++ b/fs/esdfs/super.c
+@@ -17,6 +17,8 @@
+  * vfs inode.
+  */
+ static struct kmem_cache *esdfs_inode_cachep;
++static LIST_HEAD(esdfs_list);
++static DEFINE_SPINLOCK(esdfs_list_lock);
+ 
+ void esdfs_msg(struct super_block *sb, const char *level, const char *fmt, ...)
+ {
+@@ -30,6 +32,45 @@ void esdfs_msg(struct super_block *sb, const char *level, const char *fmt, ...)
+ 	va_end(args);
+ }
+ 
++void esdfs_add_super(struct esdfs_sb_info *sbi, struct super_block *sb)
++{
++	sbi->s_sb = sb;
++	INIT_LIST_HEAD(&sbi->s_list);
++
++	spin_lock(&esdfs_list_lock);
++	list_add_tail(&sbi->s_list, &esdfs_list);
++	spin_unlock(&esdfs_list_lock);
++}
++
++static void esdfs_remove_super(struct esdfs_sb_info *sbi)
++{
++	spin_lock(&esdfs_list_lock);
++	list_del(&sbi->s_list);
++	spin_unlock(&esdfs_list_lock);
++}
++
++void esdfs_drop_shared_icache(struct super_block *sb, struct inode *lower_inode)
++{
++	struct list_head *p;
++	struct esdfs_sb_info *sbi;
++	struct super_block *lower_sb = lower_inode->i_sb;
++
++	spin_lock(&esdfs_list_lock);
++	p = esdfs_list.next;
++	while (p != &esdfs_list) {
++		sbi = list_entry(p, struct esdfs_sb_info, s_list);
++		if (sbi->s_sb == sb || sbi->lower_sb != lower_sb) {
++			p = p->next;
++			continue;
++		}
++		spin_unlock(&esdfs_list_lock);
++		esdfs_drop_sb_icache(sbi->s_sb, lower_inode->i_ino);
++		spin_lock(&esdfs_list_lock);
++		p = p->next;
++	}
++	spin_unlock(&esdfs_list_lock);
++}
++
+ /* final actions when unmounting a file system */
+ static void esdfs_put_super(struct super_block *sb)
+ {
+@@ -45,6 +86,8 @@ static void esdfs_put_super(struct super_block *sb)
+ 	esdfs_set_lower_super(sb, NULL);
+ 	atomic_dec(&s->s_active);
+ 
++	esdfs_remove_super(spd);
++
+ 	kfree(spd);
+ 	sb->s_fs_info = NULL;
+ }
+-- 
+2.11.0
+

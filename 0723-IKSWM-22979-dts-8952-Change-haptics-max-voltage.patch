@@ -1,0 +1,38 @@
+From eee9f6a0602744681ef65c46955587c1d7484ce2 Mon Sep 17 00:00:00 2001
+From: Xiaofei Ma <xiaofei@motorola.com>
+Date: Tue, 1 Mar 2016 09:42:51 -0600
+Subject: [PATCH 723/959] IKSWM-22979: dts: 8952: Change haptics max voltage
+
+DCR resistance is changed causing the
+vibrator voltage drop below operation
+voltage.
+
+Change-Id: I9b498e1e0f046c60ba3ec50a1b5c762b8c40406b
+Signed-off-by: Xiaofei Ma <xiaofei@motorola.com>
+Reviewed-on: http://gerrit.mot.com/827710
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Dmitry Ornatsky <ornatsky@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index c58ae8efbd3..b86e3fbb199 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -851,7 +851,7 @@
+ 		};
+ 
+ 		pmi8950_haptic: qcom,haptic@c000 {
+-			qcom,vmax-mv = <2400>;
++			qcom,vmax-mv = <2900>;
+ 		};
+ 	};
+ };
+-- 
+2.11.0
+

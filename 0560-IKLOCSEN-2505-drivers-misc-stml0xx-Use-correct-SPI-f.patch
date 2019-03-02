@@ -1,0 +1,44 @@
+From bf707f9dcd098a2a990626d678c58919265696fd Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Tue, 15 Dec 2015 10:33:14 -0600
+Subject: [PATCH 560/959] IKLOCSEN-2505: drivers:misc:stml0xx: Use correct SPI
+ frequency
+
+The previously specified 4Mhz was not supported
+by the SPI driver and was always downgraded to
+960Khz.  This change keeps 960Khz for flashing
+and upgrades normal operations to the supported
+4.8Mhz.
+
+Change-Id: Ie9a70d70d9a0b3b30cbae56527f1894bba92acdf
+Signed-off-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/807445
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Gabriel Burca <Gabriel.Burca@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ include/linux/stml0xx.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 06c15485fe7..c70254b2783 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -38,8 +38,8 @@
+ #define ENABLE_VERBOSE_LOGGING 0
+ 
+ /* SPI */
+-#define SPI_FLASH_CLK_SPD_HZ    4000000
+-#define SPI_NORMAL_CLK_SPD_HZ   4000000
++#define SPI_FLASH_CLK_SPD_HZ     960000
++#define SPI_NORMAL_CLK_SPD_HZ   4800000
+ #define SPI_BUFF_SIZE           1152
+ #define SPI_RETRIES             5
+ #define SPI_RETRY_DELAY         20
+-- 
+2.11.0
+

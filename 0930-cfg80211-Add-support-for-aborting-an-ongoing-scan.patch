@@ -1,0 +1,248 @@
+From 2dbcfddd053f68baf52403ad87dac115a747df01 Mon Sep 17 00:00:00 2001
+From: Vidyullatha Kanchanapally <vkanchan@qti.qualcomm.com>
+Date: Fri, 30 Oct 2015 19:14:49 +0530
+Subject: [PATCH 930/959] cfg80211: Add support for aborting an ongoing scan
+
+Implement new functionality for aborting an ongoing scan.
+
+Add NL80211_CMD_ABORT_SCAN to the nl80211 interface. After
+aborting the scan, driver shall provide the scan status by
+calling cfg80211_scan_done().
+
+Mot-CRs-fixed: IKSWN-1560
+
+Reviewed-by: Jouni Malinen <jouni@qca.qualcomm.com>
+Signed-off-by: Vidyullatha Kanchanapally <vkanchan@qti.qualcomm.com>
+Signed-off-by: Sunil Dutt <usdutt@qti.qualcomm.com>
+[change command to take wdev instead of netdev so that it
+ can be used on p2p-device scans]
+Signed-off-by: Johannes Berg <johannes.berg@intel.com>
+Git-commit: 91d3ab46730379e89e1e908c6f62fbcadb3d8f08
+Git-repo: git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+Change-Id: I071841cfea5b0da72f70032d0d99b05678d3d747
+CRs-fixed: 930859
+[vidyullatha@codeaurora.org: backport to 3.10 - This commit includes
+the changes from following commits in enum nl80211_commands in file
+include/uapi/linux/nl80211.h to compile for msm-3.10.
+960d01acf62747d6518694f92be5b06f67473833:
+cfg80211: add WMM traffic stream API,
+66be7d2bcd826344894be09dc385f9f805136b84:
+cfg80211: add ops to query mesh proxy path table,
+6e0bd6c35b021dc73a81ebd1ef79761233c48b50:
+cfg80211: 802.11p OCB mode handling,
+f8d7552e945d38bd8d2e9c23aebf98042ce12302:
+cfg80211: add channel switch started notification,
+1057d35ede5dbf7ed7842357564fb42c9b54ba50:
+cfg80211: introduce TDLS channel switch commands,
+b0d7aa59592b4270531de5ce65dcf18338a2d98c:
+cfg80211: allow wiphy specific regdomain management.]
+Signed-off-by: Vidyullatha Kanchanapally <vidyullatha@codeaurora.org>
+Reviewed-on: https://gerrit.mot.com/906080
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ include/net/cfg80211.h       |  3 ++
+ include/uapi/linux/nl80211.h | 71 ++++++++++++++++++++++++++++++++++++++++++++
+ net/wireless/nl80211.c       | 23 ++++++++++++++
+ net/wireless/rdev-ops.h      |  8 +++++
+ net/wireless/trace.h         |  4 +++
+ 5 files changed, 109 insertions(+)
+
+diff --git a/include/net/cfg80211.h b/include/net/cfg80211.h
+index c45015149fb..e59560685ee 100644
+--- a/include/net/cfg80211.h
++++ b/include/net/cfg80211.h
+@@ -1974,6 +1974,8 @@ struct cfg80211_qos_map {
+  *	the driver, and will be valid until passed to cfg80211_scan_done().
+  *	For scan results, call cfg80211_inform_bss(); you can call this outside
+  *	the scan/scan_done bracket too.
++ * @abort_scan: Tell the driver to abort an ongoing scan. The driver shall
++ *	indicate the status of the scan through cfg80211_scan_done().
+  *
+  * @auth: Request to authenticate with the specified peer
+  * @assoc: Request to (re)associate with the specified peer
+@@ -2203,6 +2205,7 @@ struct cfg80211_ops {
+ 
+ 	int	(*scan)(struct wiphy *wiphy,
+ 			struct cfg80211_scan_request *request);
++	void	(*abort_scan)(struct wiphy *wiphy, struct wireless_dev *wdev);
+ 
+ 	int	(*auth)(struct wiphy *wiphy, struct net_device *dev,
+ 			struct cfg80211_auth_request *req);
+diff --git a/include/uapi/linux/nl80211.h b/include/uapi/linux/nl80211.h
+index 861a5777fea..4b331a8da5d 100644
+--- a/include/uapi/linux/nl80211.h
++++ b/include/uapi/linux/nl80211.h
+@@ -607,6 +607,15 @@
+  *	%NL80211_ATTR_IFINDEX is now on %NL80211_ATTR_WIPHY_FREQ and the
+  *	attributes determining channel width.
+  *
++ * @NL80211_CMD_CH_SWITCH_STARTED_NOTIFY: Notify that a channel switch
++ *	has been started on an interface, regardless of the initiator
++ *	(ie. whether it was requested from a remote device or
++ *	initiated on our own).  It indicates that
++ *	%NL80211_ATTR_IFINDEX will be on %NL80211_ATTR_WIPHY_FREQ
++ *	after %NL80211_ATTR_CH_SWITCH_COUNT TBTT's.  The userspace may
++ *	decide to react to this indication by requesting other
++ *	interfaces to change channel as well.
++ *
+  * @NL80211_CMD_START_P2P_DEVICE: Start the given P2P Device, identified by
+  *	its %NL80211_ATTR_WDEV identifier. It must have been created with
+  *	%NL80211_CMD_NEW_INTERFACE previously. After it has been started, the
+@@ -688,6 +697,51 @@
+  *	QoS mapping is relevant for IP packets, it is only valid during an
+  *	association. This is cleared on disassociation and AP restart.
+  *
++ * @NL80211_CMD_ADD_TX_TS: Ask the kernel to add a traffic stream for the given
++ *	%NL80211_ATTR_TSID and %NL80211_ATTR_MAC with %NL80211_ATTR_USER_PRIO
++ *	and %NL80211_ATTR_ADMITTED_TIME parameters.
++ *	Note that the action frame handshake with the AP shall be handled by
++ *	userspace via the normal management RX/TX framework, this only sets
++ *	up the TX TS in the driver/device.
++ *	If the admitted time attribute is not added then the request just checks
++ *	if a subsequent setup could be successful, the intent is to use this to
++ *	avoid setting up a session with the AP when local restrictions would
++ *	make that impossible. However, the subsequent "real" setup may still
++ *	fail even if the check was successful.
++ * @NL80211_CMD_DEL_TX_TS: Remove an existing TS with the %NL80211_ATTR_TSID
++ *	and %NL80211_ATTR_MAC parameters. It isn't necessary to call this
++ *	before removing a station entry entirely, or before disassociating
++ *	or similar, cleanup will happen in the driver/device in this case.
++ *
++ * @NL80211_CMD_GET_MPP: Get mesh path attributes for mesh proxy path to
++ *	destination %NL80211_ATTR_MAC on the interface identified by
++ *	%NL80211_ATTR_IFINDEX.
++ *
++ * @NL80211_CMD_JOIN_OCB: Join the OCB network. The center frequency and
++ *	bandwidth of a channel must be given.
++ * @NL80211_CMD_LEAVE_OCB: Leave the OCB network -- no special arguments, the
++ *	network is determined by the network interface.
++ *
++ * @NL80211_CMD_TDLS_CHANNEL_SWITCH: Start channel-switching with a TDLS peer,
++ *	identified by the %NL80211_ATTR_MAC parameter. A target channel is
++ *	provided via %NL80211_ATTR_WIPHY_FREQ and other attributes determining
++ *	channel width/type. The target operating class is given via
++ *	%NL80211_ATTR_OPER_CLASS.
++ *	The driver is responsible for continually initiating channel-switching
++ *	operations and returning to the base channel for communication with the
++ *	AP.
++ * @NL80211_CMD_TDLS_CANCEL_CHANNEL_SWITCH: Stop channel-switching with a TDLS
++ *	peer given by %NL80211_ATTR_MAC. Both peers must be on the base channel
++ *	when this command completes.
++ *
++ * @NL80211_CMD_WIPHY_REG_CHANGE: Similar to %NL80211_CMD_REG_CHANGE, but used
++ *	as an event to indicate changes for devices with wiphy-specific regdom
++ *	management.
++ *
++ * @NL80211_CMD_ABORT_SCAN: Stop an ongoing scan. Returns -ENOENT if a scan is
++ *	not running. The driver indicates the status of the scan through
++ *	cfg80211_scan_done().
++ *
+  * @NL80211_CMD_MAX: highest used command number
+  * @__NL80211_CMD_AFTER_LAST: internal use
+  */
+@@ -859,6 +913,23 @@ enum nl80211_commands {
+ 
+ 	NL80211_CMD_SET_QOS_MAP,
+ 
++	NL80211_CMD_ADD_TX_TS,
++	NL80211_CMD_DEL_TX_TS,
++
++	NL80211_CMD_GET_MPP,
++
++	NL80211_CMD_JOIN_OCB,
++	NL80211_CMD_LEAVE_OCB,
++
++	NL80211_CMD_CH_SWITCH_STARTED_NOTIFY,
++
++	NL80211_CMD_TDLS_CHANNEL_SWITCH,
++	NL80211_CMD_TDLS_CANCEL_CHANNEL_SWITCH,
++
++	NL80211_CMD_WIPHY_REG_CHANGE,
++
++	NL80211_CMD_ABORT_SCAN,
++
+ 	/* add new commands above here */
+ 
+ 	/* used to define NL80211_CMD_MAX below */
+diff --git a/net/wireless/nl80211.c b/net/wireless/nl80211.c
+index e58fb10fd63..3d62c8803b8 100644
+--- a/net/wireless/nl80211.c
++++ b/net/wireless/nl80211.c
+@@ -5457,6 +5457,21 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
+ 	return err;
+ }
+ 
++static int nl80211_abort_scan(struct sk_buff *skb, struct genl_info *info)
++{
++	struct cfg80211_registered_device *rdev = info->user_ptr[0];
++	struct wireless_dev *wdev = info->user_ptr[1];
++
++	if (!rdev->ops->abort_scan)
++		return -EOPNOTSUPP;
++
++	if (!rdev->scan_req)
++		return -ENOENT;
++
++	rdev_abort_scan(rdev, wdev);
++	return 0;
++}
++
+ static int nl80211_start_sched_scan(struct sk_buff *skb,
+ 				    struct genl_info *info)
+ {
+@@ -9065,6 +9080,14 @@ static struct genl_ops nl80211_ops[] = {
+ 				  NL80211_FLAG_NEED_RTNL,
+ 	},
+ 	{
++		.cmd = NL80211_CMD_ABORT_SCAN,
++		.doit = nl80211_abort_scan,
++		.policy = nl80211_policy,
++		.flags = GENL_ADMIN_PERM,
++		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |
++				  NL80211_FLAG_NEED_RTNL,
++	},
++	{
+ 		.cmd = NL80211_CMD_GET_SCAN,
+ 		.policy = nl80211_policy,
+ 		.dumpit = nl80211_dump_scan,
+diff --git a/net/wireless/rdev-ops.h b/net/wireless/rdev-ops.h
+index bc1960bac77..9f5ac1eddf4 100644
+--- a/net/wireless/rdev-ops.h
++++ b/net/wireless/rdev-ops.h
+@@ -379,6 +379,14 @@ static inline int rdev_scan(struct cfg80211_registered_device *rdev,
+ 	return ret;
+ }
+ 
++static inline void rdev_abort_scan(struct cfg80211_registered_device *rdev,
++				   struct wireless_dev *wdev)
++{
++	trace_rdev_abort_scan(&rdev->wiphy, wdev);
++	rdev->ops->abort_scan(&rdev->wiphy, wdev);
++	trace_rdev_return_void(&rdev->wiphy);
++}
++
+ static inline int rdev_auth(struct cfg80211_registered_device *rdev,
+ 			    struct net_device *dev,
+ 			    struct cfg80211_auth_request *req)
+diff --git a/net/wireless/trace.h b/net/wireless/trace.h
+index ab452b0ed71..a378484fd41 100644
+--- a/net/wireless/trace.h
++++ b/net/wireless/trace.h
+@@ -2587,6 +2587,10 @@ TRACE_EVENT(cfg80211_ft_event,
+ 		  WIPHY_PR_ARG, NETDEV_PR_ARG, MAC_PR_ARG(target_ap))
+ );
+ 
++DEFINE_EVENT(wiphy_wdev_evt, rdev_abort_scan,
++	TP_PROTO(struct wiphy *wiphy, struct wireless_dev *wdev),
++	TP_ARGS(wiphy, wdev)
++);
+ #endif /* !__RDEV_OPS_TRACE || TRACE_HEADER_MULTI_READ */
+ 
+ #undef TRACE_INCLUDE_PATH
+-- 
+2.11.0
+

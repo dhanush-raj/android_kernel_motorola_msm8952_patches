@@ -1,0 +1,66 @@
+From e1c4bdd4f55ad7b0bbf16d8366b53e2a65bc7d01 Mon Sep 17 00:00:00 2001
+From: qiaotian <qiaotian@motorola.com>
+Date: Tue, 8 Mar 2016 10:28:32 -0600
+Subject: [PATCH 769/959] IKMMINTG-8687: arm/dts: leds-qpnp-flash: Increase HW
+ Strobe Duration
+
+Increase HW Strobe Duration to fix black strip issue for flash Image.
+
+Change-Id: Iba664d08c373293b92fd75f63d173827ffcd852a
+Signed-off-by: qiaotian <qiaotian@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830727
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm-pmi8950.dtsi | 2 +-
+ drivers/leds/leds-qpnp-flash.c          | 8 +-------
+ 2 files changed, 2 insertions(+), 8 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi b/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi
+index 9761ab3abff..618c0665fbe 100644
+--- a/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi
++++ b/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi
+@@ -597,7 +597,7 @@
+ 				qcom,default-led-trigger =
+ 						"switch_trigger";
+ 				qcom,max-current = <1000>;
+-				qcom,duration = <1280>;
++				qcom,duration = <150>;
+ 				qcom,id = <2>;
+ 				qcom,current = <1000>;
+ 				reg0 {
+diff --git a/drivers/leds/leds-qpnp-flash.c b/drivers/leds/leds-qpnp-flash.c
+index ea5064e576e..1c2cd59ff33 100644
+--- a/drivers/leds/leds-qpnp-flash.c
++++ b/drivers/leds/leds-qpnp-flash.c
+@@ -1307,10 +1307,6 @@ static void qpnp_flash_led_work(struct work_struct *work)
+ 					led->current2_addr,
+ 					FLASH_CURRENT_MASK, val);
+ 
+-			/* Set to 1280ms max duration to allow software to
+-			   control the expiration */
+-			flash_node->duration = 1280;
+-
+ 			if (rc) {
+ 				dev_err(&led->spmi_dev->dev,
+ 					"Torch reg write failed\n");
+@@ -1491,12 +1487,10 @@ static void qpnp_flash_led_work(struct work_struct *work)
+ 			/* Enable HW strobe control for switch trigger,
+ 			   for main flash, not preflash.
+ 			   Leds will be on for the duration of
+-			   flash_node->duration (safety timer).
+-			   Set duration of strobe to be 70ms */
++			   flash_node->duration (safety timer). */
+ 			flash_node->trigger |= (FLASH_LED_HW_STROBE_SEL |
+ 						FLASH_LED_HW_STROBE_TRIG_EDGE |
+ 						FLASH_LED_HW_STROBE_ACT_HIGH);
+-			flash_node->duration = 70;
+ 
+ 			val = (u8)(flash_node->prgm_current *
+ 				FLASH_MAX_LEVEL / flash_node->max_current);
+-- 
+2.11.0
+

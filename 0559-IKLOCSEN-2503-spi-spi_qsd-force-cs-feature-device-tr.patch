@@ -1,0 +1,112 @@
+From 11c3f91ee3e89fbef12e1357e0a4a5bb915c15c0 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Sat, 20 Dec 2014 14:39:41 -0600
+Subject: [PATCH 559/959] IKLOCSEN-2503 spi: spi_qsd: force-cs feature device
+ tree configuration
+
+Add optional parameter qcom,force-cs to enable force-cs feature.
+When enabled, spi_qsd driver will force CS on spi bus for the entire
+duration of msm_spi_process_transfer. When disabled, CS will be
+controlled by QUP hardware according to the SPI bus specification.
+
+Change-Id: If703544e737769ff90f8d269f42744675d3ebbc4
+Signed-off-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/807230
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Gabriel Burca <Gabriel.Burca@motorola.com>
+Reviewed-by: Dmitry Ornatsky <ornatsky@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ Documentation/devicetree/bindings/spi/spi_qsd.txt |  1 +
+ drivers/spi/spi_qsd.c                             | 13 ++++++++-----
+ include/linux/qcom-spi.h                          |  2 ++
+ 3 files changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/spi/spi_qsd.txt b/Documentation/devicetree/bindings/spi/spi_qsd.txt
+index 1bfb120c39f..8f5d450a34a 100644
+--- a/Documentation/devicetree/bindings/spi/spi_qsd.txt
++++ b/Documentation/devicetree/bindings/spi/spi_qsd.txt
+@@ -37,6 +37,7 @@ Optional properties:
+   With this spi transaction message pump with high (realtime) priority to reduce
+   the transfer latency on the bus by minimising the delay between a transfer request
+  - qcom,shared : whether this qup is shared with other ee's
++- qcom,force-cs : Boolean. When present, enables force-cs feature.
+ 
+ Optional properties which are required for support of BAM-mode:
+ - qcom,ver-reg-exists : Boolean. When present, allows driver to verify if HW
+diff --git a/drivers/spi/spi_qsd.c b/drivers/spi/spi_qsd.c
+index 0564fbc061d..c25c06c8206 100644
+--- a/drivers/spi/spi_qsd.c
++++ b/drivers/spi/spi_qsd.c
+@@ -1743,7 +1743,7 @@ static void msm_spi_process_message(struct msm_spi *dd)
+ 	spi_ioc = msm_spi_set_spi_io_control(dd);
+ 	if (dd->qup_ver || (dd->multi_xfr && !dd->read_len && !dd->write_len)) {
+ 
+-		if (dd->qup_ver)
++		if (dd->pdata->force_cs && dd->qup_ver)
+ 			write_force_cs(dd, 0);
+ 
+ 		/*
+@@ -1762,15 +1762,16 @@ static void msm_spi_process_message(struct msm_spi *dd)
+ 				dd->read_len = dd->write_len = 0;
+ 				xfrs_grped = combine_transfers(dd);
+ 				dd->num_xfrs_grped = xfrs_grped;
+-				if (dd->qup_ver)
++				if (dd->pdata->force_cs && dd->qup_ver)
+ 					write_force_cs(dd, 1);
+ 			}
+ 
+ 			dd->cur_tx_transfer = dd->cur_transfer;
+ 			dd->cur_rx_transfer = dd->cur_transfer;
+ 			msm_spi_process_transfer(dd);
+-			if (dd->qup_ver && dd->cur_transfer->cs_change)
+-				write_force_cs(dd, 0);
++			if (dd->pdata->force_cs && dd->qup_ver
++				&& dd->cur_transfer->cs_change)
++					write_force_cs(dd, 0);
+ 			xfrs_grped--;
+ 		}
+ 	} else {
+@@ -1793,7 +1794,7 @@ static void msm_spi_process_message(struct msm_spi *dd)
+ 		dd->num_xfrs_grped = 1;
+ 		msm_spi_process_transfer(dd);
+ 	}
+-	if (dd->qup_ver)
++	if (dd->pdata->force_cs && dd->qup_ver)
+ 		write_force_cs(dd, 0);
+ 	return;
+ error:
+@@ -2515,6 +2516,8 @@ struct msm_spi_platform_data *msm_spi_dt_to_pdata(
+ 			&pdata->rt_priority,		 DT_OPT,  DT_BOOL,  0},
+ 		{"qcom,shared",
+ 			&pdata->is_shared,		 DT_OPT,  DT_BOOL,  0},
++		{"qcom,force-cs",
++			&pdata->force_cs,		 DT_OPT,  DT_BOOL,  0},
+ 		{NULL,  NULL,                            0,       0,        0},
+ 		};
+ 
+diff --git a/include/linux/qcom-spi.h b/include/linux/qcom-spi.h
+index 0382c008c89..a3b7665f93b 100644
+--- a/include/linux/qcom-spi.h
++++ b/include/linux/qcom-spi.h
+@@ -35,6 +35,7 @@
+  * @rt_priority true if RT thread
+  * @use_pinctrl true if pinctrl library is used
+  * @is_shared true when qup is shared between ee's
++ * @force_cs true when the force cs feature is enabled
+  */
+ struct msm_spi_platform_data {
+ 	u32 max_clock_speed;
+@@ -53,4 +54,5 @@ struct msm_spi_platform_data {
+ 	bool rt_priority;
+ 	bool use_pinctrl;
+ 	bool is_shared;
++	bool force_cs;
+ };
+-- 
+2.11.0
+

@@ -1,0 +1,64 @@
+From 28d8f56355872036a501b9490e598b7d2e388e89 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Thu, 4 Apr 2013 12:10:43 -0500
+Subject: [PATCH 038/959] IKJB42MAIN-8582 drivers: misc: new utag definitions
+
+Add MD5, ICCID and DEVICE_NAME utag interface
+
+Change-Id: Ia36e59ae401f494529a0e00f7590902f156046be
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/530010
+SLT-Approved: Gerrit Code Review <gerrit-blurdev@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Check Patch <CHEKPACH@motorola.com>
+Reviewed-by: Igor Kovalenko <cik009@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+(cherry picked from commit 79a28472adc5e24eb1eda457bff1bfa07e9a43a3)
+---
+ drivers/misc/utag/utags.c |  3 +++
+ drivers/misc/utag/utags.h | 15 +++++++++++++++
+ 2 files changed, 18 insertions(+)
+
+diff --git a/drivers/misc/utag/utags.c b/drivers/misc/utag/utags.c
+index f53c4b2d307..c6a632d4b01 100644
+--- a/drivers/misc/utag/utags.c
++++ b/drivers/misc/utag/utags.c
+@@ -57,6 +57,9 @@ static struct utag_node utag_tab[] = {
+ 	{UTAG_IMEI, "imei", NULL, NULL, NULL, NULL},
+ 	{UTAG_SKU, "sku", NULL, NULL, NULL, NULL},
+ 	{UTAG_DATE, "date", NULL, NULL, NULL, NULL},
++	{UTAG_DEVICE, "device_name", NULL, NULL, NULL, NULL},
++	{UTAG_CUST_MD5, "customization_checksum", NULL, NULL, NULL, NULL},
++	{UTAG_ICCID, "iccid", NULL, NULL, NULL, NULL},
+ 	{UTAG_END, "all", NULL, NULL, NULL, NULL},
+ 	{0, "", NULL, NULL, NULL, NULL},
+ };
+diff --git a/drivers/misc/utag/utags.h b/drivers/misc/utag/utags.h
+index 31af8d095d0..c0d1b8f8f34 100644
+--- a/drivers/misc/utag/utags.h
++++ b/drivers/misc/utag/utags.h
+@@ -216,6 +216,21 @@ struct frozen_utag {
+ #define UTAG_DATE  0xCAFE001A
+ 
+ /*
++ * Device Name
++ */
++#define UTAG_DEVICE 0xCAFE001B
++
++/*
++ * Customization MD5 checksum, e.g. 64ce3caf02cd4c9881e43b613be2354a
++ */
++#define UTAG_CUST_MD5  0xCAFE001C
++
++/*
++ * The ICCID (Integrated Circuit Card Identifier)
++ */
++#define UTAG_ICCID 0xCAFE001D
++
++/*
+  * tags to store android properties
+  */
+ #define UTAG_BUILD_DATE           0xCAFE1000
+-- 
+2.11.0
+

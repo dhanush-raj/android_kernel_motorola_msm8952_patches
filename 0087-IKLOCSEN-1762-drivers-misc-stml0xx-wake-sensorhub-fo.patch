@@ -1,0 +1,52 @@
+From cbe2a63255949dd9319c74c09857f704f10c09e5 Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Wed, 29 Oct 2014 11:02:50 -0500
+Subject: [PATCH 087/959] IKLOCSEN-1762:drivers:misc:stml0xx: wake sensorhub
+ for led writes
+
+Need to wake up the sensorhub before attempting to write
+the led settings using the spi bus.
+
+Change-Id: I3a1b39b9dcee0a4141eedc73b66248e44cb70ef2
+Signed-off-by: Dan Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/683834
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_led.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_led.c b/drivers/misc/stml0xx/stml0xx_led.c
+index 4b393495d8e..791d30633c9 100644
+--- a/drivers/misc/stml0xx/stml0xx_led.c
++++ b/drivers/misc/stml0xx/stml0xx_led.c
+@@ -30,6 +30,7 @@ int stml0xx_led_set(struct led_classdev *led_cdev)
+ 
+ int stml0xx_led_set_reset(struct led_classdev *led_cdev, uint8_t allow_reset)
+ {
++	struct stml0xx_data *ps_stml0xx = stml0xx_misc_data;
+ 	unsigned char buf[SPI_MSG_SIZE];
+ 	int err;
+ 
+@@ -48,11 +49,15 @@ int stml0xx_led_set_reset(struct led_classdev *led_cdev, uint8_t allow_reset)
+ 	buf[10] = (led_cdev->blink_delay_off >> 8) & 0xFF;
+ 	buf[11] = led_cdev->blink_delay_off & 0xFF;
+ 
++	stml0xx_wake(ps_stml0xx);
++
+ 	err = stml0xx_spi_send_write_reg_reset(LED_NOTIF_CONTROL, buf, 12,
+ 		allow_reset);
+ 	if (err < 0)
+ 		return err;
+ 
++	stml0xx_sleep(ps_stml0xx);
++
+ 	return 0;
+ }
+ 
+-- 
+2.11.0
+

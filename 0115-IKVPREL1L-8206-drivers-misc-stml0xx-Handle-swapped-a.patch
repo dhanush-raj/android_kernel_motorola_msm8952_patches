@@ -1,0 +1,87 @@
+From 1eb2dfdb8b103d15008a57e9f3458a810319a5df Mon Sep 17 00:00:00 2001
+From: Gabriel Burca <Gabriel.Burca@motorola.com>
+Date: Tue, 27 Jan 2015 11:05:21 -0600
+Subject: [PATCH 115/959] IKVPREL1L-8206 drivers/misc/stml0xx: Handle swapped
+ accel parts
+
+- On dual-accel phones, the camera gesture algorithm expects accel 1 to
+  be on the left and accel 2 on the right. We allow the AP to inform the
+  sensor hub if the accel parts are swapped.
+
+Change-Id: Id02c61f17896b82455836a0c988c9424d0498788
+Signed-off-by: Gabriel Burca <Gabriel.Burca@motorola.com>
+Reviewed-on: http://gerrit.mot.com/708404
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c  |  4 ++++
+ drivers/misc/stml0xx/stml0xx_reset.c | 12 ++++++++++++
+ include/linux/stml0xx.h              |  2 ++
+ 3 files changed, 18 insertions(+)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 8c7f6cc38d6..78c9aa30993 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -456,6 +456,10 @@ static struct stml0xx_platform_data *stml0xx_of_init(struct spi_device *spi)
+ 	of_property_read_u32(np, "accel_orientation_2",
+ 			     &pdata->accel_orientation_2);
+ 
++	pdata->accel_swap = 0;
++	of_property_read_u32(np, "accel_swap",
++			     &pdata->accel_swap);
++
+ 	return pdata;
+ }
+ #else
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index 9c79982aa9a..a904e0d8576 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -88,6 +88,18 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 		}
+ 	}
+ 
++	/* Only send accel swap value if different from the default. */
++	if (pdata->accel_swap != 0) {
++		buf[0] = pdata->accel_swap & 0xff;
++		err = stml0xx_spi_send_write_reg_reset(ACCEL_SWAP, buf,
++			1, RESET_NOT_ALLOWED);
++		if (err < 0) {
++			dev_err(&ps_stml0xx->spi->dev,
++				"Unable to write accel swap value");
++			ret_err = err;
++		}
++	}
++
+ 	buf[0] = stml0xx_g_acc_delay;
+ 	err = stml0xx_spi_send_write_reg_reset(ACCEL_UPDATE_RATE, buf,
+ 			1, RESET_NOT_ALLOWED);
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index b93762fe727..efd0e9f534a 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -352,6 +352,7 @@ struct stm_response {
+ #define LOWPOWER_REG                    0x03
+ #define INIT_COMPLETE_REG               0x04
+ #define ACCEL_ORIENTATION		0x06
++#define ACCEL_SWAP                      0x07
+ 
+ #define STML0XX_PEEKDATA_REG             0x09
+ #define STML0XX_PEEKSTATUS_REG           0x0A
+@@ -613,6 +614,7 @@ struct stml0xx_platform_data {
+ 	int headset_button_4_keycode;
+ 	int accel_orientation_1;
+ 	int accel_orientation_2;
++	int accel_swap;
+ };
+ 
+ struct stml0xx_data {
+-- 
+2.11.0
+

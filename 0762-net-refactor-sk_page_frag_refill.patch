@@ -1,0 +1,112 @@
+From b659e0bbf2537861539281783695009411f643db Mon Sep 17 00:00:00 2001
+From: Eric Dumazet <edumazet@google.com>
+Date: Thu, 17 Oct 2013 16:27:07 -0700
+Subject: [PATCH 762/959] net: refactor sk_page_frag_refill()
+
+While working on virtio_net new allocation strategy to increase
+payload/truesize ratio, we found that refactoring sk_page_frag_refill()
+was needed.
+
+This patch splits sk_page_frag_refill() into two parts, adding
+skb_page_frag_refill() which can be used without a socket.
+
+While we are at it, add a minimum frag size of 32 for
+sk_page_frag_refill()
+
+Michael will either use netdev_alloc_frag() from softirq context,
+or skb_page_frag_refill() from process context in refill_work()
+ (GFP_KERNEL allocations)
+
+Signed-off-by: Eric Dumazet <edumazet@google.com>
+Cc: Michael Dalton <mwdalton@google.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+(cherry picked from commit 400dfd3ae899849b27d398ca7894e1b44430887f)
+Change-Id: Ia2aabfb1d3e739fa4d037f6232d612e04f52b607
+Reviewed-on: http://gerrit.mot.com/750526
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830414
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ include/linux/skbuff.h |  2 ++
+ net/core/sock.c        | 27 +++++++++++++++++++++++----
+ 2 files changed, 25 insertions(+), 4 deletions(-)
+
+diff --git a/include/linux/skbuff.h b/include/linux/skbuff.h
+index 478120ae34e..93945d51330 100644
+--- a/include/linux/skbuff.h
++++ b/include/linux/skbuff.h
+@@ -2167,6 +2167,8 @@ static inline void skb_frag_set_page(struct sk_buff *skb, int f,
+ 	__skb_frag_set_page(&skb_shinfo(skb)->frags[f], page);
+ }
+ 
++bool skb_page_frag_refill(unsigned int sz, struct page_frag *pfrag, gfp_t prio);
++
+ /**
+  * skb_frag_dma_map - maps a paged fragment via the DMA API
+  * @dev: the device to map the fragment to
+diff --git a/net/core/sock.c b/net/core/sock.c
+index 54bb7d72e50..4777282db49 100644
+--- a/net/core/sock.c
++++ b/net/core/sock.c
+@@ -1844,7 +1844,17 @@ EXPORT_SYMBOL(sock_alloc_send_skb);
+ /* On 32bit arches, an skb frag is limited to 2^15 */
+ #define SKB_FRAG_PAGE_ORDER	get_order(32768)
+ 
+-bool sk_page_frag_refill(struct sock *sk, struct page_frag *pfrag)
++/**
++ * skb_page_frag_refill - check that a page_frag contains enough room
++ * @sz: minimum size of the fragment we want to get
++ * @pfrag: pointer to page_frag
++ * @prio: priority for memory allocation
++ *
++ * Note: While this allocator tries to use high order pages, there is
++ * no guarantee that allocations succeed. Therefore, @sz MUST be
++ * less or equal than PAGE_SIZE.
++ */
++bool skb_page_frag_refill(unsigned int sz, struct page_frag *pfrag, gfp_t prio)
+ {
+ 	int order;
+ 
+@@ -1853,16 +1863,16 @@ bool sk_page_frag_refill(struct sock *sk, struct page_frag *pfrag)
+ 			pfrag->offset = 0;
+ 			return true;
+ 		}
+-		if (pfrag->offset < pfrag->size)
++		if (pfrag->offset + sz <= pfrag->size)
+ 			return true;
+ 		put_page(pfrag->page);
+ 	}
+ 
+ 	/* We restrict high order allocations to users that can afford to wait */
+-	order = (sk->sk_allocation & __GFP_WAIT) ? SKB_FRAG_PAGE_ORDER : 0;
++	order = (prio & __GFP_WAIT) ? SKB_FRAG_PAGE_ORDER : 0;
+ 
+ 	do {
+-		gfp_t gfp = sk->sk_allocation;
++		gfp_t gfp = prio;
+ 
+ 		if (order)
+ 			gfp |= __GFP_COMP | __GFP_NOWARN | __GFP_NORETRY;
+@@ -1874,6 +1884,15 @@ bool sk_page_frag_refill(struct sock *sk, struct page_frag *pfrag)
+ 		}
+ 	} while (--order >= 0);
+ 
++	return false;
++}
++EXPORT_SYMBOL(skb_page_frag_refill);
++
++bool sk_page_frag_refill(struct sock *sk, struct page_frag *pfrag)
++{
++	if (likely(skb_page_frag_refill(32U, pfrag, sk->sk_allocation)))
++		return true;
++
+ 	sk_enter_memory_pressure(sk);
+ 	sk_stream_moderate_sndbuf(sk);
+ 	return false;
+-- 
+2.11.0
+

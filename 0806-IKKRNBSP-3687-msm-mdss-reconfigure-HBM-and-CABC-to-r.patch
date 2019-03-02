@@ -1,0 +1,71 @@
+From 6d3a94bd3b831a60422998aed87865a229f34b23 Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Mon, 7 Mar 2016 17:28:39 -0800
+Subject: [PATCH 806/959] IKKRNBSP-3687: msm: mdss: reconfigure HBM and CABC to
+ restore value
+
+Update software settings to restore parameter value at panel on.
+
+Change-Id: Iac260cbe877ae826f9a32fb6e1296bfc26b494fa
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830156
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Patrick Auchter <auchter@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 14 ++------------
+ 1 file changed, 2 insertions(+), 12 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index c4f72a62cce..41668a2d701 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -942,10 +942,6 @@ end:
+ 	else
+ 		pr_info("%s[%d]-.\n", __func__, ctrl->ndx);
+ 
+-	/* Default CABC mode is UI while turning on display */
+-	mdss_dsi_panel_set_param(pdata,
+-		PARAM_CABC_ID, CABC_UI_MODE, false);
+-
+ 	pr_debug("%s:-\n", __func__);
+ 	return ret;
+ }
+@@ -1032,9 +1028,6 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
+ 			goto end;
+ 	}
+ 
+-	mdss_dsi_panel_set_param(pdata,
+-		PARAM_HBM_ID, HBM_OFF_STATE, true);
+-
+ 	if (ctrl->off_cmds.cmd_cnt)
+ 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->off_cmds, CMD_REQ_COMMIT);
+ 
+@@ -1046,9 +1039,6 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
+ 	mdss_dsi_panel_off_in_prog_notify(pdata, pinfo);
+ 
+ end:
+-	mdss_dsi_panel_set_param(pdata,
+-		PARAM_CABC_ID, CABC_OFF_MODE, false);
+-
+ 	pr_debug("%s:-\n", __func__);
+ 	return 0;
+ }
+@@ -1199,8 +1189,8 @@ static struct panel_param_val_map cabc_map[CABC_MODE_NUM] = {
+ };
+ 
+ static struct panel_param mdss_dsi_panel_param[PARAM_ID_NUM] = {
+-	{"HBM", hbm_map, HBM_STATE_NUM, HBM_OFF_STATE, false},
+-	{"CABC", cabc_map, CABC_MODE_NUM, CABC_UI_MODE, false},
++	{"HBM", hbm_map, HBM_STATE_NUM, HBM_OFF_STATE, HBM_OFF_STATE, false},
++	{"CABC", cabc_map, CABC_MODE_NUM, CABC_UI_MODE, CABC_UI_MODE, false},
+ };
+ 
+ static int mdss_panel_parse_param_prop(struct device_node *np,
+-- 
+2.11.0
+

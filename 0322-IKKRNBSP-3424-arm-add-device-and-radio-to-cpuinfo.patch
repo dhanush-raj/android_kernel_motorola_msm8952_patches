@@ -1,0 +1,55 @@
+From 710acbd0ff7134f2ef7ce5941b5857fbab42e322 Mon Sep 17 00:00:00 2001
+From: Alexander Filonenko <vtp684@motorola.com>
+Date: Tue, 9 Apr 2013 14:46:41 -0500
+Subject: [PATCH 322/959] IKKRNBSP-3424 arm: add device and radio to cpuinfo
+
+Add device and radio from kernel command line to "/proc/cpuinfo".
+Port of IKJBXLINE-5356
+
+Change-Id: I607e4324e1b5b1e12f2b685306c2d85fd078409a
+Signed-off-by: Alexander Filonenko <vtp684@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/530995
+SLT-Approved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <cik009@motorola.com>
+Reviewed-by: Jason Hrycay <jason.hrycay@motorola.com>
+Reviewed-by: Klocwork kwcheck <klocwork-kwcheck@sourceforge.mot.com>
+Reviewed-by: Check Patch <CHEKPACH@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <qcf001@motorola.com>
+(cherry picked from commit ea65b962190938961c915cc71bd10fb4b6f67b80)
+Reviewed-on: http://gerrit.mot.com/787272
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ arch/arm/kernel/setup.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/arch/arm/kernel/setup.c b/arch/arm/kernel/setup.c
+index d59afa3de89..c786eba5435 100644
+--- a/arch/arm/kernel/setup.c
++++ b/arch/arm/kernel/setup.c
+@@ -77,6 +77,8 @@ extern void paging_init(const struct machine_desc *desc);
+ extern void sanity_check_meminfo(void);
+ extern enum reboot_mode reboot_mode;
+ extern void setup_dma_zone(const struct machine_desc *desc);
++void __attribute__((weak)) mach_cpuinfo_show(struct seq_file *m, void *v);
++
+ 
+ unsigned int processor_id;
+ EXPORT_SYMBOL(processor_id);
+@@ -1037,6 +1039,9 @@ static int c_show(struct seq_file *m, void *v)
+ 	seq_printf(m, "Processor\t: %s rev %d (%s)\n",
+ 		   cpu_name, read_cpuid_id() & 15, elf_platform);
+ 
++	if (mach_cpuinfo_show)
++		mach_cpuinfo_show(m, v);
++
+ 	return 0;
+ }
+ 
+-- 
+2.11.0
+

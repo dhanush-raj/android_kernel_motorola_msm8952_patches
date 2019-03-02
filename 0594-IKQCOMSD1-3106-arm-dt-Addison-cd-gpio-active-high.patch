@@ -1,0 +1,34 @@
+From b1ada86f6cbbeca79aac1e845c7c65e2581de34f Mon Sep 17 00:00:00 2001
+From: Chris Fries <cfries@motorola.com>
+Date: Tue, 5 Jan 2016 15:55:10 -0600
+Subject: [PATCH 594/959] IKQCOMSD1-3106 arm/dt: Addison cd-gpio active high
+
+Change SD Card detect from active-low to active-high, for Addison.
+
+Change-Id: Ib7931ab5fc336b2e055ddc38a31ad7d9003e2141
+Signed-off-by: Chris Fries <cfries@motorola.com>
+Reviewed-on: http://gerrit.mot.com/810832
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-addison.dtsi | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-addison.dtsi b/arch/arm/boot/dts/qcom/msm8952-addison.dtsi
+index e359a9585e7..25a95173e4e 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-addison.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-addison.dtsi
+@@ -48,3 +48,7 @@
+ &ibb_regulator {
+ 	qcom,qpnp-ibb-discharge-resistor = <32>;
+ };
++
++&sdhc_2 {
++	cd-gpios = <&msm_gpio 67 0x0>;
++};
+-- 
+2.11.0
+

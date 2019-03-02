@@ -1,0 +1,36 @@
+From 7c445fa91b5513f76f1c623c8373c90a164075f7 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Fri, 10 Jun 2016 17:24:28 -0500
+Subject: [PATCH 908/959] IKSWM-45200: emmc_ffu: use machine_restart to reboot
+ device
+
+ let device reboot immediately after ffu done.
+
+Change-Id: I7c67f6d34614f7e75cc43ad9b8484acce0a12508
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/865393
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/mmc/core/mmc_ffu.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/mmc/core/mmc_ffu.c b/drivers/mmc/core/mmc_ffu.c
+index eae1edcbd36..e4d44215948 100644
+--- a/drivers/mmc/core/mmc_ffu.c
++++ b/drivers/mmc/core/mmc_ffu.c
+@@ -512,7 +512,7 @@ int mmc_ffu_invoke(struct mmc_card *card, const char *name)
+ 		   //TODO: find a more grace way to avoid power cycle.
+ 		*/
+ 		pr_info("eMMC firmware updated, reboot now\n");
+-		kernel_restart(NULL);
++		machine_restart(NULL);
+ 	}
+ 
+ exit:
+-- 
+2.11.0
+

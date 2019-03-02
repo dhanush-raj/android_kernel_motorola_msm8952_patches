@@ -1,0 +1,38 @@
+From e4d4eba2680fb27af644407e3b2a6c7bcd5c048e Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Thu, 6 Aug 2015 10:04:12 -0500
+Subject: [PATCH 051/959] IKKRNBSP-3314 misc: utags: move init to late init
+ call section.
+
+Storage is not available during regular init calls section.
+Moving to late_initcall in preparation for change into
+platform device driver.
+
+Change-Id: I2e363355a977bb72237a37382e39c63796c9e6d4
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/774315
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/utag/utags.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/misc/utag/utags.c b/drivers/misc/utag/utags.c
+index e22f9eeb7fc..2da06050a5f 100644
+--- a/drivers/misc/utag/utags.c
++++ b/drivers/misc/utag/utags.c
+@@ -1018,7 +1018,7 @@ static void __exit config_exit(void)
+ 	remove_proc_entry("config", NULL);
+ }
+ 
+-module_init(config_init);
++late_initcall(config_init);
+ module_exit(config_exit);
+ 
+ MODULE_LICENSE("GPL");
+-- 
+2.11.0
+

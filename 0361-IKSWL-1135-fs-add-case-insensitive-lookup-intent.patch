@@ -1,0 +1,34 @@
+From f433287771158b3142f28136a7aad6008318fc3d Mon Sep 17 00:00:00 2001
+From: "Russ W. Knize" <Russ.Knize@motorola.com>
+Date: Tue, 10 Sep 2013 23:11:53 -0500
+Subject: [PATCH 361/959] IKSWL-1135: fs: add case-insensitive lookup intent
+
+Add a new intent flag to let the driver know to perform a case-
+insensitive name lookup.
+
+Change-Id: I745bc3d3fc076ad77e069eb4aa960839abda63a0
+Signed-off-by: Russ Knize <Russ.Knize@motorola.com>
+Reviewed-on: http://gerrit.mot.com/658210
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+SLTApproved: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ include/linux/namei.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/include/linux/namei.h b/include/linux/namei.h
+index f10c7f29f5e..6983e9c8c3f 100644
+--- a/include/linux/namei.h
++++ b/include/linux/namei.h
+@@ -55,6 +55,7 @@ enum {LAST_NORM, LAST_ROOT, LAST_DOT, LAST_DOTDOT, LAST_BIND};
+ #define LOOKUP_JUMPED		0x1000
+ #define LOOKUP_ROOT		0x2000
+ #define LOOKUP_EMPTY		0x4000
++#define LOOKUP_NOCASE		0x8000
+ 
+ extern int user_path_at(int, const char __user *, unsigned, struct path *);
+ extern int user_path_at_empty(int, const char __user *, unsigned, struct path *, int *empty);
+-- 
+2.11.0
+

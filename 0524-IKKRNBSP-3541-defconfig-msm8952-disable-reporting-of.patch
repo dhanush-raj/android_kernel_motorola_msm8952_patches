@@ -1,0 +1,48 @@
+From 3c5b32e2dfac9f1f96f3c2d7569170686d393f4e Mon Sep 17 00:00:00 2001
+From: Alexander Filonenko <alexf@motorola.com>
+Date: Fri, 20 Nov 2015 13:56:10 -0600
+Subject: [PATCH 524/959] IKKRNBSP-3541 defconfig: msm8952: disable reporting
+ of user faults
+
+Disable reporting of user faults.
+
+Change-Id: I813e9997e80f4b3508dd3fb7dbeb2a96df847137
+Signed-off-by: Alexander Filonenko <alexf@motorola.com>
+Reviewed-on: http://gerrit.mot.com/801904
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/configs/msm8916-perf_defconfig | 1 -
+ arch/arm/configs/msm8916_defconfig      | 1 -
+ 2 files changed, 2 deletions(-)
+
+diff --git a/arch/arm/configs/msm8916-perf_defconfig b/arch/arm/configs/msm8916-perf_defconfig
+index 242dcbf0df9..5d575c0b7f0 100644
+--- a/arch/arm/configs/msm8916-perf_defconfig
++++ b/arch/arm/configs/msm8916-perf_defconfig
+@@ -566,7 +566,6 @@ CONFIG_DEBUG_MEMORY_INIT=y
+ CONFIG_IPC_LOGGING=y
+ # CONFIG_FTRACE is not set
+ CONFIG_DYNAMIC_DEBUG=y
+-CONFIG_DEBUG_USER=y
+ CONFIG_DEBUG_SET_MODULE_RONX=y
+ CONFIG_SECURITY=y
+ CONFIG_SECURITY_NETWORK=y
+diff --git a/arch/arm/configs/msm8916_defconfig b/arch/arm/configs/msm8916_defconfig
+index 420f8e4ca1a..24b97273a6c 100644
+--- a/arch/arm/configs/msm8916_defconfig
++++ b/arch/arm/configs/msm8916_defconfig
+@@ -598,7 +598,6 @@ CONFIG_IPC_LOGGING=y
+ CONFIG_BLK_DEV_IO_TRACE=y
+ CONFIG_DYNAMIC_DEBUG=y
+ CONFIG_PANIC_ON_DATA_CORRUPTION=y
+-CONFIG_DEBUG_USER=y
+ CONFIG_FREE_PAGES_RDONLY=y
+ CONFIG_KERNEL_TEXT_RDONLY=y
+ CONFIG_DEBUG_LL=y
+-- 
+2.11.0
+

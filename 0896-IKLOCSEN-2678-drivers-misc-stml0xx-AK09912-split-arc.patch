@@ -1,0 +1,1540 @@
+From 11723b44982fc43724edc3d5775c0c18511b56d1 Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Wed, 1 Jun 2016 16:35:29 -0500
+Subject: [PATCH 896/959] IKLOCSEN-2678 drivers: misc: stml0xx: AK09912 split
+ arch support
+
+- AK09912 support
+- Receive raw register data from SH and process them through
+  the AKM library
+- Report magnetometer events to the HAL
+- Increased streaming sensor queue & spi msg sizes
+
+Change-Id: I279a37f7f28ae07c94c63441d7d1baf72ced71f5
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/862643
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+---
+ drivers/misc/stml0xx/Kconfig                       |   8 +
+ drivers/misc/stml0xx/Makefile                      |   1 +
+ drivers/misc/stml0xx/stml0xx_akm.c                 | 836 +++++++++++++++++++++
+ drivers/misc/stml0xx/stml0xx_core.c                |   8 +
+ drivers/misc/stml0xx/stml0xx_ioctl.c               |  60 +-
+ drivers/misc/stml0xx/stml0xx_irq.c                 |  63 +-
+ drivers/misc/stml0xx/stml0xx_reset.c               |   6 +
+ drivers/misc/stml0xx/stml0xx_wake_irq.c            |  13 +
+ include/linux/stml0xx.h                            |  61 +-
+ include/uapi/linux/Kbuild                          |   3 +-
+ include/uapi/linux/stml0xx.h                       |   2 +-
+ include/uapi/linux/stml0xx_akm.h                   | 109 +++
+ include/uapi/linux/{motosh_vmm.h => stml0xx_vmm.h} |  12 +-
+ 13 files changed, 1132 insertions(+), 50 deletions(-)
+ create mode 100644 drivers/misc/stml0xx/stml0xx_akm.c
+ create mode 100644 include/uapi/linux/stml0xx_akm.h
+ rename include/uapi/linux/{motosh_vmm.h => stml0xx_vmm.h} (98%)
+
+diff --git a/drivers/misc/stml0xx/Kconfig b/drivers/misc/stml0xx/Kconfig
+index c9e78096b52..3c87f0f6c2b 100644
+--- a/drivers/misc/stml0xx/Kconfig
++++ b/drivers/misc/stml0xx/Kconfig
+@@ -19,3 +19,11 @@ config MMI_HALL_NOTIFICATIONS
+ 	depends on SENSORS_STML0XX
+ 	help
+ 	  Support for hall effect sensor notifications.
++
++config SENSORS_SH_AK09912
++	bool "Enable sensor processor connected ak09912"
++	default n
++	depends on SENSORS_STML0XX
++	help
++	  Support for a sensor processor connected ak09912 magnetometer.
++
+diff --git a/drivers/misc/stml0xx/Makefile b/drivers/misc/stml0xx/Makefile
+index ccfa1d4e3eb..315829a6d95 100644
+--- a/drivers/misc/stml0xx/Makefile
++++ b/drivers/misc/stml0xx/Makefile
+@@ -7,5 +7,6 @@ stml0xx-objs := stml0xx_core.o \
+ 		stml0xx_wake_irq.o \
+ 		stml0xx_spi.o \
+ 		stml0xx_spi_crc.o
++obj-$(CONFIG_SENSORS_SH_AK09912) += stml0xx_akm.o
+ obj-$(CONFIG_MMI_HALL_NOTIFICATIONS) += stml0xx_mmi_notifications.o
+ obj-$(CONFIG_SENSORS_STML0XX) += stml0xx.o
+diff --git a/drivers/misc/stml0xx/stml0xx_akm.c b/drivers/misc/stml0xx/stml0xx_akm.c
+new file mode 100644
+index 00000000000..0ca6fd69b46
+--- /dev/null
++++ b/drivers/misc/stml0xx/stml0xx_akm.c
+@@ -0,0 +1,836 @@
++/* drivers/misc/akm09912.c - akm09912 compass driver
++ *
++ * Copyright (C) 2007-2008 HTC Corporation.
++ * Author: Hou-Kun Chen <houkun.chen@gmail.com>
++ *
++ * This software is licensed under the terms of the GNU General Public
++ * License version 2, as published by the Free Software Foundation, and
++ * may be copied, distributed, and modified under those terms.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ */
++
++
++/*#define DEBUG*/
++/*#define VERBOSE_DEBUG*/
++
++#include <linux/cdev.h>
++#include <linux/delay.h>
++#include <linux/device.h>
++#include <linux/input.h>
++#include <linux/miscdevice.h>
++#include <linux/slab.h>
++#include <linux/uaccess.h>
++
++#include "linux/stml0xx.h"
++
++#ifdef CONFIG_SENSORS_SH_AK09912
++
++#include "linux/stml0xx_akm.h"
++
++#define AKM_HAS_RESET			1
++#define AKM_DRDY_TIMEOUT_MS		1000
++
++#define AKM_I2C_Address 0x18
++
++/***** Hardware I/O functions **************************************/
++static int akm_rxdata(uint8_t *rxData, int length)
++{
++	unsigned char buf[SPI_RX_PAYLOAD_LEN];
++	int loop_count;
++	int err;
++
++	dev_dbg(&stml0xx_misc_data->spi->dev, "akm_rxdata, length %d", length);
++	buf[0] = 0x00;            /* Bus number */
++	buf[1] = AKM_I2C_Address; /* I2C address */
++	buf[2] = 0x00;            /* Register address MSB */
++	buf[3] = rxData[0];       /* Register address LSB */
++	buf[4] = 0x00;            /* Read */
++	buf[5] = length;          /* Size */
++
++	err = stml0xx_spi_send_write_reg(I2C_PASSTHROUGH_COMMAND, buf,
++			STML0XX_PASSTHROUGH_SIZE);
++	if (err < 0) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++				"akm_rxdata: AKM command write error %d, reg 0x%02X",
++				err, rxData[0]);
++		return -EFAULT;
++	}
++
++	loop_count = 0;
++	buf[0] = 0;
++	do {
++		err = stml0xx_spi_send_read_reg(
++				I2C_PASSTHROUGH_RESPONSE,
++				buf, STML0XX_PASSTHROUGH_SIZE);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++					"akm_rxdata: AKM data read error %d, reg 0x%02X",
++					err, rxData[0]);
++			return -EFAULT;
++		}
++		loop_count++;
++		if (loop_count == 10)
++			break;
++	} while (buf[0] == 0);
++	if (buf[0] != 1) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++				"akm_rxdata: AKM read failed %d, reg 0x%02X",
++				buf[0], rxData[0]);
++		return -EFAULT;
++	}
++
++	memcpy(rxData, &buf[1], length);
++
++	return 0;
++}
++
++static int akm_txdata(uint8_t *txData, int length)
++{
++	unsigned char buf[SPI_TX_PAYLOAD_LEN];
++	int loop_count;
++	int err;
++
++	dev_dbg(&stml0xx_misc_data->spi->dev, "akm_txdata, length %d", length);
++	buf[0] = 0x00;            /* Bus number */
++	buf[1] = AKM_I2C_Address; /* I2C address */
++	buf[2] = 0x00;            /* Register address MSB */
++	buf[3] = txData[0];       /* Register address LSB */
++	buf[4] = 0x01;            /* Write */
++	buf[5] = (length - 1);    /* Size */
++	memcpy(&buf[6], (txData + 1), (length - 1));
++
++	err = stml0xx_spi_send_write_reg(I2C_PASSTHROUGH_COMMAND, buf,
++			STML0XX_PASSTHROUGH_SIZE);
++	if (err < 0) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++				"akm_txdata: AKM command write error %d, reg 0x%02X",
++				err, txData[0]);
++		return -EFAULT;
++	}
++
++	loop_count = 0;
++	buf[0] = 0;
++	do {
++		err = stml0xx_spi_send_read_reg(
++				I2C_PASSTHROUGH_RESPONSE,
++				buf, STML0XX_PASSTHROUGH_SIZE);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++					"akm_txdata: AKM data read error %d, reg 0x%02X",
++					err, txData[0]);
++			return -EFAULT;
++		}
++		loop_count++;
++		if (loop_count == 10)
++			break;
++	} while (buf[0] == 0);
++	if (buf[0] != 1) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++				"akm_txdata: AKM write failed %d, reg 0x%02X",
++				buf[0], txData[0]);
++		return -EFAULT;
++	}
++
++	return 0;
++}
++
++/***** akm miscdevice functions *************************************/
++static int AKECS_Set_CNTL(
++	struct stml0xx_data *ps_stml0xx,
++	uint8_t mode)
++{
++	uint8_t buffer[2];
++	int err;
++
++	/***** lock *****/
++	mutex_lock(&ps_stml0xx->akm_sensor_mutex);
++	/* Busy check */
++	if (ps_stml0xx->akm_is_busy > 0) {
++		dev_err(&ps_stml0xx->spi->dev,
++				"%s: device is busy.", __func__);
++		err = -EBUSY;
++	} else {
++		/* Set measure mode */
++		buffer[0] = AKM_REG_MODE;
++		buffer[1] = mode;
++		err = akm_txdata(buffer, 2);
++		if (err < 0) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"%s: Can not set CNTL.", __func__);
++		} else {
++			dev_vdbg(&ps_stml0xx->spi->dev,
++					"Mode is set to (%d).", mode);
++			/* Set flag */
++			ps_stml0xx->akm_is_busy = 1;
++			atomic_set(&ps_stml0xx->akm_drdy, 0);
++			/* wait at least 100us after changing mode */
++			udelay(100);
++		}
++	}
++
++	mutex_unlock(&ps_stml0xx->akm_sensor_mutex);
++	/***** unlock *****/
++
++	return err;
++}
++
++static int AKECS_Set_PowerDown(
++	struct stml0xx_data *ps_stml0xx)
++{
++	uint8_t buffer[2];
++	int err = 0;
++
++	/***** lock *****/
++	mutex_lock(&ps_stml0xx->akm_sensor_mutex);
++
++	/* Set powerdown mode */
++	buffer[0] = AKM_REG_MODE;
++	buffer[1] = AKM_MODE_POWERDOWN;
++	err = akm_txdata(buffer, 2);
++	if (err < 0) {
++		dev_err(&ps_stml0xx->spi->dev,
++			"%s: Can not set to powerdown mode.", __func__);
++	} else {
++		dev_dbg(&ps_stml0xx->spi->dev, "Powerdown mode is set.");
++		/* wait at least 100us after changing mode */
++		udelay(100);
++	}
++	/* Clear status */
++	ps_stml0xx->akm_is_busy = 0;
++	atomic_set(&ps_stml0xx->akm_drdy, 0);
++
++	mutex_unlock(&ps_stml0xx->akm_sensor_mutex);
++	/***** unlock *****/
++
++	return err;
++}
++
++static int AKECS_SetMode(
++	struct stml0xx_data *ps_stml0xx,
++	uint8_t mode)
++{
++	int err;
++
++	switch (mode & 0x1F) {
++	case AKM_MODE_SNG_MEASURE:
++	case AKM_MODE_SELF_TEST:
++	case AKM_MODE_FUSE_ACCESS:
++		err = AKECS_Set_CNTL(ps_stml0xx, mode);
++		break;
++	case AKM_MODE_POWERDOWN:
++		err = AKECS_Set_PowerDown(ps_stml0xx);
++		break;
++	default:
++		dev_err(&ps_stml0xx->spi->dev,
++			"%s: Unknown mode(%d).", __func__, mode);
++		return -EINVAL;
++	}
++
++	return err;
++}
++
++static void AKECS_SetYPR(
++	struct stml0xx_data *ps_stml0xx,
++	int *rbuf)
++{
++	uint8_t buf[UNCALIB_SENSOR_DATA_SIZE];
++	uint64_t timestamp;
++	int16_t bias_x, bias_y, bias_z;
++
++	dev_vdbg(&ps_stml0xx->spi->dev, "%s: flag =0x%X", __func__, rbuf[0]);
++	dev_vdbg(&ps_stml0xx->spi->dev, "  Acc [LSB]   : %6d,%6d,%6d stat=%d",
++		rbuf[1], rbuf[2], rbuf[3], rbuf[4]);
++	dev_vdbg(&ps_stml0xx->spi->dev, "  Geo [LSB]   : %6d,%6d,%6d stat=%d",
++		rbuf[5], rbuf[6], rbuf[7], rbuf[8]);
++	dev_vdbg(&ps_stml0xx->spi->dev, "  Orientation : %6d,%6d,%6d",
++		rbuf[9], rbuf[10], rbuf[11]);
++	dev_vdbg(&ps_stml0xx->spi->dev, "  Rotation V  : %6d,%6d,%6d,%6d",
++		rbuf[12], rbuf[13], rbuf[14], rbuf[15]);
++	dev_vdbg(&ps_stml0xx->spi->dev, "  Raw MAG     : %6d,%6d,%6d",
++		rbuf[16], rbuf[17], rbuf[18]);
++	dev_vdbg(&ps_stml0xx->spi->dev, "  Timestamp   : 0x%04x%04x",
++		rbuf[19], rbuf[20]);
++
++	memcpy(&timestamp, &rbuf[AKM_YPR_DATA_SIZE], AKM_SENSOR_TIME_SIZE);
++
++	/* Report magnetic vector information */
++	buf[0] = (rbuf[5] >> 8) & 0xFF;
++	buf[1] = rbuf[5] & 0xFF;
++	buf[2] = (rbuf[6] >> 8) & 0xFF;
++	buf[3] = rbuf[6] & 0xFF;
++	buf[4] = (rbuf[7] >> 8) & 0xFF;
++	buf[5] = rbuf[7] & 0xFF;
++	stml0xx_as_data_buffer_write(ps_stml0xx,
++			DT_MAG,
++			buf,
++			SENSOR_DATA_SIZE,
++			(uint8_t)rbuf[8],
++			timestamp);
++
++	bias_x = rbuf[16] - rbuf[5];
++	bias_y = rbuf[17] - rbuf[6];
++	bias_z = rbuf[18] - rbuf[7];
++	buf[0] = (rbuf[16] >> 8) & 0xFF;
++	buf[1] = rbuf[16] & 0xFF;
++	buf[2] = (rbuf[17] >> 8) & 0xFF;
++	buf[3] = rbuf[17] & 0xFF;
++	buf[4] = (rbuf[18] >> 8) & 0xFF;
++	buf[5] = rbuf[18] & 0xFF;
++	buf[6] = (bias_x >> 8) & 0xFF;
++	buf[7] = bias_x & 0xFF;
++	buf[8] = (bias_y >> 8) & 0xFF;
++	buf[9] = bias_y & 0xFF;
++	buf[10] = (bias_z >> 8) & 0xFF;
++	buf[11] = bias_z & 0xFF;
++	stml0xx_as_data_buffer_write(ps_stml0xx,
++			DT_UNCALIB_MAG,
++			buf,
++			UNCALIB_SENSOR_DATA_SIZE,
++			(uint8_t)rbuf[8],
++			timestamp);
++
++	/* Report fusion sensor information */
++	buf[0] = (rbuf[9] >> 8) & 0xFF;
++	buf[1] = rbuf[9] & 0xFF;
++	buf[2] = (rbuf[10] >> 8) & 0xFF;
++	buf[3] = rbuf[10] & 0xFF;
++	buf[4] = (rbuf[11] >> 8) & 0xFF;
++	buf[5] = rbuf[11] & 0xFF;
++	stml0xx_as_data_buffer_write(ps_stml0xx,
++			DT_ORIENT,
++			buf,
++			SENSOR_DATA_SIZE,
++			rbuf[8],
++			timestamp);
++}
++
++/* This function will block a process until the latest measurement
++ * data is available.
++ */
++static int AKECS_GetData(
++	struct stml0xx_data *ps_stml0xx,
++	uint8_t *rbuf,
++	int size)
++{
++	uint32_t enable;
++	long ret = 0;
++
++	dev_dbg(&ps_stml0xx->spi->dev, "AKECS_GetData, DRDY %d, num_data %d",
++		atomic_read(&ps_stml0xx->akm_drdy),
++		ps_stml0xx->akm_data_queue.num_data);
++
++	/* Block if data queue empty */
++	ret = wait_event_interruptible_timeout(
++				ps_stml0xx->akm_drdy_wq,
++				atomic_read(&ps_stml0xx->akm_drdy),
++				msecs_to_jiffies(AKM_DRDY_TIMEOUT_MS));
++
++	mutex_lock(&ps_stml0xx->akm_val_mutex);
++	enable = ps_stml0xx->akm_enable_flag & MAG_DATA_READY;
++	mutex_unlock(&ps_stml0xx->akm_val_mutex);
++	if (enable == 0) {
++		/* Mag disabled. Clear queue */
++		mutex_lock(&ps_stml0xx->akm_sensor_mutex);
++		memset(&ps_stml0xx->akm_data_queue, 0,
++			sizeof(struct akm_data_queue_t));
++		mutex_unlock(&ps_stml0xx->akm_sensor_mutex);
++		return -ENODATA;
++	}
++
++	if (ret == -ERESTARTSYS)
++		return -EINTR;
++
++	if (ret < 0) {
++		dev_err(&ps_stml0xx->spi->dev,
++			"%s: wait_event failed (%ld).", __func__, ret);
++		return ret;
++	}
++	if (!atomic_read(&ps_stml0xx->akm_drdy)) {
++		dev_err(&ps_stml0xx->spi->dev,
++			"%s: DRDY is not set.", __func__);
++		return -ENODATA;
++	}
++
++	/* Process data from queue */
++	mutex_lock(&ps_stml0xx->akm_sensor_mutex);
++	if (ps_stml0xx->akm_data_queue.num_data > 0) {
++		memcpy(rbuf, stml0xx_akm_data_queue_remove(ps_stml0xx),
++				AKM_DATA_QUEUE_ENTRY_SIZE);
++		/* Clear data ready if no more samples remaining */
++		if (ps_stml0xx->akm_data_queue.num_data == 0)
++			atomic_set(&ps_stml0xx->akm_drdy, 0);
++	} else {
++		atomic_set(&ps_stml0xx->akm_drdy, 0);
++		return -ENODATA;
++	}
++	mutex_unlock(&ps_stml0xx->akm_sensor_mutex);
++
++	return 0;
++}
++
++static int AKECS_GetOpenStatus(
++	struct stml0xx_data *ps_stml0xx)
++{
++	return wait_event_interruptible(
++			ps_stml0xx->akm_open_wq,
++			(atomic_read(&ps_stml0xx->akm_active) > 0));
++}
++
++static int AKECS_GetCloseStatus(
++	struct stml0xx_data *ps_stml0xx)
++{
++	return wait_event_interruptible(
++			ps_stml0xx->akm_open_wq,
++			(atomic_read(&ps_stml0xx->akm_active) <= 0));
++}
++
++
++static long AKECS_ioctl(
++	struct file *file,
++	unsigned int cmd,
++	unsigned long arg)
++{
++	void __user *argp = (void __user *)arg;
++	struct stml0xx_data *ps_stml0xx = file->private_data;
++
++	/* NOTE: In this function the size of "char" should be 1-byte. */
++	uint8_t i2c_buf[AKM_RWBUF_SIZE];       /* READ/WRITE */
++	uint8_t dat_buf[AKM_SENSOR_DATA_SIZE
++			+ AKM_SENSOR_TIME_SIZE]; /* GET_DATA */
++	int32_t ypr_buf[AKM_YPR_DATA_SIZE
++		+ (AKM_SENSOR_TIME_SIZE / sizeof(int32_t))]; /* SET_YPR */
++	int64_t delay[AKM_NUM_SENSORS];        /* GET_DELAY */
++	int16_t acc_buf[3];                    /* GET_ACCEL */
++	uint8_t mode;                          /* SET_MODE*/
++	int status;                            /* OPEN/CLOSE_STATUS */
++	uint8_t boot_status;
++	int ret = 0;                           /* Return value. */
++
++	if (stml0xx_g_booted != 1)
++		return -EAGAIN;
++
++	switch (cmd) {
++	case ECS_IOCTL_READ:
++	case ECS_IOCTL_WRITE:
++		if (argp == NULL) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"invalid argument.");
++			return -EINVAL;
++		}
++		if (copy_from_user(&i2c_buf, argp, sizeof(i2c_buf))) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"copy_from_user failed.");
++			return -EFAULT;
++		}
++		break;
++	case ECS_IOCTL_SET_MODE:
++		if (argp == NULL) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"invalid argument.");
++			return -EINVAL;
++		}
++		if (copy_from_user(&mode, argp, sizeof(mode))) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"copy_from_user failed.");
++			return -EFAULT;
++		}
++		break;
++	case ECS_IOCTL_SET_YPR:
++		if (argp == NULL) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"invalid argument.");
++			return -EINVAL;
++		}
++		if (copy_from_user(&ypr_buf, argp, sizeof(ypr_buf))) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"copy_from_user failed.");
++			return -EFAULT;
++		}
++	case ECS_IOCTL_GET_INFO:
++	case ECS_IOCTL_GET_CONF:
++	case ECS_IOCTL_GET_DATA:
++	case ECS_IOCTL_GET_OPEN_STATUS:
++	case ECS_IOCTL_GET_CLOSE_STATUS:
++	case ECS_IOCTL_GET_DELAY:
++	case ECS_IOCTL_GET_LAYOUT:
++	case ECS_IOCTL_GET_ACCEL:
++	case ECS_IOCTL_CHECK_READY:
++		/* Check buffer pointer for writing a data later. */
++		if (argp == NULL) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"invalid argument.");
++			return -EINVAL;
++		}
++		break;
++	default:
++		break;
++	}
++
++	switch (cmd) {
++	case ECS_IOCTL_READ:
++		dev_vdbg(&ps_stml0xx->spi->dev, "IOCTL_READ called.");
++		if ((i2c_buf[0] < 1) || (i2c_buf[0] > (AKM_RWBUF_SIZE-1))) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"invalid argument.");
++			return -EINVAL;
++		}
++		ret = akm_rxdata(&i2c_buf[1], i2c_buf[0]);
++		if (ret < 0)
++			return ret;
++		break;
++	case ECS_IOCTL_WRITE:
++		dev_vdbg(&ps_stml0xx->spi->dev, "IOCTL_WRITE called.");
++		if ((i2c_buf[0] < 2) || (i2c_buf[0] > (AKM_RWBUF_SIZE-1))) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"invalid argument.");
++			return -EINVAL;
++		}
++		ret = akm_txdata(&i2c_buf[1], i2c_buf[0]);
++		if (ret < 0)
++			return ret;
++		break;
++	case ECS_IOCTL_RESET:
++		dev_vdbg(&ps_stml0xx->spi->dev, "IOCTL_RESET called.");
++		return 1; /*AKD_SUCCESS;*/
++	case ECS_IOCTL_SET_MODE:
++		dev_vdbg(&ps_stml0xx->spi->dev,
++				"IOCTL_SET_MODE called. %d", mode);
++		return 1; /*AKD_SUCCESS;*/
++	case ECS_IOCTL_SET_YPR:
++		dev_vdbg(&ps_stml0xx->spi->dev, "IOCTL_SET_YPR called.");
++		AKECS_SetYPR(ps_stml0xx, ypr_buf);
++		break;
++	case ECS_IOCTL_GET_DATA:
++		dev_vdbg(&ps_stml0xx->spi->dev,
++				"IOCTL_GET_DATA called.");
++		ret = AKECS_GetData(ps_stml0xx, dat_buf,
++					AKM_SENSOR_DATA_SIZE
++					+ AKM_SENSOR_TIME_SIZE);
++
++		if (ret < 0)
++			return ret;
++		break;
++	case ECS_IOCTL_GET_OPEN_STATUS:
++		dev_vdbg(&ps_stml0xx->spi->dev,
++				"IOCTL_GET_OPEN_STATUS called.");
++		ret = AKECS_GetOpenStatus(ps_stml0xx);
++		if (ret < 0) {
++			if (ret != -ERESTARTSYS)
++				dev_err(&ps_stml0xx->spi->dev,
++					"Get Open returns error (%d).", ret);
++			return ret;
++		}
++		break;
++	case ECS_IOCTL_GET_CLOSE_STATUS:
++		dev_vdbg(&ps_stml0xx->spi->dev,
++				"IOCTL_GET_CLOSE_STATUS called.");
++		ret = AKECS_GetCloseStatus(ps_stml0xx);
++		if (ret < 0) {
++			if (ret != -ERESTARTSYS)
++				dev_err(&ps_stml0xx->spi->dev,
++					"Get Close returns error (%d).", ret);
++			return ret;
++		}
++		break;
++	case ECS_IOCTL_GET_DELAY:
++		dev_vdbg(&ps_stml0xx->spi->dev,
++				"IOCTL_GET_DELAY called.");
++		mutex_lock(&ps_stml0xx->akm_val_mutex);
++		delay[0] = -1;
++		delay[1] = ((ps_stml0xx->akm_enable_flag & MAG_DATA_READY) ?
++				(stml0xx_g_mag_delay * 1000000) : -1);
++		delay[2] = -1;
++		mutex_unlock(&ps_stml0xx->akm_val_mutex);
++		break;
++	case ECS_IOCTL_GET_INFO:
++		dev_vdbg(&ps_stml0xx->spi->dev,
++				"IOCTL_GET_INFO called.");
++		break;
++	case ECS_IOCTL_GET_CONF:
++		dev_vdbg(&ps_stml0xx->spi->dev,
++				"IOCTL_GET_CONF called.");
++		break;
++	case ECS_IOCTL_GET_LAYOUT:
++		dev_vdbg(&ps_stml0xx->spi->dev,
++				"IOCTL_GET_LAYOUT called.");
++		break;
++	case ECS_IOCTL_GET_ACCEL:
++		dev_vdbg(&ps_stml0xx->spi->dev,
++				"IOCTL_GET_ACCEL called.");
++		mutex_lock(&ps_stml0xx->akm_accel_mutex);
++		acc_buf[0] = ps_stml0xx->akm_accel_data[0];
++		acc_buf[1] = ps_stml0xx->akm_accel_data[1];
++		acc_buf[2] = ps_stml0xx->akm_accel_data[2];
++		mutex_unlock(&ps_stml0xx->akm_accel_mutex);
++		break;
++	case ECS_IOCTL_CHECK_READY:
++		dev_vdbg(&ps_stml0xx->spi->dev,
++				"ECS_IOCTL_CHECK_READY called");
++		break;
++	default:
++		return -ENOTTY;
++	}
++
++	switch (cmd) {
++	case ECS_IOCTL_READ:
++		/* +1  is for the first byte */
++		if (copy_to_user(argp, &i2c_buf, i2c_buf[0]+1)) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"copy_to_user failed.");
++			return -EFAULT;
++		}
++		break;
++	case ECS_IOCTL_GET_INFO:
++		if (copy_to_user(argp, &ps_stml0xx->akm_sense_info,
++					sizeof(ps_stml0xx->akm_sense_info))) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"copy_to_user failed.");
++			return -EFAULT;
++		}
++		break;
++	case ECS_IOCTL_GET_CONF:
++		if (copy_to_user(argp, &ps_stml0xx->akm_sense_conf,
++					sizeof(ps_stml0xx->akm_sense_conf))) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"copy_to_user failed.");
++			return -EFAULT;
++		}
++		break;
++	case ECS_IOCTL_GET_DATA:
++		if (copy_to_user(argp, &dat_buf, sizeof(dat_buf))) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"copy_to_user failed.");
++			return -EFAULT;
++		}
++		break;
++	case ECS_IOCTL_GET_OPEN_STATUS:
++	case ECS_IOCTL_GET_CLOSE_STATUS:
++		status = atomic_read(&ps_stml0xx->akm_active);
++		if (copy_to_user(argp, &status, sizeof(status))) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"copy_to_user failed.");
++			return -EFAULT;
++		}
++		break;
++	case ECS_IOCTL_GET_DELAY:
++		if (copy_to_user(argp, &delay, sizeof(delay))) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"copy_to_user failed.");
++			return -EFAULT;
++		}
++		break;
++	case ECS_IOCTL_GET_LAYOUT:
++		if (copy_to_user(argp, &ps_stml0xx->akm_layout,
++					sizeof(ps_stml0xx->akm_layout))) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"copy_to_user failed.");
++			return -EFAULT;
++		}
++		break;
++	case ECS_IOCTL_GET_ACCEL:
++		if (copy_to_user(argp, &acc_buf, sizeof(acc_buf))) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"copy_to_user failed.");
++			return -EFAULT;
++		}
++		break;
++	case ECS_IOCTL_CHECK_READY:
++		boot_status = stml0xx_g_booted;
++		if (copy_to_user(argp, &boot_status,
++				sizeof(boot_status))) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"copy_to_user failed.");
++			return -EFAULT;
++		}
++		break;
++	default:
++		break;
++	}
++
++	return 0;
++}
++
++int akm09912_enable_mag(int enable, struct stml0xx_data *ps_stml0xx)
++{
++	static int old_enable = -1;
++
++	if (enable == old_enable)
++		return 0;
++	old_enable = enable;
++
++	mutex_lock(&ps_stml0xx->akm_val_mutex);
++	ps_stml0xx->akm_enable_flag &= ~MAG_DATA_READY;
++	ps_stml0xx->akm_enable_flag &= ~FUSION_DATA_READY;
++	if (enable) {
++		ps_stml0xx->akm_enable_flag |= MAG_DATA_READY;
++		ps_stml0xx->akm_enable_flag |= FUSION_DATA_READY;
++	}
++
++	enable = ps_stml0xx->akm_enable_flag;
++	mutex_unlock(&ps_stml0xx->akm_val_mutex);
++
++	if (enable == 0) {
++		if (atomic_cmpxchg(&ps_stml0xx->akm_active, 1, 0) == 1) {
++			wake_up(&ps_stml0xx->akm_open_wq);
++			dev_dbg(&ps_stml0xx->spi->dev, "Deactivated");
++		}
++	} else {
++		if (atomic_cmpxchg(&ps_stml0xx->akm_active, 0, 1) == 0) {
++			wake_up(&ps_stml0xx->akm_open_wq);
++			dev_dbg(&ps_stml0xx->spi->dev, "Activated");
++		}
++	}
++
++	dev_dbg(&ps_stml0xx->spi->dev,
++			"Status updated: enable=0x%X, active=%d",
++			enable, atomic_read(&ps_stml0xx->akm_active));
++
++	return 0;
++}
++
++int akm09912_i2c_check_device(
++	struct stml0xx_data *ps_stml0xx)
++{
++	int err;
++
++	ps_stml0xx->akm_sense_info[0] = AK09912_REG_WIA1;
++	err = akm_rxdata(ps_stml0xx->akm_sense_info, AKM_SENSOR_INFO_SIZE);
++	if (err < 0)
++		return err;
++
++	/* Set FUSE access mode */
++	err = AKECS_SetMode(ps_stml0xx, AK09912_MODE_FUSE_ACCESS);
++	if (err < 0)
++		return err;
++
++	ps_stml0xx->akm_sense_conf[0] = AK09912_FUSE_ASAX;
++	err = akm_rxdata(ps_stml0xx->akm_sense_conf, AKM_SENSOR_CONF_SIZE);
++	if (err < 0)
++		return err;
++
++	err = AKECS_SetMode(ps_stml0xx, AK09912_MODE_POWERDOWN);
++	if (err < 0)
++		return err;
++
++	/* Check read data */
++	if (ps_stml0xx->akm_sense_info[0] != AKM_WIA_VALE) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"%s: The device is not AKM Compass.", __func__);
++		return -ENXIO;
++	}
++
++	return err;
++}
++
++static int stml0xx_akm_open(struct inode *inode, struct file *file)
++{
++	int err = 0;
++
++	dev_dbg(&stml0xx_misc_data->spi->dev, "stml0xx_akm_open");
++
++	err = nonseekable_open(inode, file);
++	if (err < 0)
++		return err;
++	file->private_data = stml0xx_misc_data;
++
++	return err;
++}
++
++static int stml0xx_akm_release(struct inode *inode, struct file *file)
++{
++	return 0;
++}
++
++const struct file_operations stml0xx_akm_fops = {
++	.owner = THIS_MODULE,
++	.open = stml0xx_akm_open,
++	.release = stml0xx_akm_release,
++	.unlocked_ioctl = AKECS_ioctl,
++#ifdef CONFIG_COMPAT
++	.compat_ioctl = AKECS_ioctl,
++#endif
++};
++
++struct miscdevice stml0xx_akm_device = {
++	.minor = MISC_DYNAMIC_MINOR,
++	.name = "stml0xx_akm",
++	.fops = &stml0xx_akm_fops,
++};
++
++void stml0xx_akm_init(struct stml0xx_data *ps_stml0xx)
++{
++	int err = 0;
++
++	dev_info(&ps_stml0xx->spi->dev, "stml0xx_akm_init");
++	/* Default value */
++	ps_stml0xx->akm_layout = 8;
++
++	init_waitqueue_head(&ps_stml0xx->akm_drdy_wq);
++	init_waitqueue_head(&ps_stml0xx->akm_open_wq);
++
++	mutex_init(&ps_stml0xx->akm_sensor_mutex);
++	mutex_init(&ps_stml0xx->akm_val_mutex);
++	mutex_init(&ps_stml0xx->akm_accel_mutex);
++
++	atomic_set(&ps_stml0xx->akm_active, 0);
++	atomic_set(&ps_stml0xx->akm_drdy, 0);
++
++	ps_stml0xx->akm_is_busy = 0;
++	ps_stml0xx->akm_enable_flag = 0;
++
++	memset(&ps_stml0xx->akm_data_queue, 0, sizeof(struct akm_data_queue_t));
++
++	err = misc_register(&stml0xx_akm_device);
++	if (err < 0) {
++		dev_err(&ps_stml0xx->spi->dev,
++				"akm device create failed %d", err);
++		goto exit;
++	}
++
++exit:
++	return;
++}
++
++int stml0xx_akm_data_queue_insert(struct stml0xx_data *ps_stml0xx,
++					uint8_t *data)
++{
++	int ret = 0;
++	struct akm_data_queue_t *queue = &ps_stml0xx->akm_data_queue;
++
++	if (queue->num_data >= AKM_DATA_MAX_QUEUE_SIZE) {
++		dev_err(&ps_stml0xx->spi->dev, "akm data queue full");
++		ret = -1;
++	} else {
++		queue->num_data++;
++		memcpy(&queue->data[queue->tail * AKM_DATA_QUEUE_ENTRY_SIZE],
++			data, AKM_DATA_QUEUE_ENTRY_SIZE);
++		queue->tail = (queue->tail + 1) % AKM_DATA_MAX_QUEUE_SIZE;
++	}
++
++	return ret;
++}
++
++uint8_t *stml0xx_akm_data_queue_remove(struct stml0xx_data *ps_stml0xx)
++{
++	struct akm_data_queue_t *queue = &ps_stml0xx->akm_data_queue;
++	uint8_t old_head;
++	uint8_t *ret = NULL;
++
++	if (queue->num_data == 0) {
++		dev_dbg(&ps_stml0xx->spi->dev, "akm data queue empty");
++	} else {
++		queue->num_data--;
++		old_head = queue->head;
++		queue->head = (queue->head + 1) % AKM_DATA_MAX_QUEUE_SIZE;
++
++		ret = &queue->data[old_head * AKM_DATA_QUEUE_ENTRY_SIZE];
++	}
++	return ret;
++}
++
++#endif /* CONFIG_SENSORS_SH_AK09912 */
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index e7dfa216872..47ec181fc11 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -43,6 +43,10 @@
+ #include <linux/dropbox.h>
+ #include <linux/string.h>
+ 
++#ifdef CONFIG_SENSORS_SH_AK09912
++#include <linux/stml0xx_akm.h>
++#endif
++
+ #include <linux/stml0xx.h>
+ 
+ #define NAME                "stml0xx"
+@@ -1019,6 +1023,10 @@ static int stml0xx_probe(struct spi_device *spi)
+ 	ps_stml0xx->hall_data = mmi_hall_init();
+ #endif
+ 
++#ifdef CONFIG_SENSORS_SH_AK09912
++	stml0xx_akm_init(ps_stml0xx);
++#endif
++
+ 	mutex_unlock(&ps_stml0xx->lock);
+ 
+ 	dev_dbg(&spi->dev, "probed finished");
+diff --git a/drivers/misc/stml0xx/stml0xx_ioctl.c b/drivers/misc/stml0xx/stml0xx_ioctl.c
+index b87314875f4..c015285842d 100644
+--- a/drivers/misc/stml0xx/stml0xx_ioctl.c
++++ b/drivers/misc/stml0xx/stml0xx_ioctl.c
+@@ -80,6 +80,11 @@ void stml0xx_ioctl_work_func(struct work_struct *ws)
+ 		if (stml0xx_g_booted)
+ 			err = stml0xx_spi_send_write_reg(NONWAKESENSOR_CONFIG,
+ 							buf, 3);
++#ifdef CONFIG_SENSORS_SH_AK09912
++		akm09912_enable_mag(
++				(stml0xx_g_nonwake_sensor_state & M_ECOMPASS),
++				ps_stml0xx);
++#endif
+ 		dev_dbg(&stml0xx_misc_data->spi->dev, "Sensor enable = 0x%lx\n",
+ 			stml0xx_g_nonwake_sensor_state);
+ 		break;
+@@ -115,6 +120,16 @@ void stml0xx_ioctl_work_func(struct work_struct *ws)
+ 							buf, 1);
+ 		}
+ 		break;
++	case STML0XX_IOCTL_SET_MAG_DELAY:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_MAG_DELAY");
++		stml0xx_g_mag_delay = ioctl_ws->data.delay;
++		if (stml0xx_g_booted) {
++			buf[0] = ioctl_ws->data.delay;
++			err = stml0xx_spi_send_write_reg(MAG_UPDATE_RATE,
++							buf, 1);
++		}
++		break;
+ 	case STML0XX_IOCTL_SET_ALS_DELAY:
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"STML0XX_IOCTL_SET_ALS_DELAY");
+@@ -289,8 +304,7 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		);
+ 		INIT_IOCTL_WS
+ 		ioctl_ws->cmd = cmd;
+-		if (
+-			copy_from_user(
++		if (copy_from_user(
+ 				ioctl_ws->data.bytes,
+ 				argp,
+ 				3 * sizeof(unsigned char))) {
+@@ -311,8 +325,7 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		);
+ 		INIT_IOCTL_WS
+ 		ioctl_ws->cmd = cmd;
+-		if (
+-			copy_from_user(
++		if (copy_from_user(
+ 				&(ioctl_ws->data.delay),
+ 				argp,
+ 				sizeof(ioctl_ws->data.delay))) {
+@@ -333,8 +346,7 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		);
+ 		INIT_IOCTL_WS
+ 		ioctl_ws->cmd = cmd;
+-		if (
+-			copy_from_user(
++		if (copy_from_user(
+ 				&(ioctl_ws->data.delay),
+ 				argp,
+ 				sizeof(ioctl_ws->data.delay))) {
+@@ -355,8 +367,7 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		);
+ 		INIT_IOCTL_WS
+ 		ioctl_ws->cmd = cmd;
+-		if (
+-			copy_from_user(
++		if (copy_from_user(
+ 				&(ioctl_ws->data.delay),
+ 				argp,
+ 				sizeof(ioctl_ws->data.delay))) {
+@@ -370,6 +381,27 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 			(struct work_struct *)ioctl_ws
+ 		);
+ 		return 0;
++	case STML0XX_IOCTL_SET_MAG_DELAY:
++		dev_dbg(
++			&stml0xx_misc_data->spi->dev,
++			"deferring STML0XX_IOCTL_SET_MAG_DELAY"
++		);
++		INIT_IOCTL_WS
++		ioctl_ws->cmd = cmd;
++		if (copy_from_user(
++				&(ioctl_ws->data.delay),
++				argp,
++				sizeof(ioctl_ws->data.delay))) {
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Copy mag delay returned error\n");
++			kfree(ioctl_ws);
++			return -EFAULT;
++		}
++		queue_work(
++			ps_stml0xx->irq_work_queue,
++			(struct work_struct *)ioctl_ws
++		);
++		return 0;
+ 	case STML0XX_IOCTL_SET_ALS_DELAY:
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"deferring STML0XX_IOCTL_SET_ALS_DELAY");
+@@ -412,8 +444,7 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		);
+ 		INIT_IOCTL_WS
+ 		ioctl_ws->cmd = cmd;
+-		if (
+-			copy_from_user(
++		if (copy_from_user(
+ 				ioctl_ws->data.bytes,
+ 				argp,
+ 				3 * sizeof(unsigned char))) {
+@@ -434,8 +465,7 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		);
+ 		INIT_IOCTL_WS
+ 		ioctl_ws->cmd = cmd;
+-		if (
+-			copy_from_user(
++		if (copy_from_user(
+ 				ioctl_ws->data.bytes,
+ 				argp,
+ 				2 * sizeof(unsigned char))) {
+@@ -495,8 +525,7 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		INIT_IOCTL_WS
+ 		ioctl_ws->cmd = cmd;
+ 		/* copy algo into bytes[2] */
+-		if (
+-			copy_from_user(
++		if (copy_from_user(
+ 				bytes,
+ 				argp,
+ 				2 * sizeof(unsigned char)
+@@ -509,8 +538,7 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		addr = (bytes[1] << 8) | bytes[0];
+ 		ioctl_ws->algo_req_ndx = addr;
+ 		/* copy len */
+-		if (
+-			copy_from_user(
++		if (copy_from_user(
+ 				&(ioctl_ws->data_len),
+ 				argp + 2 * sizeof(unsigned char),
+ 				sizeof(ioctl_ws->data_len)
+diff --git a/drivers/misc/stml0xx/stml0xx_irq.c b/drivers/misc/stml0xx/stml0xx_irq.c
+index 65672279ed8..902e11bb7c4 100644
+--- a/drivers/misc/stml0xx/stml0xx_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_irq.c
+@@ -86,19 +86,19 @@ irqreturn_t stml0xx_isr(int irq, void *dev)
+  *   where N = STREAM_SENSOR_QUEUE_DEPTH
+  *   (so only N-1 of the N slots are ever filled).
+  *
+- *   Byte  0   - slot 0: sensor type
+- *   Bytes 1~2 - slot 0: number of ticks elapsed since previous sample
+- *   Bytes 3~8 - slot 0: 6-byte data
++ *   Byte  0    - slot 0: sensor type
++ *   Bytes 1~2  - slot 0: number of ticks elapsed since previous sample
++ *   Bytes 3~10 - slot 0: 8-byte data
+  *   ...
+- *   Bytes [n*9]               - slot n: sensor type
+- *   Bytes [n*9 + 1]~[n*9 + 2] - slot n: number of ticks elapsed since
++ *   Bytes [n*11]                - slot n: sensor type
++ *   Bytes [n*11 + 1]~[n*11 + 2] - slot n: number of ticks elapsed since
+  *                                       previous sample
+- *   Bytes [n*9 + 3]~[n*9 + 8] - slot n: 6-byte data
++ *   Bytes [n*11 + 3]~[n*11 + 8] - slot n: 6-byte data
+  *
+- *   Bytes [N*9]               - Insert index (0,1,2,3..N-1)
+- *   Bytes [N*9 + 1]~[N*9 + 3] - Nothing (buffer to ensure insert and remove
++ *   Bytes [N*11]                - Insert index (0,1,2,3..N-1)
++ *   Bytes [N*11 + 1]~[N*11 + 3] - Nothing (buffer to ensure insert and remove
+  *                                        indices are in separate words)
+- *   Bytes [N*9 + 4]           - Remove index (0,1,2,3..N-1)
++ *   Bytes [N*11 + 4]            - Remove index (0,1,2,3..N-1)
+  *
+  *   where n = slot (0..N-1), N = STREAM_SENSOR_QUEUE_DEPTH
+ */
+@@ -114,6 +114,9 @@ void stml0xx_process_stream_sensor_queue(char *buf, uint64_t ts_ns)
+ 	struct stml0xx_data *ps_stml0xx = stml0xx_misc_data;
+ 	unsigned char *queue_buf = &buf[IRQ_IDX_STREAM_SENSOR_QUEUE];
+ 	static uint64_t last_ts_ns;
++#ifdef CONFIG_SENSORS_SH_AK09912
++	uint8_t mag_data[AKM_DATA_QUEUE_ENTRY_SIZE];
++#endif
+ 
+ 	insert_idx = queue_buf[STREAM_SENSOR_QUEUE_INSERT_IDX];
+ 	remove_idx = queue_buf[STREAM_SENSOR_QUEUE_REMOVE_IDX];
+@@ -124,9 +127,9 @@ void stml0xx_process_stream_sensor_queue(char *buf, uint64_t ts_ns)
+ 		num_samples = insert_idx + STREAM_SENSOR_QUEUE_DEPTH
+ 				- remove_idx;
+ 
+-#if ENABLE_VERBOSE_LOGGING
+ 	dev_dbg(&stml0xx_misc_data->spi->dev, "Samples in Queue: %d",
+ 			num_samples);
++#if ENABLE_VERBOSE_LOGGING
+ 
+ 	for (i = 0; i < STREAM_SENSOR_QUEUE_DEPTH *
+ 			STREAM_SENSOR_QUEUE_ENTRY_SIZE; i++) {
+@@ -171,6 +174,19 @@ void stml0xx_process_stream_sensor_queue(char *buf, uint64_t ts_ns)
+ 			stml0xx_as_data_buffer_write(ps_stml0xx,
+ 				DT_ACCEL, &sample_buf[SENSOR_X_IDX],
+ 				SENSOR_DATA_SIZE, 0, ts_ns);
++#ifdef CONFIG_SENSORS_SH_AK09912
++			mutex_lock(&ps_stml0xx->akm_accel_mutex);
++			stml0xx_misc_data->akm_accel_data[0] =
++					sample_buf[SENSOR_X_IDX] << 8 |
++					sample_buf[SENSOR_X_IDX + 1];
++			stml0xx_misc_data->akm_accel_data[1] =
++					sample_buf[SENSOR_Y_IDX] << 8 |
++					sample_buf[SENSOR_Y_IDX + 1];
++			stml0xx_misc_data->akm_accel_data[2] =
++					sample_buf[SENSOR_Z_IDX] << 8 |
++					sample_buf[SENSOR_Z_IDX + 1];
++			mutex_unlock(&ps_stml0xx->akm_accel_mutex);
++#endif
+ 			dev_dbg(&stml0xx_misc_data->spi->dev,
+ 				"Sending acc(x,y,z)values:x=%d,y=%d,z=%d",
+ 				SH_TO_H16(sample_buf + SENSOR_X_IDX),
+@@ -187,9 +203,26 @@ void stml0xx_process_stream_sensor_queue(char *buf, uint64_t ts_ns)
+ 				SH_TO_H16(sample_buf + SENSOR_Y_IDX),
+ 				SH_TO_H16(sample_buf + SENSOR_Z_IDX));
+ 			break;
++#ifdef CONFIG_SENSORS_SH_AK09912
++		case STREAM_SENSOR_TYPE_UNCAL_MAG:
++			mag_data[0] = sample_buf[SENSOR_X_IDX + 6]; /* ST1 */
++			memcpy(&mag_data[1], sample_buf + SENSOR_X_IDX, 6);
++			mag_data[7] = 0; /* unused field for temperature */
++			mag_data[8] = sample_buf[SENSOR_X_IDX + 7]; /* ST2 */
++			memcpy(&mag_data[AKM_SENSOR_DATA_SIZE], &ts_ns,
++				AKM_SENSOR_TIME_SIZE);
++
++			/* Add data to queue */
++			mutex_lock(&ps_stml0xx->akm_sensor_mutex);
++			stml0xx_akm_data_queue_insert(ps_stml0xx, mag_data);
++			atomic_set(&ps_stml0xx->akm_drdy, 1);
++			mutex_unlock(&ps_stml0xx->akm_sensor_mutex);
++			wake_up(&ps_stml0xx->akm_drdy_wq);
++			break;
++#endif
+ 		case STREAM_SENSOR_TYPE_UNCAL_GYRO:
+ 			if (stml0xx_g_nonwake_sensor_state & M_UNCALIB_GYRO) {
+-				char uncal_gyro_buf[UNCALIB_GYRO_DATA_SIZE];
++				char uncal_gyro_buf[UNCALIB_SENSOR_DATA_SIZE];
+ 
+ 				memcpy(uncal_gyro_buf,
+ 					sample_buf + SENSOR_X_IDX,
+@@ -200,7 +233,7 @@ void stml0xx_process_stream_sensor_queue(char *buf, uint64_t ts_ns)
+ 				stml0xx_as_data_buffer_write(ps_stml0xx,
+ 					DT_UNCALIB_GYRO,
+ 					uncal_gyro_buf,
+-					UNCALIB_GYRO_DATA_SIZE, 0, ts_ns);
++					UNCALIB_SENSOR_DATA_SIZE, 0, ts_ns);
+ 				dev_dbg(&stml0xx_misc_data->spi->dev,
+ 				  "Sending Gyro uncalib(x,y,z)values:%d,%d,%d;%d,%d,%d",
+ 					SH_TO_H16(sample_buf + SENSOR_X_IDX),
+@@ -286,9 +319,9 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 		if (irq_status & M_QUEUE_OVERFLOW)
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+ 				"Streaming sensor queue full");
+-		if (stml0xx_g_nonwake_sensor_state
+-				& (M_ACCEL | M_ACCEL2
+-					| M_GYRO | M_UNCALIB_GYRO))
++		if (stml0xx_g_nonwake_sensor_state &
++				(M_ACCEL | M_ACCEL2 | M_GYRO |
++					M_UNCALIB_GYRO | M_ECOMPASS))
+ 			stml0xx_process_stream_sensor_queue(buf, stm_ws->ts_ns);
+ 	} else {
+ 		ps_stml0xx->discard_sensor_queue = false;
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index 8768c86913b..1f1cab303e3 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -125,6 +125,12 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 	if (err < 0)
+ 		ret_err = err;
+ 
++	buf[0] = stml0xx_g_mag_delay;
++	err = stml0xx_spi_send_write_reg_reset(MAG_UPDATE_RATE, buf,
++			1, RESET_NOT_ALLOWED);
++	if (err < 0)
++		ret_err = err;
++
+ 	stml0xx_spi_retry_delay = 10;
+ 
+ 	buf[0] = stml0xx_g_als_delay >> 8;
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index 675dbab0c11..3dcb37a82bc 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -116,6 +116,9 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 			(struct stml0xx_delayed_work_struct *)work;
+ 	struct stml0xx_data *ps_stml0xx = stml0xx_misc_data;
+ 	unsigned char buf[SPI_MSG_SIZE];
++#ifdef CONFIG_SENSORS_SH_AK09912
++	static bool akm_init;
++#endif
+ 
+ 	struct stml0xx_platform_data *pdata;
+ 	pdata = ps_stml0xx->pdata;
+@@ -531,6 +534,16 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 		dev_info(&stml0xx_misc_data->spi->dev,
+ 			"Sensor Hub reports reset");
+ 		stml0xx_g_booted = 1;
++#ifdef CONFIG_SENSORS_SH_AK09912
++		if (akm_init == false) {
++			err = akm09912_i2c_check_device(ps_stml0xx);
++			if (err < 0) {
++				dev_err(&stml0xx_misc_data->spi->dev,
++					"akm09912 device check failed");
++			} else
++				akm_init = true;
++		}
++#endif
+ 	}
+ 	/* check for a reset request */
+ 	if (irq_status & M_HUB_RESET) {
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index f27d2e32e4f..dd3e1653712 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -34,6 +34,10 @@
+ #include <linux/mmi_hall_notifier.h>
+ #endif
+ 
++#ifdef CONFIG_SENSORS_SH_AK09912
++#include "linux/stml0xx_akm.h"
++#endif
++
+ /* Log macros */
+ #define ENABLE_VERBOSE_LOGGING 0
+ 
+@@ -61,7 +65,7 @@ enum sh_spi_msg {
+ #define VMM_ENTRY(reg, id, writable, addr, size) id,
+ #define DSP
+ enum vmm_ids {
+-#include <linux/motosh_vmm.h>
++#include <linux/stml0xx_vmm.h>
+ };
+ #undef VMM_ENTRY
+ #undef GYRO_CALIBRATION
+@@ -89,8 +93,11 @@ enum vmm_ids {
+ #define STREAM_SENSOR_TYPE_ACCEL1        1
+ #define STREAM_SENSOR_TYPE_ACCEL2        2
+ #define STREAM_SENSOR_TYPE_UNCAL_GYRO    3
+-#define STREAM_SENSOR_QUEUE_DEPTH        16
+-#define STREAM_SENSOR_QUEUE_ENTRY_SIZE   9
++#define STREAM_SENSOR_TYPE_UNCAL_MAG     4
++#define STREAM_SENSOR_QUEUE_DEPTH        20
++#define STREAM_SENSOR_QUEUE_ENTRY_SIZE   11
++#define STREAM_SENSOR_QUEUE_SIZE \
++	(STREAM_SENSOR_QUEUE_DEPTH * STREAM_SENSOR_QUEUE_ENTRY_SIZE + 5)
+ #define STREAM_SENSOR_QUEUE_INSERT_IDX \
+ 	(STREAM_SENSOR_QUEUE_DEPTH * STREAM_SENSOR_QUEUE_ENTRY_SIZE)
+ #define STREAM_SENSOR_QUEUE_REMOVE_IDX \
+@@ -101,12 +108,13 @@ enum vmm_ids {
+ #define IRQ_IDX_STATUS_MED           1
+ #define IRQ_IDX_STATUS_HI            2
+ #define IRQ_IDX_STREAM_SENSOR_QUEUE  3
+-#define IRQ_IDX_GYRO_CAL_X           152
+-#define IRQ_IDX_GYRO_CAL_Y           154
+-#define IRQ_IDX_GYRO_CAL_Z           156
+-#define IRQ_IDX_ALS                  158
+-#define IRQ_IDX_DISP_ROTATE          160
+-#define IRQ_IDX_STEP_COUNTER         161
++#define IRQ_IDX_GYRO_CAL_X           (IRQ_IDX_STREAM_SENSOR_QUEUE \
++				      + STREAM_SENSOR_QUEUE_SIZE)
++#define IRQ_IDX_GYRO_CAL_Y           (IRQ_IDX_GYRO_CAL_X + 2)
++#define IRQ_IDX_GYRO_CAL_Z           (IRQ_IDX_GYRO_CAL_Y + 2)
++#define IRQ_IDX_ALS                  (IRQ_IDX_GYRO_CAL_Z + 2)
++#define IRQ_IDX_DISP_ROTATE          (IRQ_IDX_ALS + 2)
++#define IRQ_IDX_STEP_COUNTER         (IRQ_IDX_DISP_ROTATE + 1)
+ 
+ /* stml0xx wake IRQ SPI buffer indexes */
+ #define WAKE_IRQ_IDX_STATUS_LO              0
+@@ -158,8 +166,9 @@ enum vmm_ids {
+ #define SENSOR_Y_IDX  5
+ #define SENSOR_Z_IDX  7
+ 
+-#define SENSOR_DATA_SIZE       6
+-#define UNCALIB_GYRO_DATA_SIZE 12
++#define SENSOR_DATA_SIZE         6
++#define RAW_MAG_DATA_SIZE        8
++#define UNCALIB_SENSOR_DATA_SIZE 12
+ 
+ #define DOCK_STATE	0
+ #define PROX_DISTANCE	0
+@@ -337,6 +346,27 @@ struct stml0xx_data {
+ #ifdef CONFIG_MMI_HALL_NOTIFICATIONS
+ 	struct mmi_hall_data *hall_data;
+ #endif
++
++#ifdef CONFIG_SENSORS_SH_AK09912
++	struct akm_data_queue_t akm_data_queue;
++	uint8_t akm_sense_info[AKM_SENSOR_INFO_SIZE];
++	uint8_t akm_sense_conf[AKM_SENSOR_CONF_SIZE];
++	struct mutex akm_sensor_mutex;
++	struct mutex akm_val_mutex;
++	struct mutex akm_accel_mutex;
++	atomic_t akm_active;
++	atomic_t akm_drdy;
++	/* Positive value means the device is working.
++	 * 0 or negative value means the device is not woking,
++	 * i.e. in power-down mode.
++	 */
++	int8_t akm_is_busy;
++	uint32_t akm_enable_flag;
++	wait_queue_head_t akm_drdy_wq;
++	wait_queue_head_t akm_open_wq;
++	char akm_layout;
++	int16_t akm_accel_data[3];
++#endif
+ };
+ 
+ #ifndef ts_to_ns
+@@ -455,6 +485,15 @@ int stml0xx_blink_set(struct led_classdev *led_cdev,
+ uint8_t stml0xx_set_lowpower_mode(enum lowpower_mode lp_type,
+ 		enum reset_option reset);
+ 
++#ifdef CONFIG_SENSORS_SH_AK09912
++void stml0xx_akm_init(struct stml0xx_data *ps_stml0xx);
++int akm09912_i2c_check_device(struct stml0xx_data *ps_stml0xx);
++int akm09912_enable_mag(int enable, struct stml0xx_data *ps_stml0xx);
++int stml0xx_akm_data_queue_insert(struct stml0xx_data *ps_stml0xx,
++					uint8_t *data);
++uint8_t *stml0xx_akm_data_queue_remove(struct stml0xx_data *ps_stml0xx);
++#endif
++
+ extern struct stml0xx_data *stml0xx_misc_data;
+ 
+ extern unsigned short stml0xx_g_acc_delay;
+diff --git a/include/uapi/linux/Kbuild b/include/uapi/linux/Kbuild
+index 56646113180..f50479a7973 100644
+--- a/include/uapi/linux/Kbuild
++++ b/include/uapi/linux/Kbuild
+@@ -422,7 +422,8 @@ header-y += soundcard.h
+ header-y += stat.h
+ header-y += stddef.h
+ header-y += stml0xx.h
+-header-y += motosh_vmm.h
++header-y += stml0xx_akm.h
++header-y += stml0xx_vmm.h
+ header-y += string.h
+ header-y += suspend_ioctls.h
+ header-y += swab.h
+diff --git a/include/uapi/linux/stml0xx.h b/include/uapi/linux/stml0xx.h
+index 25f1872f67d..028f1787ac4 100644
+--- a/include/uapi/linux/stml0xx.h
++++ b/include/uapi/linux/stml0xx.h
+@@ -144,7 +144,7 @@
+ 		_IOR(STML0XX_IOCTL_BASE, 58, char[STML0XX_ACCEL_CAL_SIZE])
+ 
+ /* SPI contants */
+-#define SPI_MSG_SIZE        192
++#define SPI_MSG_SIZE        256
+ #define SPI_TX_HDR_SIZE     6
+ #define SPI_CRC_SIZE        2
+ #define SPI_TX_PAYLOAD_LEN  (SPI_MSG_SIZE - SPI_TX_HDR_SIZE - SPI_CRC_SIZE)
+diff --git a/include/uapi/linux/stml0xx_akm.h b/include/uapi/linux/stml0xx_akm.h
+new file mode 100644
+index 00000000000..b14f9197969
+--- /dev/null
++++ b/include/uapi/linux/stml0xx_akm.h
+@@ -0,0 +1,109 @@
++/*
++ * Definitions for akm09912 compass chip.
++ */
++#ifndef STML0XX_AKM_H
++#define STML0XX_AKM_H
++
++#include <linux/ioctl.h>
++
++/* Device specific constant values */
++#define AK09912_REG_WIA1			0x00
++#define AK09912_REG_WIA2			0x01
++#define AK09912_REG_INFO1			0x02
++#define AK09912_REG_INFO2			0x03
++#define AK09912_REG_ST1				0x10
++#define AK09912_REG_HXL				0x11
++#define AK09912_REG_HXH				0x12
++#define AK09912_REG_HYL				0x13
++#define AK09912_REG_HYH				0x14
++#define AK09912_REG_HZL				0x15
++#define AK09912_REG_HZH				0x16
++#define AK09912_REG_TMPS			0x17
++#define AK09912_REG_ST2				0x18
++#define AK09912_REG_CNTL1			0x30
++#define AK09912_REG_CNTL2			0x31
++#define AK09912_REG_CNTL3			0x32
++#define AK09912_REG_I2CDIS			0x36
++
++#define AK09912_FUSE_ASAX			0x60
++#define AK09912_FUSE_ASAY			0x61
++#define AK09912_FUSE_ASAZ			0x62
++
++#define AK09912_CNTL1_ENABLE_TEMP	0x80
++
++#define AK09912_MODE_SNG_MEASURE	0x01
++#define AK09912_MODE_SELF_TEST		0x10
++#define AK09912_MODE_FUSE_ACCESS	0x1F
++#define AK09912_MODE_POWERDOWN		0x00
++#define AK09912_RESET_DATA			0x01
++
++/* To avoid device dependency, convert to general name */
++#define AKM_I2C_NAME			"akm09912"
++#define AKM_MISCDEV_NAME		"stml0xx_akm"
++#define AKM_SYSCLS_NAME			"compass"
++#define AKM_SYSDEV_NAME			"akm09912"
++#define AKM_REG_MODE			AK09912_REG_CNTL2
++#define AKM_REG_RESET			AK09912_REG_CNTL3
++#define AKM_REG_STATUS			AK09912_REG_ST1
++#define AKM_WIA_VALE			0x48
++#define AKM_MEASURE_TIME_US		10000
++#define AKM_DRDY_IS_HIGH(x)		((x) & 0x01)
++#define AKM_SENSOR_INFO_SIZE	2
++#define AKM_SENSOR_CONF_SIZE	3
++#define AKM_SENSOR_DATA_SIZE	9
++#define AKM_SENSOR_TIME_SIZE    8   /* Size in bytes */
++
++#define AKM_YPR_DATA_SIZE		19
++#define AKM_RWBUF_SIZE			16
++
++#define AKM_MODE_SNG_MEASURE		AK09912_MODE_SNG_MEASURE
++#define AKM_MODE_SELF_TEST		AK09912_MODE_SELF_TEST
++#define AKM_MODE_FUSE_ACCESS		AK09912_MODE_FUSE_ACCESS
++#define AKM_MODE_POWERDOWN		AK09912_MODE_POWERDOWN
++#define AKM_RESET_DATA			AK09912_RESET_DATA
++
++#define ACC_DATA_FLAG		0
++#define MAG_DATA_FLAG		1
++#define FUSION_DATA_FLAG	2
++#define AKM_NUM_SENSORS		3
++
++#define ACC_DATA_READY		(1<<(ACC_DATA_FLAG))
++#define MAG_DATA_READY		(1<<(MAG_DATA_FLAG))
++#define FUSION_DATA_READY	(1<<(FUSION_DATA_FLAG))
++
++#define AKMIO				0xA1
++
++/* IOCTLs for AKM library */
++#define ECS_IOCTL_READ			_IOWR(AKMIO, 0x01, char)
++#define ECS_IOCTL_WRITE			_IOW(AKMIO, 0x02, char)
++#define ECS_IOCTL_RESET			_IO(AKMIO, 0x03)
++#define ECS_IOCTL_SET_MODE		_IOW(AKMIO, 0x10, char)
++#define ECS_IOCTL_SET_YPR		_IOW(AKMIO, 0x11, \
++					int[AKM_YPR_DATA_SIZE])
++#define ECS_IOCTL_GET_INFO		_IOR(AKMIO, 0x20, \
++					unsigned char[AKM_SENSOR_INFO_SIZE])
++#define ECS_IOCTL_GET_CONF		_IOR(AKMIO, 0x21, \
++					unsigned char[AKM_SENSOR_CONF_SIZE])
++#define ECS_IOCTL_GET_DATA		_IOR(AKMIO, 0x22, \
++					unsigned char[AKM_SENSOR_DATA_SIZE \
++						+ AKM_SENSOR_TIME_SIZE])
++#define ECS_IOCTL_GET_OPEN_STATUS	_IOR(AKMIO, 0x23, int)
++#define ECS_IOCTL_GET_CLOSE_STATUS	_IOR(AKMIO, 0x24, int)
++#define ECS_IOCTL_GET_DELAY		_IOR(AKMIO, 0x25, long long int)
++#define ECS_IOCTL_GET_LAYOUT		_IOR(AKMIO, 0x26, char)
++#define ECS_IOCTL_GET_ACCEL		_IOR(AKMIO, 0x30, short[3])
++#define ECS_IOCTL_CHECK_READY           _IOR(AKMIO, 0x31, char)
++
++/* AKM data queue */
++#define AKM_DATA_MAX_QUEUE_SIZE 10
++#define AKM_DATA_QUEUE_ENTRY_SIZE \
++			(AKM_SENSOR_DATA_SIZE + AKM_SENSOR_TIME_SIZE)
++struct akm_data_queue_t {
++	int num_data;
++	uint8_t head;
++	uint8_t tail;
++	uint8_t data[AKM_DATA_QUEUE_ENTRY_SIZE * AKM_DATA_MAX_QUEUE_SIZE];
++};
++
++#endif
++
+diff --git a/include/uapi/linux/motosh_vmm.h b/include/uapi/linux/stml0xx_vmm.h
+similarity index 98%
+rename from include/uapi/linux/motosh_vmm.h
+rename to include/uapi/linux/stml0xx_vmm.h
+index 1537d5c76d3..289f6c19491 100644
+--- a/include/uapi/linux/motosh_vmm.h
++++ b/include/uapi/linux/stml0xx_vmm.h
+@@ -97,9 +97,9 @@ VMM_ENTRY(0x15, STEP_COUNTER_INFO,					TRUE,
+ VMM_ENTRY(0x16, ACCEL_UPDATE_RATE,					TRUE,
+ 		&vmm_accel_update_rate,
+ 		sizeof(vmm_accel_update_rate))
+-VMM_ENTRY(0x17, UNUSED_17,						FALSE,
+-		0, /* &vmm_mag_update_rate */
+-		0)
++VMM_ENTRY(0x17, MAG_UPDATE_RATE,					TRUE,
++		&vmm_mag_update_rate,
++		sizeof(vmm_mag_update_rate))
+ VMM_ENTRY(0x18, UNUSED_18,						FALSE,
+ 		0, /* vmm_pressure_update_rate */
+ 		0)
+@@ -247,9 +247,9 @@ VMM_ENTRY(0x44, UNUSED_44,						FALSE,
+ VMM_ENTRY(0x45, UNCALIB_GYRO_DATA,					FALSE,
+ 		vmm_uncalib_gyro_data,
+ 		sizeof(vmm_uncalib_gyro_data))
+-VMM_ENTRY(0x46, UNUSED_46,						FALSE,
+-		0, /* vmm_uncalib_mag_data */
+-		0)
++VMM_ENTRY(0x46, UNCALIB_MAG_DATA,					FALSE,
++		vmm_uncalib_mag_data,
++		sizeof(vmm_uncalib_mag_data))
+ VMM_ENTRY(0x47, UNUSED_47,						FALSE,
+ 		0,
+ 		0)
+-- 
+2.11.0
+

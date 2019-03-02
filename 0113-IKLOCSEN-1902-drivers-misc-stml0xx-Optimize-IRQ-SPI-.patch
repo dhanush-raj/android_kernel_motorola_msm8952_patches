@@ -1,0 +1,1026 @@
+From 083b3fe57ae1d68f8b877fe54fc7c6bbd1817c2e Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Mon, 5 Jan 2015 15:10:47 -0600
+Subject: [PATCH 113/959] IKLOCSEN-1902:drivers:misc:stml0xx: Optimize IRQ SPI
+ transactions
+
+Use new SPI api to read all the irq data with
+only one SPI read.
+
+Change-Id: Ifeaa4212bfb6970bbb90d9e528f77c15df9ea809
+Signed-off-by: Dan Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/701614
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_irq.c      | 253 +++---------------------
+ drivers/misc/stml0xx/stml0xx_spi.c      |  75 ++++++--
+ drivers/misc/stml0xx/stml0xx_wake_irq.c | 329 ++++++++------------------------
+ include/linux/stml0xx.h                 |  52 ++++-
+ 4 files changed, 216 insertions(+), 493 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_irq.c b/drivers/misc/stml0xx/stml0xx_irq.c
+index ea025fa2330..4c5129bbe69 100644
+--- a/drivers/misc/stml0xx/stml0xx_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_irq.c
+@@ -86,278 +86,79 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 	if (ps_stml0xx->is_suspended)
+ 		goto EXIT;
+ 
+-	/* read interrupt mask register */
+-	err = stml0xx_spi_send_read_reg(INTERRUPT_STATUS, buf, 3);
++	err = stml0xx_spi_read_msg_data(SPI_MSG_TYPE_READ_IRQ_DATA,
++					buf,
++					sizeof(buf),
++					RESET_ALLOWED);
++
+ 	if (err < 0) {
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+ 			"Reading from stml0xx failed");
+ 		goto EXIT;
+ 	}
+-	irq_status = (buf[IRQ_NOWAKE_HI] << 16) |
+-	    (buf[IRQ_NOWAKE_MED] << 8) | buf[IRQ_NOWAKE_LO];
+ 
+-	if (irq_status & M_ACCEL) {
+-		/* read accelerometer values from STML0XX */
+-		err = stml0xx_spi_send_read_reg(ACCEL_X, buf, 6);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading Accel from stml0xx failed");
+-			goto EXIT;
+-		}
++	irq_status = (buf[IRQ_IDX_STATUS_HI] << 16) |
++	    (buf[IRQ_IDX_STATUS_MED] << 8) | buf[IRQ_IDX_STATUS_LO];
+ 
++	if (irq_status & M_ACCEL) {
+ 		stml0xx_as_data_buffer_write(
+ 			ps_stml0xx,
+ 			DT_ACCEL,
+-			buf,
++			&buf[IRQ_IDX_ACCEL1],
+ 			6,
+ 			0,
+ 			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending acc(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(ACCEL_RD_X, buf),
+-			STM16_TO_HOST(ACCEL_RD_Y, buf),
+-			STM16_TO_HOST(ACCEL_RD_Z, buf));
++			STM16_TO_HOST(ACCEL_RD_X, &buf[IRQ_IDX_ACCEL1]),
++			STM16_TO_HOST(ACCEL_RD_Y, &buf[IRQ_IDX_ACCEL1]),
++			STM16_TO_HOST(ACCEL_RD_Z, &buf[IRQ_IDX_ACCEL1]));
+ 	}
+ 	if (irq_status & M_ACCEL2) {
+-		/* read 2nd accelerometer values from STML0XX */
+-		err = stml0xx_spi_send_read_reg(ACCEL2_X, buf, 6);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading 2nd Accel from stml0xx failed");
+-			goto EXIT;
+-		}
+-
+ 		stml0xx_as_data_buffer_write(ps_stml0xx,
+ 			DT_ACCEL2,
+-			buf,
++			&buf[IRQ_IDX_ACCEL2],
+ 			6,
+ 			0,
+ 			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending acc2(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(ACCEL_RD_X, buf),
+-			STM16_TO_HOST(ACCEL_RD_Y, buf),
+-			STM16_TO_HOST(ACCEL_RD_Z, buf));
+-	}
+-	if (irq_status & M_LIN_ACCEL) {
+-		dev_err(&stml0xx_misc_data->spi->dev,
+-			"Invalid M_LIN_ACCEL bit set. irq_status = 0x%06x",
+-			irq_status);
+-
+-		/* read linear accelerometer values from STML0XX */
+-		err = stml0xx_spi_send_read_reg(LIN_ACCEL_X, buf, 6);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading Linear Accel from stml0xx failed");
+-			goto EXIT;
+-		}
+-
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_LIN_ACCEL,
+-					     buf, 6, 0, stm_ws->ts_ns);
+-
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending lin_acc(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(ACCEL_RD_X, buf),
+-			STM16_TO_HOST(ACCEL_RD_Y, buf),
+-			STM16_TO_HOST(ACCEL_RD_Z, buf));
+-	}
+-	if (irq_status & M_ECOMPASS) {
+-		unsigned char status;
+-		/*Read orientation values */
+-		err = stml0xx_spi_send_read_reg(MAG_HX, buf, 13);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading Ecompass failed");
+-			goto EXIT;
+-		}
+-		status = buf[COMPASS_STATUS];
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_MAG,
+-					     buf, 6, status, stm_ws->ts_ns);
+-
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending mag(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(MAG_X, buf), STM16_TO_HOST(MAG_Y, buf),
+-			STM16_TO_HOST(MAG_Z, buf));
+-
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_ORIENT,
+-					     buf + 6, 6, status, stm_ws->ts_ns);
+-
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending orient(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(ORIENT_X, buf),
+-			STM16_TO_HOST(ORIENT_Y, buf),
+-			STM16_TO_HOST(ORIENT_Z, buf));
+-	}
+-	if (irq_status & M_GYRO) {
+-		err = stml0xx_spi_send_read_reg(GYRO_X, buf, 6);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading Gyroscope failed");
+-			goto EXIT;
+-		}
+-		stml0xx_as_data_buffer_write(
+-			ps_stml0xx,
+-			DT_GYRO,
+-			buf,
+-			6,
+-			0,
+-			stm_ws->ts_ns);
+-
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending gyro(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(GYRO_RD_X, buf),
+-			STM16_TO_HOST(GYRO_RD_Y, buf),
+-			STM16_TO_HOST(GYRO_RD_Z, buf));
+-	}
+-	/*MODIFIED UNCALIBRATED GYRO */
+-	if (irq_status & M_UNCALIB_GYRO) {
+-		err = stml0xx_spi_send_read_reg(UNCALIB_GYRO_X, buf, 12);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading Gyroscope failed");
+-			goto EXIT;
+-		}
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_UNCALIB_GYRO,
+-					     buf, 12, 0, stm_ws->ts_ns);
+-
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending Gyro uncalib(x,y,z)values:%d,%d,%d;%d,%d,%d",
+-			STM16_TO_HOST(GYRO_RD_X, buf),
+-			STM16_TO_HOST(GYRO_RD_Y, buf),
+-			STM16_TO_HOST(GYRO_RD_Z, buf),
+-			STM16_TO_HOST(GYRO_UNCALIB_X, buf),
+-			STM16_TO_HOST(GYRO_UNCALIB_Y, buf),
+-			STM16_TO_HOST(GYRO_UNCALIB_Z, buf));
+-	}
+-	if (irq_status & M_UNCALIB_MAG) {
+-		err = stml0xx_spi_send_read_reg(UNCALIB_MAG_X, buf, 12);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading Gyroscope failed");
+-			goto EXIT;
+-		}
+-
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_UNCALIB_MAG,
+-					     buf, 12, 0, stm_ws->ts_ns);
+-
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending Gyro uncalib(x,y,z)values:%d,%d,%d;%d,%d,%d",
+-			STM16_TO_HOST(MAG_X, buf), STM16_TO_HOST(MAG_Y, buf),
+-			STM16_TO_HOST(MAG_Z, buf),
+-			STM16_TO_HOST(MAG_UNCALIB_X, buf),
+-			STM16_TO_HOST(MAG_UNCALIB_Y, buf),
+-			STM16_TO_HOST(MAG_UNCALIB_Z, buf));
++			STM16_TO_HOST(ACCEL_RD_X, &buf[IRQ_IDX_ACCEL2]),
++			STM16_TO_HOST(ACCEL_RD_Y, &buf[IRQ_IDX_ACCEL2]),
++			STM16_TO_HOST(ACCEL_RD_Z, &buf[IRQ_IDX_ACCEL2]));
+ 	}
+ 	if (irq_status & M_ALS) {
+-		err = stml0xx_spi_send_read_reg(ALS_LUX, buf, 2);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading ALS from stml0xx failed");
+-			goto EXIT;
+-		}
+ 		stml0xx_as_data_buffer_write(
+ 			ps_stml0xx,
+ 			DT_ALS,
+-			buf,
+-			2,
+-			0,
+-			stm_ws->ts_ns);
+-
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending ALS %d", STM16_TO_HOST(ALS_VALUE, buf));
+-	}
+-	if (irq_status & M_TEMPERATURE) {
+-		/* Read temperature value */
+-		err = stml0xx_spi_send_read_reg(TEMPERATURE_DATA, buf, 2);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading Temperature failed");
+-			goto EXIT;
+-		}
+-		stml0xx_as_data_buffer_write(
+-			ps_stml0xx,
+-			DT_TEMP,
+-			buf,
++			&buf[IRQ_IDX_ALS],
+ 			2,
+ 			0,
+ 			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending temp(x)value:%d",
+-			STM16_TO_HOST(TEMP_VALUE, buf));
+-	}
+-	if (irq_status & M_PRESSURE) {
+-		dev_err(&stml0xx_misc_data->spi->dev,
+-			"Invalid M_PRESSURE bit set. irq_status = 0x%06x",
+-			irq_status);
+-		/* Read pressure value */
+-		err = stml0xx_spi_send_read_reg(CURRENT_PRESSURE, buf, 4);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading Pressure failed");
+-			goto EXIT;
+-		}
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_PRESSURE,
+-					     buf, 4, 0, stm_ws->ts_ns);
+-
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending pressure %d",
+-			STM32_TO_HOST(PRESSURE_VALUE, buf));
+-	}
+-	if (irq_status & M_GRAVITY) {
+-		dev_err(&stml0xx_misc_data->spi->dev,
+-			"Invalid M_GRAVITY bit set. irq_status = 0x%06x",
+-			irq_status);
+-
+-		/* read gravity values from STML0XX */
+-		err = stml0xx_spi_send_read_reg(GRAVITY_X, buf, 6);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading Gravity from stml0xx failed");
+-			goto EXIT;
+-		}
+-
+-		stml0xx_as_data_buffer_write(
+-			ps_stml0xx,
+-			DT_GRAVITY,
+-			buf,
+-			6,
+-			0,
+-			stm_ws->ts_ns);
+-
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending gravity(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(GRAV_X, buf), STM16_TO_HOST(GRAV_Y, buf),
+-			STM16_TO_HOST(GRAV_Z, buf));
++			"Sending ALS %d", STM16_TO_HOST(ALS_VALUE,
++					&buf[IRQ_IDX_ALS]));
+ 	}
+ 	if (irq_status & M_DISP_ROTATE) {
+-		/* Read Display Rotate value */
+-		err = stml0xx_spi_send_read_reg(DISP_ROTATE_DATA, buf, 1);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading disp_rotate failed");
+-			goto EXIT;
+-		}
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_DISP_ROTATE,
+-					     buf, 1, 0, stm_ws->ts_ns);
++					&buf[IRQ_IDX_DISP_ROTATE],
++					1, 0, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending disp_rotate(x)value: %d", buf[DISP_VALUE]);
++			"Sending disp_rotate(x)value: %d",
++			buf[IRQ_IDX_DISP_ROTATE]);
+ 	}
+ 	if (irq_status & M_DISP_BRIGHTNESS) {
+-		err = stml0xx_spi_send_read_reg(DISPLAY_BRIGHTNESS, buf, 1);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading Display Brightness failed");
+-			goto EXIT;
+-		}
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_DISP_BRIGHT,
+-					     buf, 1, 0, stm_ws->ts_ns);
++						&buf[IRQ_IDX_DISP_BRIGHTNESS],
++						 1, 0, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending Display Brightness %d", buf[DISP_VALUE]);
++			"Sending Display Brightness %d",
++			buf[IRQ_IDX_DISP_BRIGHTNESS]);
+ 	}
+ EXIT:
+ 	kfree((void *)stm_ws);
+diff --git a/drivers/misc/stml0xx/stml0xx_spi.c b/drivers/misc/stml0xx/stml0xx_spi.c
+index 08d47c4f75c..ed47d4192b6 100644
+--- a/drivers/misc/stml0xx/stml0xx_spi.c
++++ b/drivers/misc/stml0xx/stml0xx_spi.c
+@@ -432,8 +432,8 @@ static int stml0xx_spi_send_write_reg_no_retries(unsigned char reg_type,
+ 
+ 		/* Payload data offset */
+ 		cmd_buff[4] = data_offset;
+-		data_size = (remaining_data_size < SPI_MAX_PAYLOAD_LEN) ?
+-		    remaining_data_size : SPI_MAX_PAYLOAD_LEN;
++		data_size = (remaining_data_size < SPI_TX_PAYLOAD_LEN) ?
++		    remaining_data_size : SPI_TX_PAYLOAD_LEN;
+ 		cmd_buff[5] = data_size;
+ 
+ 		/* Copy data and update data parameters */
+@@ -513,9 +513,10 @@ int stml0xx_spi_send_write_reg_reset(unsigned char reg_type,
+ 	return ret;
+ }
+ 
+-static int stml0xx_spi_send_read_reg_no_retries(unsigned char reg_type,
+-					 unsigned char *reg_data,
+-					 int reg_size)
++static int stml0xx_spi_send_read_reg_no_retries(enum sh_spi_msg spi_msg_type,
++				unsigned char reg_type,
++				unsigned char *reg_data,
++				int reg_size)
+ {
+ 	int data_offset = 0, data_size;
+ 	int remaining_data_size = reg_size;
+@@ -539,13 +540,16 @@ static int stml0xx_spi_send_read_reg_no_retries(unsigned char reg_type,
+ 		/* Populate header */
+ 		cmd_buff[0] = SPI_BARKER_1;
+ 		cmd_buff[1] = SPI_BARKER_2;
+-		cmd_buff[2] = SPI_MSG_TYPE_READ_REG;
++		cmd_buff[2] = spi_msg_type;
+ 		cmd_buff[3] = reg_type;
+ 
+ 		/* Payload data offset */
+ 		cmd_buff[4] = data_offset;
+-		data_size = (remaining_data_size < SPI_MAX_PAYLOAD_LEN) ?
+-		    remaining_data_size : SPI_MAX_PAYLOAD_LEN;
++
++		/* Hub doesn't send the header when transmitting
++		 * so we can read more than we can write */
++		data_size = (remaining_data_size < SPI_RX_PAYLOAD_LEN) ?
++		    remaining_data_size : SPI_RX_PAYLOAD_LEN;
+ 		cmd_buff[5] = data_size;
+ 
+ 		/* Swap all bytes */
+@@ -575,7 +579,7 @@ static int stml0xx_spi_send_read_reg_no_retries(unsigned char reg_type,
+ 						     SPI_MSG_SIZE -
+ 						     SPI_CRC_LEN);
+ 		if (recv_crc != calc_crc) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
++			dev_dbg(&stml0xx_misc_data->spi->dev,
+ 				"CRC mismatch [0x%02x/0x%02x]. Discarding data.",
+ 				recv_crc, calc_crc);
+ 			ret = -EIO;
+@@ -622,9 +626,11 @@ int stml0xx_spi_send_read_reg_reset(unsigned char reg_type,
+ 	     reset_retries++) {
+ 		for (tries = 0; tries < SPI_RETRIES && ret < 0; tries++) {
+ 			ret =
+-			    stml0xx_spi_send_read_reg_no_retries(reg_type,
+-								 reg_data,
+-								 reg_size);
++				stml0xx_spi_send_read_reg_no_retries(
++						SPI_MSG_TYPE_READ_REG,
++						reg_type,
++						reg_data,
++						reg_size);
+ 		}
+ 
+ 		if (ret < 0) {
+@@ -646,6 +652,51 @@ int stml0xx_spi_send_read_reg_reset(unsigned char reg_type,
+ 	return ret;
+ }
+ 
++int stml0xx_spi_read_msg_data(enum sh_spi_msg spi_msg,
++				unsigned char *data_buffer,
++				int buffer_size,
++				enum reset_option reset_allowed) {
++	int tries;
++	int reset_retries;
++	int ret = -EIO;
++
++	if (!data_buffer || buffer_size <= 0) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Invalid buffer or buffer size");
++		ret = -EFAULT;
++		return ret;
++	}
++
++	for (reset_retries = 0; reset_retries < RESET_RETRIES && ret < 0;
++	     reset_retries++) {
++		for (tries = 0; tries < SPI_RETRIES && ret < 0; tries++) {
++			ret =
++				stml0xx_spi_send_read_reg_no_retries(spi_msg,
++								0,
++								data_buffer,
++								buffer_size);
++		}
++
++		if (ret < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"stml0xx_spi_read_msg_data SPI transfer error [%d], retries left [%d]",
++				ret, reset_retries);
++			if (reset_allowed)
++				stml0xx_reset(stml0xx_misc_data->pdata);
++			else
++				break;
++		}
++	}
++
++	if (reset_retries == RESET_RETRIES) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"stml0xx_spi_read_msg_data spi failure");
++	}
++
++	return ret;
++
++}
++
+ void stml0xx_spi_swap_bytes(unsigned char *data, int size)
+ {
+ 	unsigned short *temp = (unsigned short *)data;
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index 7acdedff1d3..d98afc0bef2 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -86,7 +86,6 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 	int err;
+ 	unsigned short irq_status;
+ 	u32 irq2_status;
+-	uint8_t irq3_status;
+ 	struct stml0xx_work_struct *stm_ws = (struct stml0xx_work_struct *)work;
+ 	struct stml0xx_data *ps_stml0xx = stml0xx_misc_data;
+ 	unsigned char buf[SPI_MSG_SIZE];
+@@ -106,128 +105,43 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 
+ 	stml0xx_wake(ps_stml0xx);
+ 
+-	/* read interrupt mask register */
+-	err = stml0xx_spi_send_read_reg(WAKESENSOR_STATUS, buf, 2);
+-	if (err < 0) {
+-		dev_err(&stml0xx_misc_data->spi->dev,
+-			"Reading from stml0xx failed");
+-		goto EXIT;
+-	}
+-	irq_status = (buf[IRQ_WAKE_MED] << 8)
+-	    | buf[IRQ_WAKE_LO];
++	err = stml0xx_spi_read_msg_data(SPI_MSG_TYPE_READ_WAKE_IRQ_DATA,
++					buf,
++					sizeof(buf),
++					RESET_ALLOWED);
+ 
+-	/* read algorithm interrupt status register */
+-	err = stml0xx_spi_send_read_reg(ALGO_INT_STATUS, buf, 3);
+ 	if (err < 0) {
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+ 			"Reading from stml0xx failed");
+ 		goto EXIT;
+ 	}
+-	irq2_status = (buf[IRQ_WAKE_HI] << 16) |
+-	    (buf[IRQ_WAKE_MED] << 8) | buf[IRQ_WAKE_LO];
+ 
+-	/* read generic interrupt register */
+-	err = stml0xx_spi_send_read_reg(GENERIC_INT_STATUS, buf, 1);
+-	if (err < 0) {
+-		dev_err(&stml0xx_misc_data->spi->dev,
+-			"Reading from stm failed");
+-		goto EXIT;
+-	}
+-	irq3_status = buf[0];
+-
+-	/* First, check for log messages */
+-	if (irq_status & M_LOG_MSG) {
+-		err = stml0xx_spi_send_read_reg(LOG_MSG_STATUS, buf,
+-			LOG_MSG_SIZE);
+-		if (err >= 0) {
+-			memcpy(stat_string, buf, LOG_MSG_SIZE);
+-			stat_string[LOG_MSG_SIZE] = 0;
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"sensorhub : %s", stat_string);
+-		} else
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Failed to read log message %d", err);
+-	}
+-
+-	/* Second, check for a reset request */
+-	if (irq_status & M_HUB_RESET) {
+-		unsigned char status;
+-
+-		if (strnstr(stat_string, "modality", LOG_MSG_SIZE))
+-			status = 0x01;
+-		else if (strnstr(stat_string, "Algo", LOG_MSG_SIZE))
+-			status = 0x02;
+-		else if (strnstr(stat_string, "Watchdog", LOG_MSG_SIZE))
+-			status = 0x03;
+-		else
+-			status = 0x04;
+-
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_RESET, &status, 1,
+-					     0, stm_ws->ts_ns);
++	/* read interrupt mask register */
++	irq_status = (buf[WAKE_IRQ_IDX_STATUS_MED] << 8)
++	    | buf[WAKE_IRQ_IDX_STATUS_LO];
+ 
+-		stml0xx_reset(stml0xx_misc_data->pdata);
+-		dev_err(&stml0xx_misc_data->spi->dev,
+-			"STML0XX requested a reset");
+-		goto EXIT;
+-	}
++	/* read algorithm interrupt status register */
++	irq2_status = (buf[WAKE_IRQ_IDX_ALGO_STATUS_HI] << 16) |
++	    (buf[WAKE_IRQ_IDX_ALGO_STATUS_MED] << 8) |
++		buf[WAKE_IRQ_IDX_ALGO_STATUS_LO];
+ 
+ 	/* Check all other status bits */
+-	if (irq_status & M_DOCK) {
+-		int state;
+-
+-		dev_err(&stml0xx_misc_data->spi->dev,
+-			"Invalid M_DOCK bit set. irq_status = 0x%06x",
+-			irq_status);
+-
+-		err = stml0xx_spi_send_read_reg(DOCK_DATA, buf, 1);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading Dock state failed");
+-			goto EXIT;
+-		}
+-		stml0xx_as_data_buffer_write(
+-			ps_stml0xx,
+-			DT_DOCK,
+-			buf,
+-			1,
+-			0,
+-			stm_ws->ts_ns);
+-		state = buf[DOCK_STATE];
+-		if (ps_stml0xx->dsdev.dev != NULL)
+-			switch_set_state(&ps_stml0xx->dsdev, state);
+-		if (ps_stml0xx->edsdev.dev != NULL)
+-			switch_set_state(&ps_stml0xx->edsdev, state);
+-
+-		dev_dbg(&stml0xx_misc_data->spi->dev, "Dock status:%d", state);
+-	}
+ 	if (irq_status & M_PROXIMITY) {
+-		err = stml0xx_spi_send_read_reg(PROXIMITY, buf, 1);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading prox from stml0xx failed");
+-			goto EXIT;
+-		}
+ 		stml0xx_as_data_buffer_write(
+ 			ps_stml0xx,
+ 			DT_PROX,
+-			buf,
++			&buf[WAKE_IRQ_IDX_PROX],
+ 			1,
+ 			0,
+ 			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending Proximity distance %d", buf[PROX_DISTANCE]);
++			"Sending Proximity distance %d",
++			buf[WAKE_IRQ_IDX_PROX]);
+ 	}
+ 	if (irq_status & M_COVER) {
+-		int state;
+-		err = stml0xx_spi_send_read_reg(COVER_DATA, buf, 1);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading Cover state failed");
+-			goto EXIT;
+-		}
+-
+-		if (buf[COVER_STATE] == STML0XX_HALL_NORTH)
++		int state = 0;
++		if (buf[WAKE_IRQ_IDX_COVER] == STML0XX_HALL_NORTH)
+ 			state = 1;
+ 		else
+ 			state = 0;
+@@ -241,13 +155,7 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 	if (irq_status & M_HEADSET) {
+ 		uint8_t new_state;
+ 
+-		err = stml0xx_spi_send_read_reg(HEADSET_DATA, buf, 1);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading Headset state failed");
+-			goto EXIT;
+-		}
+-		new_state = buf[HEADSET_STATE];
++		new_state = buf[WAKE_IRQ_IDX_HEADSET];
+ 
+ 		switch (Headset_State) {
+ 		case SH_HEADSET_BUTTON_1:
+@@ -373,115 +281,57 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 			}
+ 		}
+ 	}
+-	if (irq_status & M_INIT_COMPLETE) {
+-		/* set the init complete register, */
+-		/* to let the hub know it was received */
+-		buf[0] = 0x01;
+-		err = stml0xx_spi_send_write_reg(INIT_COMPLETE_REG, buf, 1);
+-
+-		queue_work(ps_stml0xx->irq_work_queue,
+-			&ps_stml0xx->initialize_work);
+-		dev_err(&stml0xx_misc_data->spi->dev,
+-			"Sensor Hub reports reset");
+-		stml0xx_g_booted = 1;
+-	}
+ 	if (irq_status & M_FLATUP) {
+-		err = stml0xx_spi_send_read_reg(FLAT_DATA, buf, 1);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading flat data from stml0xx failed");
+-			goto EXIT;
+-		}
+ 		stml0xx_as_data_buffer_write(
+ 			ps_stml0xx,
+ 			DT_FLAT_UP,
+-			buf,
++			&buf[WAKE_IRQ_IDX_FLAT],
+ 			1,
+ 			0,
+ 			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending Flat up %d", buf[FLAT_UP]);
++			"Sending Flat up %d", buf[WAKE_IRQ_IDX_FLAT]);
+ 	}
+ 	if (irq_status & M_FLATDOWN) {
+-		err = stml0xx_spi_send_read_reg(FLAT_DATA, buf, 1);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading flat data from stml0xx failed");
+-			goto EXIT;
+-		}
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_FLAT_DOWN,
+-					     buf, 1, 0, stm_ws->ts_ns);
++						&buf[WAKE_IRQ_IDX_FLAT],
++						1, 0, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending Flat down %d", buf[FLAT_DOWN]);
++			"Sending Flat down %d", buf[WAKE_IRQ_IDX_FLAT]);
+ 	}
+ 	if (irq_status & M_STOWED) {
+-		err = stml0xx_spi_send_read_reg(STOWED, buf, 1);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading stowed from stml0xx failed");
+-			goto EXIT;
+-		}
+ 		stml0xx_as_data_buffer_write(
+ 			ps_stml0xx,
+ 			DT_STOWED,
+-			buf,
++			&buf[WAKE_IRQ_IDX_STOWED],
+ 			1,
+ 			0,
+ 			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending Stowed status %d", buf[STOWED_STATUS]);
++			"Sending Stowed status %d", buf[WAKE_IRQ_IDX_STOWED]);
+ 	}
+ 	if (irq_status & M_CAMERA_ACT) {
+-		err = stml0xx_spi_send_read_reg(CAMERA, buf, 2);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading camera data from stm failed");
+-			goto EXIT;
+-		}
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_CAMERA_ACT,
+-					     buf, 2, 0, stm_ws->ts_ns);
++						&buf[WAKE_IRQ_IDX_CAMERA],
++						2, 0, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending Camera: %d", STM16_TO_HOST(CAMERA_VALUE, buf));
++			"Sending Camera: %d", STM16_TO_HOST(CAMERA_VALUE,
++					&buf[WAKE_IRQ_IDX_CAMERA]));
+ 
+ 		input_report_key(ps_stml0xx->input_dev, KEY_CAMERA, 1);
+ 		input_report_key(ps_stml0xx->input_dev, KEY_CAMERA, 0);
+ 		input_sync(ps_stml0xx->input_dev);
+ 		dev_dbg(&stml0xx_misc_data->spi->dev, "Report camkey toggle");
+ 	}
+-	if (irq_status & M_NFC) {
+-		err = stml0xx_spi_send_read_reg(NFC, buf, 1);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading nfc data from stm failed");
+-			goto EXIT;
+-		}
+-		stml0xx_as_data_buffer_write(
+-			ps_stml0xx,
+-			DT_NFC,
+-			buf,
+-			1,
+-			0,
+-			stm_ws->ts_ns);
+-
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending NFC value: %d", buf[NFC_VALUE]);
+-
+-	}
+ 	if (irq_status & M_SIM) {
+-		err = stml0xx_spi_send_read_reg(SIM, buf, 2);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading sig_motion data from stm failed");
+-			goto EXIT;
+-		}
+ 		stml0xx_as_data_buffer_write(
+ 			ps_stml0xx,
+ 			DT_SIM,
+-			buf,
++			&buf[WAKE_IRQ_IDX_SIM],
+ 			2,
+ 			0,
+ 			stm_ws->ts_ns);
+@@ -490,14 +340,12 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 		stml0xx_g_wake_sensor_state &= (~M_SIM);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending SIM Value=%d", STM16_TO_HOST(SIM_DATA, buf));
++			"Sending SIM Value=%d", STM16_TO_HOST(SIM_DATA,
++					&buf[WAKE_IRQ_IDX_SIM]));
+ 	}
+ 	if (irq2_status & M_MMOVEME) {
+ 		unsigned char status;
+ 
+-		/* read motion data reg to clear movement interrupt */
+-		err = stml0xx_spi_send_read_reg(MOTION_DATA, buf, 2);
+-
+ 		/* Client recieving action will be upper 2 most significant */
+ 		/* bits of the least significant byte of status. */
+ 		status = (irq2_status & STML0XX_CLIENT_MASK) | M_MMOVEME;
+@@ -509,9 +357,6 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 	if (irq2_status & M_NOMMOVE) {
+ 		unsigned char status;
+ 
+-		/* read motion data reg to clear movement interrupt */
+-		err = stml0xx_spi_send_read_reg(MOTION_DATA, buf, 2);
+-
+ 		/* Client recieving action will be upper 2 most significant */
+ 		/* bits of the least significant byte of status. */
+ 		status = (irq2_status & STML0XX_CLIENT_MASK) | M_NOMMOVE;
+@@ -521,90 +366,76 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 			"Sending no meaningful movement event");
+ 	}
+ 	if (irq2_status & M_ALGO_MODALITY) {
+-		err =
+-		    stml0xx_spi_send_read_reg(stml0xx_algo_info
+-				[STML0XX_IDX_MODALITY].evt_register,
+-				buf, STML0XX_EVT_SZ_TRANSITION);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading modality event failed");
+-			goto EXIT;
+-		}
+-		buf[ALGO_TYPE] = STML0XX_IDX_MODALITY;
+-		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_ALGO_EVT, buf, 8);
++		buf[WAKE_IRQ_IDX_MODALITY + ALGO_TYPE] = STML0XX_IDX_MODALITY;
++		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_ALGO_EVT,
++						&buf[WAKE_IRQ_IDX_MODALITY], 8);
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending modality event");
+ 	}
+ 	if (irq2_status & M_ALGO_ORIENTATION) {
+-		err =
+-		    stml0xx_spi_send_read_reg(stml0xx_algo_info
+-				[STML0XX_IDX_ORIENTATION].evt_register,
+-				buf, STML0XX_EVT_SZ_TRANSITION);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading orientation event failed");
+-			goto EXIT;
+-		}
+-		buf[ALGO_TYPE] = STML0XX_IDX_ORIENTATION;
+-		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_ALGO_EVT, buf, 8);
++		buf[WAKE_IRQ_IDX_MODALITY_ORIENT + ALGO_TYPE] =
++				STML0XX_IDX_ORIENTATION;
++		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_ALGO_EVT,
++				&buf[WAKE_IRQ_IDX_MODALITY_ORIENT],
++				8);
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending orientation event");
+ 	}
+ 	if (irq2_status & M_ALGO_STOWED) {
+-		err =
+-		    stml0xx_spi_send_read_reg(stml0xx_algo_info
+-				[STML0XX_IDX_STOWED].evt_register,
+-				buf, STML0XX_EVT_SZ_TRANSITION);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading stowed event failed");
+-			goto EXIT;
+-		}
+-		buf[ALGO_TYPE] = STML0XX_IDX_STOWED;
+-		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_ALGO_EVT, buf, 8);
++		buf[WAKE_IRQ_IDX_MODALITY_STOWED + ALGO_TYPE] =
++				STML0XX_IDX_STOWED;
++		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_ALGO_EVT,
++				&buf[WAKE_IRQ_IDX_MODALITY_STOWED],
++				8);
+ 		dev_dbg(&stml0xx_misc_data->spi->dev, "Sending stowed event");
+ 	}
+ 	if (irq2_status & M_ALGO_ACCUM_MODALITY) {
+-		err =
+-		    stml0xx_spi_send_read_reg(stml0xx_algo_info
+-				[STML0XX_IDX_ACCUM_MODALITY].evt_register,
+-				buf, STML0XX_EVT_SZ_ACCUM_STATE);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading accum modality event failed");
+-			goto EXIT;
+-		}
+-		buf[ALGO_TYPE] = STML0XX_IDX_ACCUM_MODALITY;
+-		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_ALGO_EVT, buf, 8);
++		buf[WAKE_IRQ_IDX_MODALITY_ACCUM + ALGO_TYPE] =
++				STML0XX_IDX_ACCUM_MODALITY;
++		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_ALGO_EVT,
++				&buf[WAKE_IRQ_IDX_MODALITY_ACCUM],
++				8);
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending accum modality event");
+ 	}
+ 	if (irq2_status & M_ALGO_ACCUM_MVMT) {
+-		err =
+-		    stml0xx_spi_send_read_reg(stml0xx_algo_info
+-				[STML0XX_IDX_ACCUM_MVMT].evt_register,
+-				buf, STML0XX_EVT_SZ_ACCUM_MVMT);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading accum mvmt event failed");
+-			goto EXIT;
+-		}
+-		buf[ALGO_TYPE] = STML0XX_IDX_ACCUM_MVMT;
+-		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_ALGO_EVT, buf, 8);
++		buf[WAKE_IRQ_IDX_MODALITY_ACCUM_MVMT + ALGO_TYPE] =
++				STML0XX_IDX_ACCUM_MVMT;
++		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_ALGO_EVT,
++				&buf[WAKE_IRQ_IDX_MODALITY_ACCUM_MVMT],
++				8);
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending accum mvmt event");
+ 	}
+-	if (irq3_status & M_GENERIC_INTRPT) {
++	/* check for log messages */
++	if (irq_status & M_LOG_MSG) {
++		memcpy(stat_string, &buf[WAKE_IRQ_IDX_LOG_MSG], LOG_MSG_SIZE);
++		stat_string[LOG_MSG_SIZE] = 0;
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"sensorhub : %s", stat_string);
++	}
++	if (irq_status & M_INIT_COMPLETE) {
++		/* set the init complete register, */
++		/* to let the hub know it was received */
++		buf[0] = 0x01;
++		err = stml0xx_spi_send_write_reg(INIT_COMPLETE_REG, buf, 1);
+ 
++		queue_work(ps_stml0xx->irq_work_queue,
++			&ps_stml0xx->initialize_work);
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+-			"Invalid M_GENERIC_INTRPT bit set. irq_status = 0x%06x"
+-			, irq_status);
++			"Sensor Hub reports reset");
++		stml0xx_g_booted = 1;
++	}
++	/* check for a reset request */
++	if (irq_status & M_HUB_RESET) {
++		unsigned char status = 0x01;
+ 
+-		/* x (data1) : irq3_status */
+-		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_GENERIC_INT,
+-					     &irq3_status, 1);
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending generic interrupt event:%d", irq3_status);
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_RESET, &status, 1,
++					     0, stm_ws->ts_ns);
++
++		stml0xx_reset(stml0xx_misc_data->pdata);
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"STML0XX requested a reset");
+ 	}
+ 
+ EXIT:
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 110b2e0ff79..b93762fe727 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -33,7 +33,7 @@
+ 
+ /* SPI */
+ #define SPI_FLASH_CLK_SPD_HZ    4000000
+-#define SPI_NORMAL_CLK_SPD_HZ    4000000
++#define SPI_NORMAL_CLK_SPD_HZ   4000000
+ #define SPI_BUFF_SIZE           1152
+ #define SPI_RETRIES             5
+ #define SPI_RETRY_DELAY         20
+@@ -42,16 +42,14 @@
+ #define SPI_BARKER_2            0xAE
+ #define SPI_HEADER_SIZE         6
+ #define SPI_CRC_SIZE            2
+-#define SPI_MSG_TYPE_READ_REG       0x01
+-#define SPI_MSG_TYPE_WRITE_REG      0x02
+-#define SPI_MSG_TYPE_READ_SENSORS   0x03
+ #define SPI_WRITE_REG_HDR_SIZE      6
+ #define SPI_READ_REG_HDR_SIZE       6
+ #define SPI_CRC_LEN                 2
+ #define SPI_READ_SENSORS_HDR_SIZE   3
+-#define SPI_MAX_PAYLOAD_LEN        88
++#define SPI_TX_PAYLOAD_LEN         88
+ #define SPI_MSG_SIZE	\
+-	(SPI_MAX_PAYLOAD_LEN+SPI_HEADER_SIZE+SPI_CRC_SIZE)
++	(SPI_HEADER_SIZE+SPI_TX_PAYLOAD_LEN+SPI_CRC_SIZE)
++#define SPI_RX_PAYLOAD_LEN         SPI_MSG_SIZE
+ 
+ /** The following define the IOCTL command values via the ioctl macros */
+ #define STML0XX_IOCTL_BASE		77
+@@ -326,6 +324,13 @@ enum sh_log_level {
+ 	SH_LOG_DEBUG
+ };
+ 
++enum sh_spi_msg {
++	SPI_MSG_TYPE_READ_REG = 1,
++	SPI_MSG_TYPE_WRITE_REG,
++	SPI_MSG_TYPE_READ_IRQ_DATA,
++	SPI_MSG_TYPE_READ_WAKE_IRQ_DATA
++};
++
+ struct stm_response {
+ 	/* 0x0080 */
+ 	unsigned short header;
+@@ -478,6 +483,37 @@ struct stm_response {
+ 
+ #define STML0XX_MAXDATA_LENGTH		256
+ 
++/* stml0xx IRQ SPI buffer indexes */
++#define IRQ_IDX_STATUS_LO         0
++#define IRQ_IDX_STATUS_MED        1
++#define IRQ_IDX_STATUS_HI         2
++#define IRQ_IDX_ACCEL1            3
++#define IRQ_IDX_ACCEL2            9
++#define IRQ_IDX_ALS              15
++#define IRQ_IDX_DISP_ROTATE      17
++#define IRQ_IDX_DISP_BRIGHTNESS  18
++
++/* stml0xx WAKE IRQ SPI buffer indexes */
++#define WAKE_IRQ_IDX_STATUS_LO              0
++#define WAKE_IRQ_IDX_STATUS_MED             1
++#define WAKE_IRQ_IDX_ALGO_STATUS_LO         2
++#define WAKE_IRQ_IDX_ALGO_STATUS_MED        3
++#define WAKE_IRQ_IDX_ALGO_STATUS_HI         4
++#define WAKE_IRQ_IDX_PROX                   5
++#define WAKE_IRQ_IDX_COVER                  6
++#define WAKE_IRQ_IDX_HEADSET                7
++#define WAKE_IRQ_IDX_FLAT                   8
++#define WAKE_IRQ_IDX_STOWED                 9
++#define WAKE_IRQ_IDX_CAMERA                10
++#define WAKE_IRQ_IDX_SIM                   12
++#define WAKE_IRQ_IDX_MOTION                14
++#define WAKE_IRQ_IDX_MODALITY              16
++#define WAKE_IRQ_IDX_MODALITY_ORIENT       23
++#define WAKE_IRQ_IDX_MODALITY_STOWED       30
++#define WAKE_IRQ_IDX_MODALITY_ACCUM        37
++#define WAKE_IRQ_IDX_MODALITY_ACCUM_MVMT   39
++#define WAKE_IRQ_IDX_LOG_MSG               43
++
+ /* stml0xx_readbuff offsets. */
+ #define IRQ_WAKE_LO  0
+ #define IRQ_WAKE_MED 1
+@@ -710,6 +746,10 @@ int stml0xx_spi_send_read_reg(unsigned char reg_type,
+ int stml0xx_spi_send_read_reg_reset(unsigned char reg_type,
+ 			      unsigned char *reg_data, int reg_data_size,
+ 			      uint8_t reset_allowed);
++int stml0xx_spi_read_msg_data(enum sh_spi_msg spi_msg,
++				unsigned char *data_buffer,
++				int buffer_size,
++				enum reset_option reset_allowed);
+ void stml0xx_spi_swap_bytes(unsigned char *data, int size);
+ unsigned short stml0xx_spi_calculate_crc(unsigned char *data, int len);
+ void stml0xx_spi_append_crc(unsigned char *data, int len);
+-- 
+2.11.0
+

@@ -1,0 +1,75 @@
+From 6fc73b80316cdd2726d1395b50e68ab919ca2d9e Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Mon, 28 Sep 2015 13:18:07 -0500
+Subject: [PATCH 325/959] IKKRNBSP-3410: power: qpnp-smbcharger-mmi: Add
+ support for Factory Kill
+
+Add support to power off the phone when the cable is removed in factory
+mode. This is useful for products that don't have a dedicated factory
+kill circuit.
+
+Change-Id: I3bd42539a8f7cb3c8e53d42c3974b5098005f2f6
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/786753
+Tested-by: Jira Key <jirakey@motorola.com>
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 9e44b57c44a..9912ff2c682 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -261,6 +261,7 @@ struct smbchg_chip {
+ 	unsigned long			first_aicl_seconds;
+ 	int				aicl_irq_count;
+ 	bool				factory_mode;
++	bool				factory_cable;
+ 	struct delayed_work		heartbeat_work;
+ 	struct mutex			check_temp_lock;
+ 	int				temp_state;
+@@ -4614,6 +4615,8 @@ static void usb_insertion_work(struct work_struct *work)
+ 	smbchg_relax(chip, PM_CHARGER);
+ }
+ 
++static int factory_kill_disable;
++module_param(factory_kill_disable, int, 0644);
+ static void handle_usb_removal(struct smbchg_chip *chip)
+ {
+ 	int rc;
+@@ -4622,6 +4625,15 @@ static void handle_usb_removal(struct smbchg_chip *chip)
+ 	chip->apsd_rerun_cnt = 0;
+ 	chip->hvdcp_det_done = false;
+ 
++	if (chip->factory_cable) {
++		if (!factory_kill_disable && !reboot_in_progress()) {
++			pr_err("SMB - Factory Cable removed, power-off\n");
++			kernel_power_off();
++		} else
++			pr_err("SMB - Factory cable removed - kill disabled\n");
++		chip->factory_cable = false;
++	}
++
+ 	smbchg_aicl_deglitch_wa_check(chip);
+ 	if (chip->force_aicl_rerun) {
+ 		rc = smbchg_hw_aicl_rerun_en(chip, true);
+@@ -4710,6 +4722,12 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
+ 
+ 	chip->apsd_rerun_cnt = 0;
+ 
++	if (chip->factory_mode && (usb_supply_type == POWER_SUPPLY_TYPE_USB ||
++				usb_supply_type == POWER_SUPPLY_TYPE_USB_CDP)) {
++		pr_err("SMB - Factory Kill Armed\n");
++		chip->factory_cable = true;
++	}
++
+ 	pr_smb(PR_STATUS, "inserted %s, usb psy type = %d stat_5 = 0x%02x\n",
+ 			usb_type_name, usb_supply_type, reg);
+ 	smbchg_aicl_deglitch_wa_check(chip);
+-- 
+2.11.0
+

@@ -1,0 +1,102 @@
+From 1b4884176d0cf26db5bf87242477e7c6a55a2231 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Tue, 1 Sep 2015 13:58:34 -0500
+Subject: [PATCH 144/959] IKKRNBSP-3351 arm/dt: 8952: provision FCI DTV node
+
+Add pinctrl and FCI DTV node on spi_5 for DTV hardware.
+Set max frequency for spi_5 to matching 50 MHz.
+
+Change-Id: I9d78162d84d9035bb9b55d1ebcdc7209e1b8b8c1
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/780646
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-dtv.dtsi | 41 ++++++++++++++++++++++++++--
+ 1 file changed, 38 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-dtv.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-dtv.dtsi
+index 7a8451bacfa..a4203f023e7 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-dtv.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-dtv.dtsi
+@@ -17,6 +17,27 @@
+ };
+ 
+ &tlmm_pinmux {
++	dtv_enable_reset {
++		qcom,pins = <&gp 41>, <&gp 38>;
++		qcom,num-grp-pins = <2>;
++		qcom,pin-func = <0>;
++		label = "dtv-outputs";
++		dtv_output_default: dtv-outputs {
++			drive-strength = <2>;
++			bias-disable; /* no pull */
++			output-low;
++		};
++	};
++
++	dtv_irq {
++		qcom,pins = <&gp 37>;
++		qcom,num-grp-pins = <1>;
++		qcom,pin-func = <0>;
++		label = "dtv-irq";
++		dtv_input_default: dtv-irq {
++			bias-pull-up; /* pull up */
++		};
++	};
+ 
+ 	spi5_active {
+ 		/* BLSP6 MOSI, MISO, CLK */
+@@ -27,7 +48,7 @@
+ 		/* active state */
+ 		spi5_default: spi5_default {
+ 			drive-strength = <12>; /* 12 MA */
+-			bias-disable = <0>; /* No PULL */
++			bias-disable; /* No PULL */
+ 		};
+ 	};
+ 
+@@ -52,7 +73,7 @@
+ 		label = "spi5-cs0-active";
+ 		spi5_cs0_active: cs0_active {
+ 			drive-strength = <2>;
+-			bias-disable = <0>;
++			bias-disable;
+ 		};
+ 	};
+ 
+@@ -64,7 +85,7 @@
+ 		label = "spi5-cs0-suspend";
+ 		spi5_cs0_sleep: cs0_sleep {
+ 			drive-strength = <2>;
+-			bias-disable = <0>;
++			bias-pull-up;
+ 		};
+ 	};
+ };
+@@ -97,5 +118,19 @@
+ 		/* master-id for BLSP2 is MSM_BUS_MASTER_BLSP_2 or 84 */
+ 		qcom,master-id = <84>;
+ 		status = "ok";
++
++		fci_dtv: fc8300@0 {
++			status = "ok";
++			compatible = "fci,isdbt";
++			reg = <0>;
++			spi-max-frequency = <50000000>;
++			irq-gpio = <&msm_gpio 37 0>;
++			reset-gpio = <&msm_gpio 38 0>;
++			enable-gpio = <&msm_gpio 41 0>;
++			enable-active-high;
++			pinctrl-names = "default";
++			pinctrl-0 = <&dtv_output_default &dtv_input_default>;
++			isdbt_vdd-supply = <&pm8950_l6>;
++		};
+ 	};
+ };
+-- 
+2.11.0
+

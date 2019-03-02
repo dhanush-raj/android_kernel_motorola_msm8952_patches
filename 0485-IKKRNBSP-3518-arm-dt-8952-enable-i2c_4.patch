@@ -1,0 +1,106 @@
+From 22f6ef37eb883156e0e80dddbc74c849f4f18ef1 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Mon, 16 Nov 2015 10:13:09 -0600
+Subject: [PATCH 485/959] IKKRNBSP-3518 arm/dt: 8952: enable i2c_4
+
+Configure i2c_4 interface in common 8952 file.
+Interface is unused on P0.
+
+Change-Id: I599cf4d7b9cc300fc8a93fc56e9690c60ead2096
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/800272
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-athene-p0.dts    |  4 +++
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 45 +++++++++++++++++++++++++
+ 2 files changed, 49 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+index b23a7380b92..c2b8f660c1e 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
++++ b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+@@ -122,3 +122,7 @@
+ 		touch_vdd-supply = <&pm8950_l22>;
+ 	};
+ };
++
++&i2c_4 {
++	status = "disabled";
++};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 84cb45dd039..b4c50495c7e 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -21,6 +21,7 @@
+ 	aliases {
+ 		serial0 = &blsp1_uart2;
+ 		spi4 = &spi_4;
++		i2c4 = &i2c_4;
+ 		/delete-property/ i2c5;
+ 		/delete-property/ i2c8;
+ 		/delete-property/ spi0;
+@@ -64,6 +65,24 @@
+ };
+ 
+ &tlmm_pinmux {
++	pmx_i2c_4 {
++		/* CLK, DATA */
++		qcom,pins = <&gp 14>, <&gp 15>;
++		qcom,num-grp-pins = <2>;
++		qcom,pin-func = <3>;
++		label = "pmx_i2c_4";
++		/* active state */
++		i2c_4_active: i2c_4_active{
++			drive-strength = <2>; /* 2 MA */
++			bias-disable; /* No PULL */
++		};
++		/* suspended state */
++		i2c_4_sleep: i2c_4_sleep {
++			drive-strength = <2>; /* 2 MA */
++			bias-disable; /* No PULL */
++		};
++	};
++
+ 	tlmm_gpio_key {
+ 			qcom,pins = <&gp 85>;
+ 			qcom,num-grp-pins = <1>;
+@@ -649,6 +668,32 @@
+ 	qcom,msm-thermal {
+ 		qcom,config-info = "athene";
+ 	};
++
++	i2c_4: i2c@78b8000 { /* BLSP1 QUP4 */
++		compatible = "qcom,i2c-msm-v2";
++		#address-cells = <1>;
++		#size-cells = <0>;
++		reg-names = "qup_phys_addr";
++		reg = <0x78b8000 0x600>;
++		interrupt-names = "qup_irq";
++		interrupts = <0 98 0>;
++		qcom,clk-freq-out = <400000>;
++		qcom,clk-freq-in  = <19200000>;
++		clock-names = "iface_clk", "core_clk";
++		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
++			 <&clock_gcc clk_gcc_blsp1_qup4_i2c_apps_clk>;
++
++		pinctrl-names = "i2c_active", "i2c_sleep";
++		pinctrl-0 = <&i2c_4_active>;
++		pinctrl-1 = <&i2c_4_sleep>;
++		qcom,noise-rjct-scl = <0>;
++		qcom,noise-rjct-sda = <0>;
++		qcom,master-id = <86>;
++		dmas = <&dma_blsp1 10 64 0x20000020 0x20>,
++			<&dma_blsp1 11 32 0x20000020 0x20>;
++		dma-names = "tx", "rx";
++	};
++
+ };
+ 
+ &sdhc_1 {
+-- 
+2.11.0
+

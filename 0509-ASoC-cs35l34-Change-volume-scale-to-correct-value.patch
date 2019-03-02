@@ -1,0 +1,37 @@
+From e159748c615864604a8d14fc6618c30722f591aa Mon Sep 17 00:00:00 2001
+From: Paul Handrigan <Paul.Handrigan@cirrus.com>
+Date: Fri, 20 Nov 2015 08:37:46 -0600
+Subject: [PATCH 509/959] ASoC: cs35l34: Change volume scale to correct value.
+
+Change the digital volume scale to reflect the correct dB
+values.
+
+Signed-off-by: Paul Handrigan <Paul.Handrigan@cirrus.com>
+Change-Id: I0ea4234ae5b91653dc1ca92d080a0e566eb58e0d
+Reviewed-on: http://gerrit.mot.com/802330
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Reviewed-by: Joseph Dwyer <josephdwyer@motorola.com>
+---
+ sound/soc/codecs/cs35l34.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/sound/soc/codecs/cs35l34.c b/sound/soc/codecs/cs35l34.c
+index 828560d15bb..9bee568225b 100644
+--- a/sound/soc/codecs/cs35l34.c
++++ b/sound/soc/codecs/cs35l34.c
+@@ -308,7 +308,7 @@ static const struct soc_enum amp_gain = SOC_VALUE_ENUM_SINGLE(
+ 
+ static const struct snd_kcontrol_new cs35l34_snd_controls[] = {
+ 	SOC_SINGLE_SX_TLV("Digital Volume", CS35L34_AMP_DIG_VOL,
+-		      0, 0x34, 0xFF, dig_vol_tlv),
++		0, 0x34, 0x18, dig_vol_tlv),
+ 	SOC_ENUM("AMP Gain", amp_gain),
+ 	SOC_SINGLE("Mute Switch", CS35L34_AMP_ANLG_GAIN_CTL, 5, 1, 0),
+ };
+-- 
+2.11.0
+

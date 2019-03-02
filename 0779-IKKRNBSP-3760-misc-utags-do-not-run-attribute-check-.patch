@@ -1,0 +1,47 @@
+From 8cebbc2db30303c206e9be4afa5e044faa332fb4 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Fri, 11 Mar 2016 15:01:06 -0600
+Subject: [PATCH 779/959] IKKRNBSP-3760 misc: utags: do not run attribute check
+ in root
+
+There is no need to run .attribute check for the root tag special
+files.
+
+Change-Id: I628c8572b5531e60c33af4bd32fdbfe036a9bd2d
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/832451
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/utag/utags.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/misc/utag/utags.c b/drivers/misc/utag/utags.c
+index 9feb4697c3c..392f3e14458 100644
+--- a/drivers/misc/utag/utags.c
++++ b/drivers/misc/utag/utags.c
+@@ -1384,7 +1384,7 @@ size_t len, alen;
+ 	}
+ 
+ 	if (!vld->size) {
+-		pr_err("no validation data in [%s]\n", vld->name);
++		pr_err("allow [%s] because [%s] is empty\n", attr, vld->name);
+ 		return 0;
+ 	}
+ 
+@@ -1510,7 +1510,8 @@ static ssize_t new_utag(struct file *file, const char __user *buffer,
+ 	}
+ 
+ 	/* only check attributes for last file starting with a . */
+-	if (ctrl->hwtag && '.' == names[num_names-1][0])
++	/* do not check for attributes in the root */
++	if (ctrl->hwtag && num_names != 1 && '.' == names[num_names-1][0])
+ 		if (check_hwtag(ctrl, names[num_names-1], ctrl->attrib)) {
+ 			ret = -EINVAL;
+ 			goto just_leave;
+-- 
+2.11.0
+

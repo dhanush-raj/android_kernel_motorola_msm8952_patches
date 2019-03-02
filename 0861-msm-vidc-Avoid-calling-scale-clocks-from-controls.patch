@@ -1,0 +1,41 @@
+From e4f0a49a22d72e1f51467f497898bdb097a73d81 Mon Sep 17 00:00:00 2001
+From: Praneeth Paladugu <ppaladug@codeaurora.org>
+Date: Wed, 16 Sep 2015 10:37:28 -0700
+Subject: [PATCH 861/959] msm: vidc: Avoid calling scale clocks from controls
+
+V4L2 control framework acquires ctrls lock before
+s_ctrl and g_ctrl. If driver calls scale clocks with
+control, it internally calls g_ctrl and it leads to
+deadlocks. Hence avoid calling scale clocks with control.
+The clocks will be scaled with future ETB\FTB anyways.
+
+Mot-CRs-fixed:IKSWM-31783: Fix vidc turbo mode
+Change-Id: I8bf62d18fca445b0c1239b15e510790cf2105a8e
+Signed-off-by: Praneeth Paladugu <ppaladug@codeaurora.org>
+Reviewed-on: http://gerrit.mot.com/844108
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sabyasachi Singh <txwv64@motorola.com>
+Reviewed-by: Kiran Kumar Krishna <kiran@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/media/platform/msm/vidc/msm_vdec.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/drivers/media/platform/msm/vidc/msm_vdec.c b/drivers/media/platform/msm/vidc/msm_vdec.c
+index 6a14165a198..1121e9d535e 100644
+--- a/drivers/media/platform/msm/vidc/msm_vdec.c
++++ b/drivers/media/platform/msm/vidc/msm_vdec.c
+@@ -2368,7 +2368,6 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
+ 			break;
+ 		}
+ 
+-		msm_comm_scale_clocks_and_bus(inst);
+ 		break;
+ 	case V4L2_CID_MPEG_VIDC_VIDEO_ALLOC_MODE_INPUT:
+ 		if (ctrl->val == V4L2_MPEG_VIDC_VIDEO_DYNAMIC) {
+-- 
+2.11.0
+

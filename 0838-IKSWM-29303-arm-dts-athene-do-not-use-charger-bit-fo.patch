@@ -1,0 +1,53 @@
+From c4ff4fc879431a8dfe12102b7b886cefdcad0974 Mon Sep 17 00:00:00 2001
+From: Igor Kovalenko <cik009@motorola.com>
+Date: Fri, 1 Apr 2016 17:10:11 -0500
+Subject: [PATCH 838/959] IKSWM-29303: arm/dts: athene: do not use charger bit
+ for touch
+
+Noise state machine behaves inconsistently and BOE panels
+often get stuck in noise mitigation state even after removing
+USB cable. This hurts user experience in normal use cases.
+
+Charger noise immunity needs to be resolved in some other way.
+
+Change-Id: Ie3fc5882ccdcdde32aa91b1d3742aa7e87e52100
+Signed-off-by: Igor Kovalenko <cik009@motorola.com>
+Reviewed-on: http://gerrit.mot.com/840572
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Alexander Filonenko <alexf@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-athene.dtsi | 8 +-------
+ 1 file changed, 1 insertion(+), 7 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene.dtsi b/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+index 51f491e9c31..2f43d189cef 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+@@ -95,7 +95,7 @@
+ 		pinctrl-names = "default", "active";
+ 		pinctrl-0 = <&touch_reset_active &touch_int_default>;
+ 		pinctrl-1 = <&touch_reset_active &touch_int_active>;
+-		config_modifier-names = "aod", "fps", "charger";
++		config_modifier-names = "aod", "fps";
+ 		config_modifier-aod {
+ 			aod-suspended {
+ 				patch-data = "F12@20:1=2;S"; /* Set LPWG bit; Power->sleep */
+@@ -107,11 +107,5 @@
+ 				touch-clip-area = <450 1875 610 1919 1>;
+ 			};
+ 		};
+-		config_modifier-charger {
+-			enable-notification;
+-			charger-active { /* mitigate charger noise on BOE */
+-				patch-data = "F1@0=20&0";
+-			};
+-		};
+ 	};
+ };
+-- 
+2.11.0
+

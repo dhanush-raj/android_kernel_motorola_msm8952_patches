@@ -1,0 +1,119 @@
+From 48df2b30f0d980b33bc3b3d5707936e3d5ddff40 Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Fri, 6 Mar 2015 10:54:21 -0800
+Subject: [PATCH 756/959] IKSWM-24183: pm: supsend: read suspend time from
+ timekeeping
+
+The suspend time will always return 0 on the Arches that don't
+support persistent clock. For these Arches we should read the
+suspend time from timekeeping realtime interface.
+
+Change-Id: I30648352207ea7b5ca221c251d47476b609e0009
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/724552
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+SME-Granted: Gerrit Application <gerritmailarchive@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830291
+SME-Granted: SME Approvals Granted
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ kernel/power/Kconfig        |  7 +++++++
+ kernel/power/suspend_time.c | 36 ++++++++++++++++++++++++++++++++++++
+ 2 files changed, 43 insertions(+)
+
+diff --git a/kernel/power/Kconfig b/kernel/power/Kconfig
+index b156022b10c..c9c4f922e9d 100644
+--- a/kernel/power/Kconfig
++++ b/kernel/power/Kconfig
+@@ -289,6 +289,13 @@ config SUSPEND_TIME
+ 	  keeps statistics on the time spent in suspend in
+ 	  /sys/kernel/debug/suspend_time
+ 
++config SUSPEND_TIME_TIMEKEEPING
++	bool "get suspend time from timekeeping"
++	depends on SUSPEND_TIME
++	---help---
++	  Get the suspend time in suspend from timekeeping for the archs
++	  that dont support persistent clock.
++
+ config SUSPEND_DEBUG
+ 	bool "Enable snapshot of regulator and tlmm when suspend"
+ 	depends on SUSPEND
+diff --git a/kernel/power/suspend_time.c b/kernel/power/suspend_time.c
+index d2a65da9f22..691d115dea4 100644
+--- a/kernel/power/suspend_time.c
++++ b/kernel/power/suspend_time.c
+@@ -21,6 +21,7 @@
+ #include <linux/seq_file.h>
+ #include <linux/syscore_ops.h>
+ #include <linux/time.h>
++#include <linux/suspend.h>
+ 
+ static struct timespec suspend_time_before;
+ static unsigned int time_in_suspend_bins[32];
+@@ -70,6 +71,32 @@ static int __init suspend_time_debug_init(void)
+ late_initcall(suspend_time_debug_init);
+ #endif
+ 
++#ifdef CONFIG_SUSPEND_TIME_TIMEKEEPING
++static int suspend_time_pm_event(struct notifier_block *notifier,
++				unsigned long pm_event, void *unused)
++{
++	struct timespec after;
++	switch (pm_event) {
++	case PM_SUSPEND_PREPARE:
++		getnstimeofday(&suspend_time_before);
++		break;
++	case PM_POST_SUSPEND:
++		getnstimeofday(&after);
++		after = timespec_sub(after, suspend_time_before);
++		time_in_suspend_bins[fls(after.tv_sec)]++;
++		pr_info("Suspended for %lu.%03lu seconds\n", after.tv_sec,
++			after.tv_nsec / NSEC_PER_MSEC);
++		break;
++	default:
++		break;
++	}
++	return NOTIFY_DONE;
++}
++
++static struct notifier_block suspend_time_pm_notifier_block = {
++	.notifier_call = suspend_time_pm_event,
++};
++#else
+ static int suspend_time_syscore_suspend(void)
+ {
+ 	read_persistent_clock(&suspend_time_before);
+@@ -95,17 +122,26 @@ static struct syscore_ops suspend_time_syscore_ops = {
+ 	.suspend = suspend_time_syscore_suspend,
+ 	.resume = suspend_time_syscore_resume,
+ };
++#endif
+ 
+ static int suspend_time_syscore_init(void)
+ {
++#ifdef CONFIG_SUSPEND_TIME_TIMEKEEPING
++	register_pm_notifier(&suspend_time_pm_notifier_block);
++#else
+ 	register_syscore_ops(&suspend_time_syscore_ops);
++#endif
+ 
+ 	return 0;
+ }
+ 
+ static void suspend_time_syscore_exit(void)
+ {
++#ifdef CONFIG_SUSPEND_TIME_TIMEKEEPING
++	unregister_pm_notifier(&suspend_time_pm_notifier_block);
++#else
+ 	unregister_syscore_ops(&suspend_time_syscore_ops);
++#endif
+ }
+ module_init(suspend_time_syscore_init);
+ module_exit(suspend_time_syscore_exit);
+-- 
+2.11.0
+

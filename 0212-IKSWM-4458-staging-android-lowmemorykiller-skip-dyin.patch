@@ -1,0 +1,81 @@
+From d9e4439733c4a35f8182f27fcf74f09130125707 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Tue, 8 Apr 2014 10:33:44 -0700
+Subject: [PATCH 212/959] IKSWM-4458: staging: android: lowmemorykiller: skip
+ dying or exiting task
+
+Under certain circumstances, a process may take time to handle a SIGKILL.
+When lowmemkiller is called again shortly after, it would pick the same
+process to kill over and over, so that we cann't get free memory for long
+time. We would skip the task who has fatal_signal_pending().
+
+Also a task can be selected to kill when it's already exiting. Sending
+signal to the task at that state won't set TIF_SIGPENDING for it.
+After that, every task including threads in the exiting task itself
+running into lmk will compete for the mutex, then spend some time
+waiting for the exiting task to release memory or try to send signal
+to the same task again. We skip lmk if current thread group leader is
+exiting and is killed by lmk. Also delegate TIF_MEMDIE to current task.
+
+This is ported and mergered from below four local patches:
+    d9d2b1f141a4d4bbb94501a10282d9cd5e119b6f
+    8a57e7df00a12f35370d5edef83676f24d8e8ade
+    87656f5289168b13e94dcd2a1d678c5008b1d074
+    90f9b91c86307667572a6487b2fbdb7575c434f6
+
+Change-Id: I0bf7f59bc01549c75df365bff46fc9f7262b4300
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ drivers/staging/android/lowmemorykiller.c | 22 +++++++++++++++++++++-
+ 1 file changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/staging/android/lowmemorykiller.c b/drivers/staging/android/lowmemorykiller.c
+index f8132d562be..e5f9464719a 100644
+--- a/drivers/staging/android/lowmemorykiller.c
++++ b/drivers/staging/android/lowmemorykiller.c
+@@ -423,6 +423,15 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 	unsigned long nr_to_scan = sc->nr_to_scan;
+         struct zone_avail zall[MAX_NUMNODES][MAX_NR_ZONES];
+ 
++	rcu_read_lock();
++	tsk = current->group_leader;
++	if ((tsk->flags & PF_EXITING) && test_task_flag(tsk, TIF_MEMDIE)) {
++		set_tsk_thread_flag(current, TIF_MEMDIE);
++		rcu_read_unlock();
++		return 0;
++	}
++	rcu_read_unlock();
++
+ 	if (nr_to_scan > 0) {
+ 		if (mutex_lock_interruptible(&scan_mutex) < 0)
+ 			return 0;
+@@ -500,7 +509,11 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 			if (test_task_flag(tsk, TIF_MEMDIE)) {
+ 				rcu_read_unlock();
+ 				/* give the system time to free up the memory */
+-				msleep_interruptible(20);
++				if (!same_thread_group(current, tsk))
++					msleep_interruptible(20);
++				else
++					set_tsk_thread_flag(current,
++								TIF_MEMDIE);
+ 				mutex_unlock(&scan_mutex);
+ 				return 0;
+ 			}
+@@ -519,6 +532,13 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 			continue;
+ #endif
+ 		}
++		if (fatal_signal_pending(p) ||
++				((p->flags & PF_EXITING) &&
++					test_tsk_thread_flag(p, TIF_MEMDIE))) {
++			lowmem_print(2, "skip slow dying process %d\n", p->pid);
++			task_unlock(p);
++			continue;
++		}
+ 		tasksize = get_mm_rss(p->mm);
+ 		task_unlock(p);
+ 		if (tasksize <= 0)
+-- 
+2.11.0
+

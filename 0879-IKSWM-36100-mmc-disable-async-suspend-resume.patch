@@ -1,0 +1,64 @@
+From a075ee874027fed68683db391c002535faa4f857 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Wed, 4 May 2016 14:31:58 -0700
+Subject: [PATCH 879/959] IKSWM-36100: mmc: disable async suspend/resume
+
+ Enable async suspend will cause the host been suspended
+ while blk layer still alive.
+
+ This commit revert QCOM's 44945a7744e751da411020916b571b3f5e8ed1f9
+
+Change-Id: I53b6e0a5184ed19722283c6987df44f03561b0b6
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/852495
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Lian-Wei Wang <lian-wei.wang@motorola.com>
+Reviewed-by: David Ding <dding@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/mmc/core/bus.c       | 1 -
+ drivers/mmc/core/host.c      | 1 -
+ drivers/mmc/host/sdhci-msm.c | 1 -
+ 3 files changed, 3 deletions(-)
+
+diff --git a/drivers/mmc/core/bus.c b/drivers/mmc/core/bus.c
+index 06011ad1e00..8d5beab4488 100644
+--- a/drivers/mmc/core/bus.c
++++ b/drivers/mmc/core/bus.c
+@@ -431,7 +431,6 @@ int mmc_add_card(struct mmc_card *card)
+ 	if (ret)
+ 		return ret;
+ 
+-	device_enable_async_suspend(&card->dev);
+ 	if (mmc_use_core_runtime_pm(card->host) && !mmc_card_sdio(card)) {
+ 		card->rpm_attrib.show = show_rpm_delay;
+ 		card->rpm_attrib.store = store_rpm_delay;
+diff --git a/drivers/mmc/core/host.c b/drivers/mmc/core/host.c
+index 1a905ab9fbb..fabd2e85cdf 100644
+--- a/drivers/mmc/core/host.c
++++ b/drivers/mmc/core/host.c
+@@ -991,7 +991,6 @@ int mmc_add_host(struct mmc_host *host)
+ 	if (err)
+ 		return err;
+ 
+-	device_enable_async_suspend(&host->class_dev);
+ 	led_trigger_register_simple(dev_name(&host->class_dev), &host->led);
+ 
+ #ifdef CONFIG_DEBUG_FS
+diff --git a/drivers/mmc/host/sdhci-msm.c b/drivers/mmc/host/sdhci-msm.c
+index 6d526efc8b9..ef7d934970a 100644
+--- a/drivers/mmc/host/sdhci-msm.c
++++ b/drivers/mmc/host/sdhci-msm.c
+@@ -3986,7 +3986,6 @@ static int sdhci_msm_probe(struct platform_device *pdev)
+ 		}
+ 	}
+ 
+-	device_enable_async_suspend(&pdev->dev);
+ 	/* Successful initialization */
+ 	goto out;
+ 
+-- 
+2.11.0
+

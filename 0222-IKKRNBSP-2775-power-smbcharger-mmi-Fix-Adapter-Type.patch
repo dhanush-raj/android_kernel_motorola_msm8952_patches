@@ -1,0 +1,58 @@
+From 0655194815e40a833a985b4b894c9d2d1c8ad213 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Tue, 20 Jan 2015 19:41:03 -0600
+Subject: [PATCH 222/959] IKKRNBSP-2775: power: smbcharger-mmi: Fix Adapter
+ Type
+
+The Adapter type defaults to Unregulated supplies.
+Change to Regulated Types as the Unregulated setting
+can lead to AICL instability when using a Regulated
+Supply.
+
+Change-Id: I5933ae8d9aa52d5a7515a8cdb7be254b07bb53b1
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/706188
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 746fb5f0c78..5ca86bc2706 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -4213,6 +4213,13 @@ static inline int get_bpd(const char *name)
+ #define AICL_WL_SEL_45S		0
+ #define CHGR_CCMP_CFG			0xFA
+ #define JEITA_TEMP_HARD_LIMIT_BIT	BIT(5)
++#define USBIN_ALLOW_MASK		SMB_MASK(2, 0)
++#define USBIN_ALLOW_5V			0x0
++#define USBIN_ALLOW_5V_9V		0x1
++#define USBIN_ALLOW_5V_TO_9V		0x2
++#define USBIN_ALLOW_9V			0x3
++#define USBIN_ALLOW_5V_UNREG		0x4
++#define USBIN_ALLOW_5V_9V_UNREG		0x5
+ static int smbchg_hw_init(struct smbchg_chip *chip)
+ {
+ 	int rc, i;
+@@ -4549,6 +4556,14 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
+ 		return rc;
+ 	}
+ 
++	rc = smbchg_sec_masked_write(chip,
++				     chip->usb_chgpth_base + USBIN_CHGR_CFG,
++				     USBIN_ALLOW_MASK, USBIN_ALLOW_5V_TO_9V);
++	if (rc < 0) {
++		dev_err(chip->dev, "Couldn't write usb allowance rc=%d\n", rc);
++		return rc;
++	}
++
+ 	rc = smbchg_read(chip, &chip->original_usbin_allowance,
+ 			chip->usb_chgpth_base + USBIN_CHGR_CFG, 1);
+ 	if (rc < 0)
+-- 
+2.11.0
+

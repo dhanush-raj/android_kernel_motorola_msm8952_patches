@@ -1,0 +1,83 @@
+From 0ee4b9520cd528a3d5b59bdfff7b84a0bcfb45d4 Mon Sep 17 00:00:00 2001
+From: Ravi Chebolu <arc095@motorola.com>
+Date: Thu, 14 May 2015 10:19:43 -0500
+Subject: [PATCH 562/959] IKSWL-13510: usb: gadget: Use different pm-qos params
+ for factory.
+
+Factory suspend test expects a stable APC current. With CPUs
+power collapsing in idle, there's a big variation in battery
+current which is failing the factory suspend test. Disabling
+the CPUs from power collapsing when factory cable is detected
+helps to keep the battery current stable.
+
+If the device is powered with a factory cable and the device
+tree has "mmi,pm-qos-latency-factory", then overwrite the default
+USB pm-qos latency parameters with factory latency parameters.
+
+Change-Id: I8a6fbead23e1738f891ae5af5c599ca8764f5aa2
+Signed-off-by: Ravi Chebolu <arc095@motorola.com>
+Reviewed-on: http://gerrit.mot.com/747933
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/807741
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Christopher Fries <cfries@motorola.com>
+Tested-by: Christopher Fries <cfries@motorola.com>
+---
+ drivers/usb/gadget/android.c | 30 ++++++++++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/drivers/usb/gadget/android.c b/drivers/usb/gadget/android.c
+index fecf4c3f3b1..e0d1630b157 100644
+--- a/drivers/usb/gadget/android.c
++++ b/drivers/usb/gadget/android.c
+@@ -4005,6 +4005,34 @@ static int usb_diag_update_pid_and_serial_num(u32 pid, const char *snum)
+ 	return 0;
+ }
+ 
++static void check_mmi_factory(struct platform_device *pdev,
++		struct android_usb_platform_data *pdata)
++{
++	struct device_node *np = of_find_node_by_path("/chosen");
++	bool fact_cable = false;
++	int prop_len = 0;
++
++	if (np)
++		fact_cable = of_property_read_bool(np, "mmi,factory-cable");
++
++	of_node_put(np);
++
++	if (fact_cable) {
++		of_get_property(pdev->dev.of_node,
++				"mmi,pm-qos-latency-factory",
++				&prop_len);
++		if (prop_len == sizeof(pdata->pm_qos_latency)) {
++			pr_info("Overwrite pm_qos latency with factory mode\n");
++			of_property_read_u32_array(pdev->dev.of_node,
++				"mmi,pm-qos-latency-factory",
++				pdata->pm_qos_latency,
++				prop_len/sizeof(*pdata->pm_qos_latency));
++		} else {
++			pr_info("pm_qos latency for factory not specified\n");
++		}
++	}
++}
++
+ static int android_probe(struct platform_device *pdev)
+ {
+ 	struct android_usb_platform_data *pdata;
+@@ -4031,6 +4059,8 @@ static int android_probe(struct platform_device *pdev)
+ 			pr_info("pm_qos latency not specified %d\n", prop_len);
+ 		}
+ 
++		check_mmi_factory(pdev, pdata);
++
+ 		ret = of_property_read_u32(pdev->dev.of_node,
+ 					"qcom,usb-core-id",
+ 					&usb_core_id);
+-- 
+2.11.0
+

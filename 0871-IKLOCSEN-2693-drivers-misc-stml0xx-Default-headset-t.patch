@@ -1,0 +1,44 @@
+From d3fb406e6b8fda50444ffa49312330580629abd7 Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Fri, 13 May 2016 11:03:20 -0500
+Subject: [PATCH 871/959] IKLOCSEN-2693 drivers/misc: stml0xx: Default headset
+ to removed
+
+On initialization set the headset state to removed so we
+don't have to wait for the sensor hub to come up and
+report removed.
+
+Change-Id: Ia6ed873d18f0328407493b37f1ba68b2dde1ceda
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/856287
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Gabriel Burca <Gabriel.Burca@motorola.com>
+Reviewed-by: George Standish <george.standish@motorola.com>
+Reviewed-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 5772667d29f..e7dfa216872 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -989,6 +989,10 @@ static int stml0xx_probe(struct spi_device *spi)
+ 	input_set_capability(ps_stml0xx->input_dev, EV_SW, SW_HEADPHONE_INSERT);
+ 	input_set_capability(ps_stml0xx->input_dev, EV_SW, SW_MICROPHONE_INSERT);
+ 	ps_stml0xx->input_dev->name = "sensorprocessor";
++	input_report_switch(ps_stml0xx->input_dev,
++			SW_HEADPHONE_INSERT,  0);
++	input_report_switch(ps_stml0xx->input_dev,
++			SW_MICROPHONE_INSERT, 0);
+ 
+ 	err = input_register_device(ps_stml0xx->input_dev);
+ 	if (err) {
+-- 
+2.11.0
+

@@ -1,0 +1,54 @@
+From 3a120a83a31e65cf81c4bf8277deae81e93121b4 Mon Sep 17 00:00:00 2001
+From: Konstantin Makariev <kmakariev@motorola.com>
+Date: Thu, 22 Oct 2015 14:29:34 -0500
+Subject: [PATCH 404/959] IKSWM-7569 input: synaptics_dsx_i2c: fix touch
+ statistics
+
+Statistics is supposed to be measured in microseconds
+
+Change-Id: Iba335c74a1c7ba2bddcf492c2bd1e9307105b048
+Signed-off-by: Konstantin Makariev <kmakariev@motorola.com>
+Reviewed-on: http://gerrit.mot.com/793838
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/touchscreen/synaptics_dsx_i2c.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.c b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+index f586d560f29..48013582444 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.c
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+@@ -2917,7 +2917,7 @@ static ssize_t synaptics_rmi4_stats_show(struct device *dev,
+ 		gear_time = stats->keeper[ii].duration;
+ 		if (ii == gear)
+ 			gear_time += duration;
+-		perc_u64 = 10000*gear_time;
++		perc_u64 = 100000*gear_time;
+ 		do_div(perc_u64, total);
+ 		percentage = (int)perc_u64;
+ 		SPRINTF_PAGE("%c%d: %d%%\n", stats->abbr, ii,
+@@ -2942,7 +2942,7 @@ static ssize_t synaptics_rmi4_stats_show(struct device *dev,
+ 		gear_time = stats->keeper[ii].duration;
+ 		if (ii == state)
+ 			gear_time += duration;
+-		perc_u64 = 10000*gear_time;
++		perc_u64 = 100000*gear_time;
+ 		do_div(perc_u64, total);
+ 		percentage = (int)perc_u64;
+ 		SPRINTF_PAGE("%c%d: %d%%\n", stats->abbr,
+@@ -2967,7 +2967,7 @@ static ssize_t synaptics_rmi4_stats_show(struct device *dev,
+ 		gear_time = stats->keeper[ii].duration;
+ 		if (ii == state)
+ 			gear_time += duration;
+-		perc_u64 = 10000*gear_time;
++		perc_u64 = 100000*gear_time;
+ 		do_div(perc_u64, total);
+ 		percentage = (int)perc_u64;
+ 		SPRINTF_PAGE("%c%d: %d%%\n", stats->abbr,
+-- 
+2.11.0
+

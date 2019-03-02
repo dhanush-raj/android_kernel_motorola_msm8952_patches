@@ -1,0 +1,142 @@
+From ee911ba6776e293cf4abc4de924aef0653d9a546 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Thu, 1 Oct 2015 10:53:21 -0500
+Subject: [PATCH 326/959] IKKRNBSP-3423 leds: atc-led: changes to support
+ pmi8952
+
+Older PMIC ICs had a simple charging LED override command.
+Newer PMI8952 has led mode in addition to SW override and
+it has one of the blink patterns as a default mode. Make
+control patterns, masks configurable. Save previous bit
+configuration and restore it on "off" command.
+
+Change-Id: Ib4c576a880d8d732c56cd0ee175b1a8aa2e8b12f
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/787700
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ .../devicetree/bindings/leds/leds-atc.txt          | 12 ++++--
+ drivers/leds/leds-atc.c                            | 43 +++++++++++++++++++++-
+ 2 files changed, 50 insertions(+), 5 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/leds/leds-atc.txt b/Documentation/devicetree/bindings/leds/leds-atc.txt
+index 445175ce64c..3dcea506926 100644
+--- a/Documentation/devicetree/bindings/leds/leds-atc.txt
++++ b/Documentation/devicetree/bindings/leds/leds-atc.txt
+@@ -3,12 +3,18 @@ Driver leds-atc is used to control ATC charging led on a Qualcomm PMIC.
+ Required properties
+ - compatible		: string should be "qcom,leds-atc"
+ - linux,name		: name of the led that is used in led framework
+-- qcom,ctrl-reg		: ATC LED register address. Check PMIC specification
++- qcom,ctrl-reg		: ATC LED register address. Check your PMIC specification
++- qcom,on-data		: ATC LED register pattern to turn on the led. Check your PMIC spec.
++- qcom,on-data		: ATC LED register pattern to turn off the led. Check your PMIC spec.
++- qcom,mask		: ATC LED register access mask. Check your PMIC spec.
+ 
+ Example:
+ 
+-qcom,leds@104d {
++qcom,leds@1243 {
+ 	compatible = "qcom,leds-atc";
+ 	linux,name = "charging";
+-	qcom,ctrl-reg = <0x104D>;
++	qcom,ctrl-reg = <0x1243>;
++	qcom,on-data = <0x07>;
++	qcom,off-data = <0x06>;
++	qcom,mask = <0x07>;
+ };
+diff --git a/drivers/leds/leds-atc.c b/drivers/leds/leds-atc.c
+index 4bebc7ffd06..e89889205eb 100644
+--- a/drivers/leds/leds-atc.c
++++ b/drivers/leds/leds-atc.c
+@@ -28,11 +28,17 @@
+  * @led_classdev - led class device
+  * @spmi_device - spmi class device
+  * @addr - spmi address for control register
++ * @on_data - ctrl reg pattern to turn on the LED
++ * @off_data - ctrl reg patterm to turn off the LED
+  */
+ struct atc_led_data {
+ 	struct led_classdev	cdev;
+ 	struct spmi_device	*spmi_dev;
+ 	u32			addr;
++	u8			on_data;
++	u8			off_data;
++	u8			mask;
++	u8			save;
+ };
+ 
+ static int
+@@ -66,9 +72,12 @@ static void atc_led_set(struct led_classdev *led_cdev,
+ 	struct atc_led_data *led;
+ 
+ 	led = container_of(led_cdev, struct atc_led_data, cdev);
+-	val = (led->cdev.brightness) ? 1 : 0;
+-	spmi_masked_write(led, led->addr, FORCE_ON_MASK, val);
++	val = (led->cdev.brightness) ? led->on_data : led->off_data;
++	spmi_masked_write(led, led->addr, led->mask, val);
+ 	led->cdev.brightness = value;
++	/* If we just turned off, restore the saved configuration) */
++	if (!val)
++		spmi_masked_write(led, led->addr, led->mask, led->save);
+ }
+ 
+ static enum led_brightness atc_led_get(struct led_classdev *led_cdev)
+@@ -109,6 +118,27 @@ static int atc_leds_probe(struct spmi_device *spmi)
+ 		return -ENODEV;
+ 	}
+ 
++	rc = of_property_read_u8(node, "qcom,on-data", &led->on_data);
++	if (rc < 0) {
++		dev_err(&spmi->dev,
++			"Failure reading ctrl on_data, rc = %d\n", rc);
++		return -ENODEV;
++	}
++
++	rc = of_property_read_u8(node, "qcom,off-data", &led->off_data);
++	if (rc < 0) {
++		dev_err(&spmi->dev,
++			"Failure reading ctrl off_data, rc = %d\n", rc);
++		return -ENODEV;
++	}
++
++	rc = of_property_read_u8(node, "qcom,mask", &led->mask);
++	if (rc < 0) {
++		dev_err(&spmi->dev,
++			"Failure reading ctrl mask, rc = %d\n", rc);
++		return -ENODEV;
++	}
++
+ 	led->addr = led_resource->start + offset;
+ 
+ 	rc = of_property_read_string(node, "linux,name", &led->cdev.name);
+@@ -118,6 +148,14 @@ static int atc_leds_probe(struct spmi_device *spmi)
+ 		return -ENODEV;
+ 	}
+ 
++	rc = spmi_ext_register_readl(led->spmi_dev->ctrl, led->spmi_dev->sid,
++		led->addr, &led->save, 1);
++	if (rc) {
++		dev_err(&led->spmi_dev->dev,
++			"Unable to read from addr=%#x, rc(%d)\n", led->addr, rc);
++		return -ENODEV;
++	}
++
+ 	led->cdev.brightness_set = atc_led_set;
+ 	led->cdev.brightness_get = atc_led_get;
+ 	led->cdev.brightness = LED_OFF;
+@@ -129,6 +167,7 @@ static int atc_leds_probe(struct spmi_device *spmi)
+ 	}
+ 
+ 	dev_set_drvdata(&spmi->dev, led);
++	dev_info(&spmi->dev, "Probe success\n");
+ 	return 0;
+ }
+ 
+-- 
+2.11.0
+

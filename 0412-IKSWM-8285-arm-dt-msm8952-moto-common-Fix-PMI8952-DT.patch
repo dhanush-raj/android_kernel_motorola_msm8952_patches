@@ -1,0 +1,56 @@
+From 119f9b39bbf803521e8795ab8e4695a51fc7620c Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Wed, 21 Oct 2015 15:05:07 -0500
+Subject: [PATCH 412/959] IKSWM-8285: arm/dt: msm8952-moto-common: Fix PMI8952
+ DT
+
+Switch to internal sense resistance.
+Remove the DCIN Power Supply configuration.
+Increase Shutdown threhsolds to 3.2 V and 3.0 V.
+
+Change-Id: I6b0a0f0eea799515a23eb118c975323267da318a
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/793367
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 8 +++-----
+ 1 file changed, 3 insertions(+), 5 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 67ad795f975..aa87417a498 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -265,8 +265,6 @@
+ 	qcom,float-voltage-mv = <4400>;
+ 	qcom,resume-delta-mv = <200>;
+ 	qcom,chg-inhibit-fg;
+-	qcom,dc-psy-type = "Wireless";
+-	qcom,dc-psy-ma = <950>;
+ 	qcom,rparasitic-uohm = <100000>;
+ 	qcom,bms-psy-name = "bms";
+ 	qcom,charge-unknown-battery;
+@@ -312,14 +310,14 @@
+ 	qcom,cool-bat-decidegc = <0>;
+ 	qcom,hot-bat-decidegc = <600>;
+ 	qcom,cold-bat-decidegc = <(-200)>;
+-	qcom,ext-sense-type; /* External Sense Resistor */
++	/delete-property/ qcom,ext-sense-type; /* External Sense Resistor */
+ 	qcom,thermal-coefficients =  /bits/ 16 <0x6986 0x5D4B 0x6235>;
+ 	qcom,resume-soc = <99>;
+ 	qcom,bcl-lm-threshold-ma = <126>;
+ 	qcom,bcl-mh-threshold-ma = <400>;
+ 	qcom,fg-iterm-ma = <150>;
+-	qcom,irq-volt-empty-mv = <2750>;
+-	qcom,fg-cutoff-voltage-mv = <3000>;
++	qcom,irq-volt-empty-mv = <3000>;
++	qcom,fg-cutoff-voltage-mv = <3200>;
+ 	qcom,fg-vbat-estimate-diff-mv = <1000>;
+ 	qcom,fg-delta-soc = <1>;
+ 	qcom,fg-max-soc = <100>;
+-- 
+2.11.0
+

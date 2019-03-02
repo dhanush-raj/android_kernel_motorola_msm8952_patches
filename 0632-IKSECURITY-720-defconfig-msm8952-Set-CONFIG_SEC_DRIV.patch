@@ -1,0 +1,34 @@
+From f2138eb5b1b93eb487013463bceea73323b85f44 Mon Sep 17 00:00:00 2001
+From: Mark Reed <mreed1@motorola.com>
+Date: Fri, 22 Jan 2016 09:57:39 -0600
+Subject: [PATCH 632/959] IKSECURITY-720 - defconfig: msm8952: Set
+ CONFIG_SEC_DRIVER=y
+
+Set CONFIG_SEC_DRIVER=y to enable efuse driver.
+
+Change-Id: I5792bd182629e4a7fca4d3014c0911ae87c39cd5
+Signed-off-by: mreed1 <mreed1@motorola.com>
+
+Change-Id: Idb4e0fd0a5ce31b163e8aefc84c86a2da242d60c
+Reviewed-on: http://gerrit.mot.com/815453
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index de57cc5e772..f200be49cfa 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -59,3 +59,4 @@ CONFIG_MMC_FFU=y
+ CONFIG_SUSPEND_DEBUG=y
+ CONFIG_ALSA_TO_H2W=y
+ CONFIG_ESD_FS=y
++CONFIG_SEC_DRIVER=y
+-- 
+2.11.0
+

@@ -1,0 +1,110 @@
+From 02b1a205d741883666a55b092d760c5a60fff0a4 Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Fri, 29 Apr 2016 17:51:18 -0700
+Subject: [PATCH 882/959] IKKRNBSP-3889: msm: mdss: clean up panel param sysfs
+ function definition
+
+Use macro helper to define panel parameter sysfs store/show function.
+
+Change-Id: I33544e43745484e7b46ebae8e5fd63e7e73979cf
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/851034
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Patrick Auchter <auchter@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_fb.c | 67 +++++++++++++---------------------------
+ 1 file changed, 22 insertions(+), 45 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_fb.c b/drivers/video/msm/mdss/mdss_fb.c
+index f92e4590061..fea5c4345b9 100644
+--- a/drivers/video/msm/mdss/mdss_fb.c
++++ b/drivers/video/msm/mdss/mdss_fb.c
+@@ -71,6 +71,26 @@
+ #define BLANK_FLAG_LP	FB_BLANK_NORMAL
+ #define BLANK_FLAG_ULP	FB_BLANK_VSYNC_SUSPEND
+ 
++#define __PARAM_SYSFS_DEFINITION(_name, _id) \
++static ssize_t _name##_show(struct device *dev, \
++		struct device_attribute *attr, char *buf) \
++{ \
++	const char *name; \
++	ssize_t ret; \
++	ret = mdss_fb_get_param(dev, _id, &name); \
++	if (ret < 0) \
++		return ret; \
++	return snprintf(buf, PAGE_SIZE, "%s\n", name); \
++} \
++static ssize_t _name##_store(struct device *dev, \
++		struct device_attribute *attr, \
++		const char *buf, size_t count) \
++{ \
++	ssize_t ret; \
++	ret = mdss_fb_set_param(dev, _id, buf); \
++	return ret ? ret : count; \
++}
++
+ static struct fb_info *fbi_list[MAX_FBI_LIST];
+ static int fbi_list_index;
+ 
+@@ -1017,51 +1037,8 @@ static void mdss_fb_restore_param(struct msm_fb_data_type *mfd)
+ 	mutex_unlock(&mfd->param_lock);
+ }
+ 
+-static ssize_t hbm_show(struct device *dev,
+-		struct device_attribute *attr, char *buf)
+-{
+-	const char *name;
+-	ssize_t ret;
+-
+-	ret = mdss_fb_get_param(dev, PARAM_HBM_ID, &name);
+-	if (ret < 0)
+-		return ret;
+-
+-	return snprintf(buf, PAGE_SIZE, "%s\n", name);
+-}
+-
+-static ssize_t hbm_store(struct device *dev,
+-		struct device_attribute *attr,
+-		const char *buf, size_t count)
+-{
+-	ssize_t ret;
+-
+-	ret = mdss_fb_set_param(dev, PARAM_HBM_ID, buf);
+-	return ret ? ret : count;
+-}
+-
+-static ssize_t cabc_show(struct device *dev,
+-		struct device_attribute *attr, char *buf)
+-{
+-	const char *name;
+-	ssize_t ret;
+-
+-	ret = mdss_fb_get_param(dev, PARAM_CABC_ID, &name);
+-	if (ret < 0)
+-		return ret;
+-
+-	return snprintf(buf, PAGE_SIZE, "%s\n", name);
+-}
+-
+-static ssize_t cabc_store(struct device *dev,
+-		struct device_attribute *attr,
+-		const char *buf, size_t count)
+-{
+-	ssize_t ret;
+-
+-	ret = mdss_fb_set_param(dev, PARAM_CABC_ID, buf);
+-	return ret ? ret : count;
+-}
++__PARAM_SYSFS_DEFINITION(hbm, PARAM_HBM_ID)
++__PARAM_SYSFS_DEFINITION(cabc, PARAM_CABC_ID)
+ 
+ static struct device_attribute param_attrs[PARAM_ID_NUM] = {
+ 	__ATTR(hbm, S_IWUSR | S_IWGRP | S_IRUSR | S_IRGRP, hbm_show, hbm_store),
+-- 
+2.11.0
+

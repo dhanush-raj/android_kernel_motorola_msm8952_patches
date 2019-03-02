@@ -1,0 +1,48 @@
+From d6bf7386f3daea21d7a2e1779e6ec91e260b0fd5 Mon Sep 17 00:00:00 2001
+From: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Date: Thu, 9 Oct 2014 11:55:23 -0500
+Subject: [PATCH 080/959] IKKRNBSP-2690 stml0xx: update printf specifier for
+ size_t type
+
+Use %zu instead of %d for 32- and 64-bit portability.
+
+Change-Id: I30a44f86fdceb14bf9be64dcb7f22f17a7dbc9f5
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_flash.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_flash.c b/drivers/misc/stml0xx/stml0xx_flash.c
+index e79fd84dcc7..a58a40b8968 100644
+--- a/drivers/misc/stml0xx/stml0xx_flash.c
++++ b/drivers/misc/stml0xx/stml0xx_flash.c
+@@ -383,7 +383,7 @@ ssize_t stml0xx_misc_write(struct file *file, const char __user *buff,
+ 
+ 	if (count > STML0XX_MAXDATA_LENGTH || count == 0) {
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+-			"Invalid packet size %d", count);
++			"Invalid packet size %zu", count);
+ 		return -EINVAL;
+ 	}
+ 
+@@ -399,7 +399,7 @@ ssize_t stml0xx_misc_write(struct file *file, const char __user *buff,
+ 	if (stml0xx_misc_data->mode == BOOTMODE) {
+ 		/* For boot mode */
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Starting flash write, %d bytes to address 0x%08x",
++			"Starting flash write, %zu bytes to address 0x%08x",
+ 			count, stml0xx_misc_data->current_addr);
+ 
+ BEGIN_WRITE:
+@@ -538,7 +538,7 @@ RETRY_WRITE:
+ 					"Data compare successful");
+ 			else
+ 				dev_err(&stml0xx_misc_data->spi->dev,
+-					"Write error detected, %d/%d bytes",
++					"Write error detected, %d/%zu bytes",
+ 					bad_byte_cnt, count);
+ 			break;
+ RETRY_READ:
+-- 
+2.11.0
+

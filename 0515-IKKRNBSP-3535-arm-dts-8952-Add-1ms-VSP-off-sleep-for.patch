@@ -1,0 +1,53 @@
+From 0a0b76f031840c3fe426f77d28113eaf514dcf0b Mon Sep 17 00:00:00 2001
+From: daiss1 <daiss1@motorola.com>
+Date: Tue, 24 Nov 2015 13:34:39 +0800
+Subject: [PATCH 515/959] IKKRNBSP-3535 arm/dts: 8952:Add 1ms VSP off sleep for
+ discharge purpose
+
+Set VSP qcom,supply-post-off-sleep = <1>
+
+Change-Id: Ia460e155abbcb3f43eb5aebbb00fe85cb8569403
+Signed-off-by: daiss1 <daiss1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/802363
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi | 2 +-
+ arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+index bc5fdc07baa..3eb8df77800 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+@@ -130,7 +130,7 @@ qcom,panel-supply-entries {
+ 		qcom,supply-pre-on-sleep = <2>;
+ 		qcom,supply-post-on-sleep = <0>;
+ 		qcom,supply-pre-off-sleep = <0>;
+-		qcom,supply-post-off-sleep = <0>;
++		qcom,supply-post-off-sleep = <1>;
+ 	};
+ 
+ 	qcom,panel-supply-entry@2 {
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+index 103b9268137..eabdea60d61 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -127,7 +127,7 @@ qcom,panel-supply-entries {
+ 		qcom,supply-pre-on-sleep = <2>;
+ 		qcom,supply-post-on-sleep = <0>;
+ 		qcom,supply-pre-off-sleep = <0>;
+-		qcom,supply-post-off-sleep = <0>;
++		qcom,supply-post-off-sleep = <1>;
+ 	};
+ 
+ 	qcom,panel-supply-entry@2 {
+-- 
+2.11.0
+

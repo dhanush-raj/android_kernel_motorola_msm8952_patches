@@ -1,0 +1,38 @@
+From 5f0ea757afb276001e55e319efef35e1f0b7c710 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Sat, 26 Sep 2015 14:25:48 -0700
+Subject: [PATCH 357/959] IKSWM-2069: esdfs: set proper permisison for root
+ inode
+
+ The root inode's permission is not initialized, which will
+ leave uid/gid/mode all are zero, causing packageinstall
+ access denied.
+
+Change-Id: I1bb823864655eb7a24249a049891a56efd3a40bf
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/786525
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Reviewed-by: Russell Knize <rknize@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/esdfs/main.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/fs/esdfs/main.c b/fs/esdfs/main.c
+index e5bf1733758..efec0d6c00c 100644
+--- a/fs/esdfs/main.c
++++ b/fs/esdfs/main.c
+@@ -341,6 +341,7 @@ static int esdfs_read_super(struct super_block *sb, const char *dev_name,
+ 
+ 	/* initialize root inode */
+ 	esdfs_derive_perms(sb->s_root);
++	esdfs_set_perms(inode);
+ 
+ 	esdfs_add_super(sbi, sb);
+ 
+-- 
+2.11.0
+

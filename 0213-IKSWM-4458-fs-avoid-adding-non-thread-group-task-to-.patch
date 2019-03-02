@@ -1,0 +1,54 @@
+From 7b9709e2d79ac7c4343aca4760ec3cfe40ed5cee Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Mon, 1 Jun 2015 18:58:42 -0700
+Subject: [PATCH 213/959] IKSWM-4458 fs: avoid adding non-thread-group task to
+ LMK rbtree
+
+To maintain the task adj RB tree, we add a task to the RB tree when fork,
+and delete it when exit. The place is exactly the same as the linear
+p->tasks list, say, nly when the task is thread_group_leader.
+
+When task group_leader is changing, we make sure to add the new leader
+into RB tree after its leader flag is set, task->exit_signal.
+
+Change-Id: I8da47998510e531188feb067b491e92306be9414
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ fs/exec.c | 14 ++++++++------
+ 1 file changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/fs/exec.c b/fs/exec.c
+index 1a5a7fdbcad..a9f4bf1faaf 100644
+--- a/fs/exec.c
++++ b/fs/exec.c
+@@ -952,19 +952,21 @@ static int de_thread(struct task_struct *tsk)
+ 		transfer_pid(leader, tsk, PIDTYPE_SID);
+ 
+ 		list_replace_rcu(&leader->tasks, &tsk->tasks);
++		list_replace_init(&leader->sibling, &tsk->sibling);
++
++		tsk->group_leader = tsk;
++		leader->group_leader = tsk;
++
++		tsk->exit_signal = SIGCHLD;
+ 		/*
+ 		 * need to delete leader from adj tree, because it will not be
+ 		 * group leader (exit_signal = -1) soon. release_task(leader)
+ 		 * can't delete it.
+ 		 */
++		spin_lock_irq(lock);
+ 		delete_from_adj_tree(leader);
+ 		add_2_adj_tree(tsk);
+-		list_replace_init(&leader->sibling, &tsk->sibling);
+-
+-		tsk->group_leader = tsk;
+-		leader->group_leader = tsk;
+-
+-		tsk->exit_signal = SIGCHLD;
++		spin_unlock_irq(lock);
+ 		leader->exit_signal = -1;
+ 
+ 		BUG_ON(leader->exit_state != EXIT_ZOMBIE);
+-- 
+2.11.0
+

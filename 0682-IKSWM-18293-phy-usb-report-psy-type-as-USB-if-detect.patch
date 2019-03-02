@@ -1,0 +1,48 @@
+From 07a141245a732c790afa24024c0b0d0c723e859c Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Mon, 1 Jun 2015 11:16:52 -0500
+Subject: [PATCH 682/959] IKSWM-18293: phy: usb: report psy type as USB if
+ detection is complete at boot.
+
+There is a corner case where the psy type is still reported as UNKNOWN
+if the user quickly disconnects the charger at boot. This will cause
+userspace to ignore charger type detection and thereby charging status
+will not be updated in the UI. Fix this by defaulting psy type to USB
+if detection is already done.
+
+Change-Id: I0a1372bc46659519dfe9258440113c6d429f7a68
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/753095
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kumar Venkatesh <kumarv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+(cherry picked from commit 28bb60aaad8df07aef19c232ae11dd12858fec58)
+Reviewed-on: http://gerrit.mot.com/823121
+Reviewed-by: Hujun Liao <liaohj@motorola.com>
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+---
+ drivers/usb/phy/phy-msm-usb.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/usb/phy/phy-msm-usb.c b/drivers/usb/phy/phy-msm-usb.c
+index bb7ab7da55a..af7eb3c3e1b 100644
+--- a/drivers/usb/phy/phy-msm-usb.c
++++ b/drivers/usb/phy/phy-msm-usb.c
+@@ -5059,8 +5059,11 @@ static int otg_power_set_property_usb(struct power_supply *psy,
+ 		 * does not exist in power supply enum and it
+ 		 * gets overridden as DCP.
+ 		 */
+-		if (motg->chg_state == USB_CHG_STATE_DETECTED)
++		if (motg->chg_state == USB_CHG_STATE_DETECTED) {
++			if (psy->type == POWER_SUPPLY_TYPE_UNKNOWN)
++				psy->type = POWER_SUPPLY_TYPE_USB;
+ 			break;
++		}
+ 
+ 		switch (motg->usb_supply_type) {
+ 		case POWER_SUPPLY_TYPE_USB:
+-- 
+2.11.0
+

@@ -1,0 +1,92 @@
+From 312b0b4ad254f4c5dd9a89a42cc196d4ab81ad4d Mon Sep 17 00:00:00 2001
+From: satya kottisa <fvgm76@motorola.com>
+Date: Mon, 26 Oct 2015 13:19:43 -0500
+Subject: [PATCH 411/959] IKMMINTG-6037: Revert "ARM: dts: Change the camera
+ csi clock for svs plus"
+
+This reverts commit 86de03ab90802a914a09f7836aaca8b248d04b6d.
+
+This change is suggested by Qualcomm to fix the frame
+corruption seen when using full res @ 30fps using
+dual VFE configuration.
+
+Change-Id: I6f8e0dbe07651c56e7c2a55085079ddf4fdbc7ef
+Signed-off-by: satya kottisa <fvgm76@motorola.com>
+Reviewed-on: http://gerrit.mot.com/794620
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Elena Satraitis <w04888@motorola.com>
+Reviewed-by: Sumit Jamadar <xkbr38@motorola.com>
+Reviewed-by: Sachin Doshi <sachindoshi@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-camera.dtsi | 16 ++++++++--------
+ 1 file changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-camera.dtsi b/arch/arm/boot/dts/qcom/msm8952-camera.dtsi
+index 7c267e6bd9f..dff1dd54499 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-camera.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-camera.dtsi
+@@ -39,7 +39,7 @@
+ 			"csiphy_timer_src_clk", "csiphy_timer_clk",
+ 			"camss_ahb_src", "csi_phy_clk",
+ 			"camss_ahb_clk";
+-		qcom,clock-rates = <0 61540000 160000000 0 0 0 0>;
++		qcom,clock-rates = <0 61540000 200000000 0 0 0 0>;
+ 	};
+ 
+ 	qcom,csiphy@1b0b000 {
+@@ -61,7 +61,7 @@
+ 			"csiphy_timer_src_clk", "csiphy_timer_clk",
+ 			"camss_ahb_src", "csi_phy_clk",
+ 			"camss_ahb_clk";
+-		qcom,clock-rates = <0 61540000 160000000 0 0 0 0>;
++		qcom,clock-rates = <0 61540000 200000000 0 0 0 0>;
+ 	};
+ 
+ 	qcom,csid@1b08000  {
+@@ -85,7 +85,7 @@
+ 			"ispif_ahb_clk", "csi_ahb_clk", "csi_src_clk",
+ 			"csi_clk",  "csi_pix_clk",
+ 			"csi_rdi_clk", "camss_ahb_clk";
+-		qcom,clock-rates = <0 61540000 0 160000000 0 0 0 0>;
++		qcom,clock-rates = <0 61540000 0 200000000 0 0 0 0>;
+ 	};
+ 
+ 	qcom,csid@1b08400 {
+@@ -109,7 +109,7 @@
+ 			"ispif_ahb_clk", "csi_ahb_clk", "csi_src_clk",
+ 			"csi_clk", "csi_pix_clk",
+ 			"csi_rdi_clk", "camss_ahb_clk";
+-		qcom,clock-rates = <0 61540000 0 160000000 0 0 0 0>;
++		qcom,clock-rates = <0 61540000 0 200000000 0 0 0 0>;
+ 	};
+ 
+ 	qcom,csid@1b08800 {
+@@ -133,7 +133,7 @@
+ 			"ispif_ahb_clk", "csi_ahb_clk", "csi_src_clk",
+ 			"csi_clk", "csi_pix_clk",
+ 			"csi_rdi_clk", "camss_ahb_clk";
+-		qcom,clock-rates = <0 61540000 0 160000000 0 0 0 0>;
++		qcom,clock-rates = <0 61540000 0 200000000 0 0 0 0>;
+ 	};
+ 
+ 	qcom,ispif@1b0a000 {
+@@ -182,9 +182,9 @@
+ 			"camss_ahb_clk", "camss_top_ahb_clk",
+ 			"camss_ahb_src";
+ 		qcom,clock-rates = <61540000
+-			160000000 0 0 0
+-			160000000 0 0 0
+-			160000000 0 0 0
++			200000000 0 0 0
++			200000000 0 0 0
++			200000000 0 0 0
+ 			0 0 0
+ 			0 0 0
+ 			0 0 0>;
+-- 
+2.11.0
+

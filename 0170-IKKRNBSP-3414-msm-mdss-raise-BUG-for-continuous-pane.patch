@@ -1,0 +1,56 @@
+From 379fbeb9145e5676e649a4a977371fd35463813b Mon Sep 17 00:00:00 2001
+From: Zac Crosby <zac@motorola.com>
+Date: Mon, 14 Sep 2015 11:11:29 -0500
+Subject: [PATCH 170/959] IKKRNBSP-3414 msm: mdss: raise BUG for continuous
+ panel recovery failure
+
+Include retry count to increment for each susbsequent
+panel recovery failure, raise a BUG() if there is
+more than 5 times panel recovery failure
+
+Port of db405c9 from 8996.
+
+Change-Id: Ic01c233bb93b1adef4ab4447bb8ba333627053af
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/785880
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index 76c4f94857f..1053ba2d7c0 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -787,6 +787,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
+ 	struct dsi_panel_cmds *on_cmds;
+ 	int ret = 0;
+ 	u8 pwr_mode = 0;
++	static int panel_recovery_retry;
+ 
+ 	if (pdata == NULL) {
+ 		pr_err("%s: Invalid input data\n", __func__);
+@@ -832,7 +833,14 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
+ 			pr_err("%s: Panel recovery FAILED!!\n", __func__);
+ 
+ 		pdata->panel_info.panel_dead = true;
+-	}
++
++		if (panel_recovery_retry++ > 5) {
++			pr_err("%s: panel recovery failed for all retries",
++				__func__);
++			BUG();
++		}
++	} else
++		panel_recovery_retry = 0;
+ end:
+ 	if (!ctrl->ndx)
+ 		pr_info("%s[%d]-. Pwr_mode(0x0A) = 0x%x\n", __func__,
+-- 
+2.11.0
+

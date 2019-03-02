@@ -1,0 +1,57 @@
+From 94c766174a31666fab4b52aa25102584278e8f7b Mon Sep 17 00:00:00 2001
+From: Kevin Wells <kwells@motorola.com>
+Date: Fri, 13 Sep 2013 18:07:29 -0400
+Subject: [PATCH 008/959] IKJBMR2-5115 build: choose debug config based on
+ chipset
+
+This change allows us to pick up a debug configuration file
+based on the defconfig that is being used to build the
+kernel. Previously, there was one file "eng_bld.config"
+that was included for all defconfigs. This caused breakages
+when CONFIG items were placed in this file that didn't apply
+to all configurations. The new debug file will be named
+based on the defconfig, i.e. debug-msm8226.config will be
+picked up when the defconfig file is msm8226_defconfig.
+
+Change-Id: If7caa69be7327daff3e9458de709a91489d9d6cb
+Signed-off-by: Kevin Wells <kwells@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/566716
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kevin L Wells <kewells@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+(cherry picked from commit 3d520ba4696d225d13f08998984bb9f65d1e1250)
+---
+ defconfig.mk | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/defconfig.mk b/defconfig.mk
+index 968c4f94be1..ec190dcef91 100644
+--- a/defconfig.mk
++++ b/defconfig.mk
+@@ -2,6 +2,7 @@ DEFCONFIGSRC			:= kernel/arch/arm/configs
+ LJAPDEFCONFIGSRC		:= ${DEFCONFIGSRC}/ext_config
+ PRODUCT_SPECIFIC_DEFCONFIGS	:= $(DEFCONFIGSRC)/$(KERNEL_DEFCONFIG)
+ TARGET_DEFCONFIG		:= $(KERNEL_OUT)/mapphone_defconfig
++KERNEL_DEBUG_DEFCONFIG          := $(LJAPDEFCONFIGSRC)/debug-$(subst _defconfig,,$(KERNEL_DEFCONFIG)).config
+ 
+ ifneq ($(KERNEL_EXTRA_CONFIG),)
+ PRODUCT_SPECIFIC_DEFCONFIGS += $(LJAPDEFCONFIGSRC)/$(KERNEL_EXTRA_CONFIG).config
+@@ -9,10 +10,12 @@ endif
+ 
+ # build eng kernel for eng and userdebug Android variants
+ ifneq ($(TARGET_BUILD_VARIANT), user)
+-PRODUCT_SPECIFIC_DEFCONFIGS += ${LJAPDEFCONFIGSRC}/eng_bld.config
++ifneq ($(wildcard $(DEBUG_CONFIG)),)
++PRODUCT_SPECIFIC_DEFCONFIGS += $(KERNEL_DEBUG_DEFCONFIG)
++endif
+ 
+ ifneq ($(KERNEL_EXTRA_CONFIG),)
+-PRODUCT_SPECIFIC_DEFCONFIGS += $(LJAPDEFCONFIGSRC)/eng_bld-$(KERNEL_EXTRA_CONFIG).config
++PRODUCT_SPECIFIC_DEFCONFIGS += $(LJAPDEFCONFIGSRC)/debug-$(KERNEL_EXTRA_CONFIG).config
+ endif
+ endif
+ 
+-- 
+2.11.0
+

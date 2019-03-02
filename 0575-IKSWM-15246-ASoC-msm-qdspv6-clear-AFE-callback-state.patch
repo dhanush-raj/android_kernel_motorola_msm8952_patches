@@ -1,0 +1,37 @@
+From 592700f6ef5f7cc391baa550cf6f2ce6ebd2237a Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Mon, 28 Dec 2015 08:03:11 -0600
+Subject: [PATCH 575/959] IKSWM-15246 ASoC: msm: qdspv6: clear AFE callback
+ state
+
+OSPL AFE callback routines generate (false) AFE timeout routine
+because its state wasn't cleared after DSP retunes value.
+Handle AFE state correctly to clear timeout error.
+
+Change-Id: I0964b132e7b9d760afd7bac781b4f63efa601b4f
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/809670
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/msm/qdsp6v2/q6afe.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/sound/soc/msm/qdsp6v2/q6afe.c b/sound/soc/msm/qdsp6v2/q6afe.c
+index 967c7b626ea..084cde4bf55 100644
+--- a/sound/soc/msm/qdsp6v2/q6afe.c
++++ b/sound/soc/msm/qdsp6v2/q6afe.c
+@@ -216,6 +216,7 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
+ 		    payload32[1] == AFE_CUSTOM_OPALUM_TX_MODULE) {
+ 			if (ospl2xx_callback != NULL)
+ 				ospl2xx_callback(data);
++			atomic_set(&this_afe.state, 0);
+ 		} else {
+ #endif
+ 		if (rtac_make_afe_callback(data->payload, data->payload_size))
+-- 
+2.11.0
+

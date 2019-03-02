@@ -1,0 +1,24 @@
+From 22377478b70e101c2932a4ce0e750b3eabeb7b73 Mon Sep 17 00:00:00 2001
+From: Nikit Sharma <nikitsharma92@gmail.com>
+Date: Sat, 17 Mar 2018 09:23:22 +0530
+Subject: [PATCH 717/959] IKSWM-22509 defconfig: change CONFIG_HZ to 300
+
+---
+ arch/arm/configs/msm8916-perf_defconfig | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/msm8916-perf_defconfig b/arch/arm/configs/msm8916-perf_defconfig
+index 5d575c0b7f0..85481856a1f 100644
+--- a/arch/arm/configs/msm8916-perf_defconfig
++++ b/arch/arm/configs/msm8916-perf_defconfig
+@@ -51,6 +51,7 @@ CONFIG_SCHED_MC=y
+ CONFIG_NR_CPUS=8
+ CONFIG_ARM_PSCI=y
+ CONFIG_PREEMPT=y
++CONFIG_HZ_300=y
+ CONFIG_AEABI=y
+ CONFIG_HIGHMEM=y
+ CONFIG_BALANCE_ANON_FILE_RECLAIM=y
+-- 
+2.11.0
+

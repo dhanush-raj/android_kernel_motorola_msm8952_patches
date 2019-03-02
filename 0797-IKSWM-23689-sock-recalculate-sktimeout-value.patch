@@ -1,0 +1,37 @@
+From 97e8e33e3e75f6ab781fed5f340ba884d3f2fde9 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Mon, 14 Mar 2016 19:03:28 -0700
+Subject: [PATCH 797/959] IKSWM-23689 sock: recalculate sktimeout value
+
+The sk_rcvtimeo value may be rounded up wrongly on different HZ
+configuration. Recalculate the value to get a more accurate value
+and make sure the result from getsockopt is the same as setsockopt.
+
+Change-Id: I69d74f92bb7fcc83560bac96389abf93ef75d59e
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+Reviewed-on: http://gerrit.mot.com/833066
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ net/core/sock.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/net/core/sock.c b/net/core/sock.c
+index fed17669a70..c08b50df7d0 100644
+--- a/net/core/sock.c
++++ b/net/core/sock.c
+@@ -403,7 +403,7 @@ static int sock_set_timeout(long *timeo_p, char __user *optval, int optlen)
+ 	if (tv.tv_sec == 0 && tv.tv_usec == 0)
+ 		return 0;
+ 	if (tv.tv_sec < (MAX_SCHEDULE_TIMEOUT/HZ - 1))
+-		*timeo_p = tv.tv_sec*HZ + (tv.tv_usec+(1000000/HZ-1))/(1000000/HZ);
++		*timeo_p = tv.tv_sec*HZ + (tv.tv_usec+(1000000/HZ-1))*HZ/1000000;
+ 	return 0;
+ }
+ 
+-- 
+2.11.0
+

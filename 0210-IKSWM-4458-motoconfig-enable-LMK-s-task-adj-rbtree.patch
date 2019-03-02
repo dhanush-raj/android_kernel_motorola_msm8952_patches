@@ -1,0 +1,26 @@
+From 2c42d2a9163a75aa14f5b73817df2801cb75bc6e Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Fri, 6 Mar 2015 17:52:28 -0800
+Subject: [PATCH 210/959] IKSWM-4458 motoconfig: enable LMK's task adj rbtree
+
+This is to enable low memory kill optimization option,
+to have LMK select task to kill from rbtree.
+
+Change-Id: I50f72618b71aa405729eda40aa7d32880c7f4818
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index 673b51ed2e9..5e71fce6498 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -35,3 +35,4 @@ CONFIG_MMI_SOC_INFO=y
+ CONFIG_MMI_RAM_INFO=y
+ CONFIG_SOFTLOCKUP_WATCHDOG_TEST=y
+ CONFIG_LOCKUP_IPI_CALL_WDT=y
++CONFIG_ANDROID_LMK_ADJ_RBTREE=y
+-- 
+2.11.0
+

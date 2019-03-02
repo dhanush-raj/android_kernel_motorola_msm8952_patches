@@ -1,0 +1,94 @@
+From 82064d5c676e63845985b6e7897bd8eed6855cb3 Mon Sep 17 00:00:00 2001
+From: Zac Crosby <azc095@motorola.com>
+Date: Wed, 26 Feb 2014 11:56:44 -0600
+Subject: [PATCH 313/959] IKKRNBSP-3418 msm: mdss: Add sysfs method to retrieve
+ frame counter
+
+Provide a method to retrieve the ping pong frame counter via sysfs. This
+counter can be used to count the number of TE pulse the host sees,
+which is needed for the factory to verify TE functionality.
+
+Port of f13a892 from 8996.
+
+Change-Id: Ic665a3f41b7243d82c8a30cc154df10e7cb06b7e
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/786225
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_mdp_overlay.c | 47 +++++++++++++++++++++++++++++++
+ 1 file changed, 47 insertions(+)
+
+diff --git a/drivers/video/msm/mdss/mdss_mdp_overlay.c b/drivers/video/msm/mdss/mdss_mdp_overlay.c
+index 4fecf2fcc30..dd1b40ad5f6 100644
+--- a/drivers/video/msm/mdss/mdss_mdp_overlay.c
++++ b/drivers/video/msm/mdss/mdss_mdp_overlay.c
+@@ -2847,6 +2847,43 @@ static struct attribute_group dynamic_fps_fs_attrs_group = {
+ 	.attrs = dynamic_fps_fs_attrs,
+ };
+ 
++static ssize_t frame_counter_show(struct device *dev,
++				struct device_attribute *attr, char *buf)
++{
++	struct fb_info *fbi = dev_get_drvdata(dev);
++	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
++	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
++	struct mdss_mdp_mixer *mixer;
++	u32 reg;
++
++	if (!ctl) {
++		pr_warn("there is no ctl attached to fb\n");
++		return -ENODEV;
++	}
++
++	mixer = mdss_mdp_mixer_get(ctl, MDSS_MDP_MIXER_MUX_LEFT);
++	if (!mixer) {
++		pr_warn("there is no mixer\n");
++		return -ENODEV;
++	}
++
++	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
++	reg = mdss_mdp_pingpong_read(mixer->pingpong_base,
++				MDSS_MDP_REG_PP_INT_COUNT_VAL) >> 16;
++	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
++	return snprintf(buf, PAGE_SIZE, "%d\n", reg);
++}
++
++static DEVICE_ATTR(frame_counter, S_IRUSR | S_IRGRP, frame_counter_show, NULL);
++static struct attribute *factory_te_attrs[] = {
++	&dev_attr_frame_counter.attr,
++	NULL,
++};
++static struct attribute_group factory_te_attrs_group = {
++	.attrs = factory_te_attrs,
++};
++
++
+ static ssize_t mdss_mdp_vsync_show_event(struct device *dev,
+ 		struct device_attribute *attr, char *buf)
+ {
+@@ -5323,6 +5360,16 @@ int mdss_mdp_overlay_init(struct msm_fb_data_type *mfd)
+ 			goto init_fail;
+ 		}
+ 	}
++
++	if (mfd->panel_info->type == MIPI_CMD_PANEL) {
++		rc = sysfs_create_group(&dev->kobj,
++					&factory_te_attrs_group);
++		if (rc) {
++			pr_err("Error factory te sysfs creation ret=%d\n", rc);
++			goto init_fail;
++		}
++	}
++
+ 	mfd->mdp_sync_pt_data.async_wait_fences = true;
+ 
+ 	pm_runtime_set_suspended(&mfd->pdev->dev);
+-- 
+2.11.0
+

@@ -1,0 +1,100 @@
+From 354091db84d6566fbd7a71fa89b018b254b90513 Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Fri, 8 Jan 2016 16:34:49 -0600
+Subject: [PATCH 628/959] IKLOCSEN-2524 drivers/misc/stml0xx: Improve sensor
+ hub error reporting
+
+Report the reason for sensor hub crashes using Bug2Go.
+
+Change-Id: I67bcbbc5c4435c4e9920161b8e8a131670787e74
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/811553
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Gabriel Burca <Gabriel.Burca@motorola.com>
+Reviewed-by: Eric Hefner <ehefner@motorola.com>
+Reviewed-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_wake_irq.c | 16 ++++++++++++----
+ include/uapi/linux/motosh_vmm.h         |  6 +++---
+ include/uapi/linux/stml0xx.h            | 13 +++++++++++++
+ 3 files changed, 28 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index c16b6bd09ce..c8ae7247f93 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -515,14 +515,22 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 	}
+ 	/* check for a reset request */
+ 	if (irq_status & M_HUB_RESET) {
+-		unsigned char status = 0x01;
++		err = stml0xx_spi_send_read_reg(RESET_REASON, buf, 1);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Unable to read reset reason %d",
++				err);
++			/* Unknown error reason since the read failed. */
++			buf[0] = RESET_REASON_UNKNOWN;
++		}
+ 
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_RESET, &status, 1,
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_RESET, buf, 1,
+ 					     0, stm_ws->ts_ns);
+ 
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Sensor Hub requested a reset %d", buf[0]);
++
+ 		stml0xx_reset(stml0xx_misc_data->pdata);
+-		dev_info(&stml0xx_misc_data->spi->dev,
+-			"STML0XX requested a reset");
+ 	}
+ 
+ EXIT:
+diff --git a/include/uapi/linux/motosh_vmm.h b/include/uapi/linux/motosh_vmm.h
+index d894dcc580b..290a6a6e339 100644
+--- a/include/uapi/linux/motosh_vmm.h
++++ b/include/uapi/linux/motosh_vmm.h
+@@ -43,9 +43,9 @@ VMM_ENTRY(0x03, LOWPOWER_REG,						TRUE,
+ VMM_ENTRY(0x04, INIT_COMPLETE,						TRUE,
+ 		&vmm_init_complete,
+ 		sizeof(vmm_init_complete))
+-VMM_ENTRY(0x05, UNUSED_05,						FALSE,
+-		0,
+-		0)
++VMM_ENTRY(0x05, RESET_REASON,						FALSE,
++		&vmm_reset_reason,
++		sizeof(vmm_reset_reason))
+ VMM_ENTRY(0x06, ACCEL_ORIENTATION,					TRUE,
+ 		vmm_accel_orientation,
+ 		sizeof(vmm_accel_orientation))
+diff --git a/include/uapi/linux/stml0xx.h b/include/uapi/linux/stml0xx.h
+index a62d162ccf3..6a769fb02f6 100644
+--- a/include/uapi/linux/stml0xx.h
++++ b/include/uapi/linux/stml0xx.h
+@@ -248,6 +248,19 @@
+ #define SH_HEADSET_BUTTON_3_DOWN  0x10
+ #define SH_HEADSET_BUTTON_4_DOWN  0x20
+ 
++/* Sensor Hub failure error codes */
++#define RESET_REASON_UNKNOWN              0
++#define RESET_REASON_WATCHDOG             1
++#define RESET_REASON_MODALITY_ENGINE      2
++#define RESET_REASON_MODALITY_EVENT       3
++#define RESET_REASON_MODALITY_ACCUM_EVENT 4
++#define RESET_REASON_ALGO_ENGINE          5
++#define RESET_REASON_IOEXPANDER           6
++#define RESET_REASON_PANIC                7
++#define RESET_REASON_EXIT                 8
++#define RESET_REASON_HEAP_ACCESS          9
++#define RESET_REASON_MAX_CODE             9 /* Must match highest value above */
++
+ struct stml0xx_android_sensor_data {
+ 	int64_t timestamp;
+ 	unsigned char type;
+-- 
+2.11.0
+

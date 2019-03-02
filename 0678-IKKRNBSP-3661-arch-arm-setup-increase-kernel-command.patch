@@ -1,0 +1,36 @@
+From 8b3788d1fa375a3674c5ce1bf984bde6bb070743 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Wed, 10 Feb 2016 14:34:29 -0600
+Subject: [PATCH 678/959] IKKRNBSP-3661 arch/arm: setup: increase kernel
+ command line size to 2k
+
+BL output is truncated on 8952 platform if we use only 1k.
+
+Change-Id: If0c68dd03aad67e5ad57f727a4f19dd02bcb2353
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/820902
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/include/uapi/asm/setup.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/include/uapi/asm/setup.h b/arch/arm/include/uapi/asm/setup.h
+index 979ff401640..b4d1bea21a2 100644
+--- a/arch/arm/include/uapi/asm/setup.h
++++ b/arch/arm/include/uapi/asm/setup.h
+@@ -16,7 +16,7 @@
+ 
+ #include <linux/types.h>
+ 
+-#define COMMAND_LINE_SIZE 1024
++#define COMMAND_LINE_SIZE 2048
+ 
+ /* The list ends with an ATAG_NONE node. */
+ #define ATAG_NONE	0x00000000
+-- 
+2.11.0
+

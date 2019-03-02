@@ -1,0 +1,55 @@
+From 73e1495c435d81a4498216a600a8a4c0256d5eb3 Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Mon, 28 Sep 2015 15:43:45 -0700
+Subject: [PATCH 340/959] IKKRNBSP-3406 arm/dts: Athene: enable Dynamic-CABC
+ for TDI and LGD panel
+
+Make TDI and LGD panels support UI, MV and DIS mode switching on the fly.
+
+Change-Id: Ic6d3e15a51645627a70fb176c4e277353e5e3f61
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/786819
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi | 4 ++++
+ arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi | 4 ++++
+ 2 files changed, 8 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+index 1b51ca190f9..c481d6eb135 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -60,6 +60,10 @@ qcom,mdss-dsi-off-command = [
+ 	05 01 00 00 0a 00 01 28		/* display_off */
+ 	05 01 00 00 55 00 01 10];	/* enter sleep mode */
+ 
++qcom,mdss-dsi-cabc-ui-command = [15 01 00 00 00 00 02 55 01];
++qcom,mdss-dsi-cabc-mv-command = [15 01 00 00 00 00 02 55 03];
++qcom,mdss-dsi-cabc-dis-command = [15 01 00 00 00 00 02 55 00];
++
+ qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+ qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+ qcom,mdss-dsi-h-sync-pulse = <0>;
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
+index b2de75bcfc3..463f8485b4c 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
+@@ -68,6 +68,10 @@ qcom,mdss-dsi-off-command = [
+ 	05 01 00 00 0a 00 01 28		/* display_off */
+ 	05 01 00 00 78 00 01 10];	/* enter sleep mode */
+ 
++qcom,mdss-dsi-cabc-ui-command = [15 01 00 00 00 00 02 55 01];
++qcom,mdss-dsi-cabc-mv-command = [15 01 00 00 00 00 02 55 03];
++qcom,mdss-dsi-cabc-dis-command = [15 01 00 00 00 00 02 55 00];
++
+ qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+ qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+ qcom,mdss-dsi-h-sync-pulse = <0>;
+-- 
+2.11.0
+

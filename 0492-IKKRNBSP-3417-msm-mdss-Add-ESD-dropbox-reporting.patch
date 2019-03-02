@@ -1,0 +1,123 @@
+From c6cfb9594eed1ec964521eaad14f5894fcc67a7c Mon Sep 17 00:00:00 2001
+From: Zac Crosby <zac@motorola.com>
+Date: Tue, 12 Aug 2014 15:55:25 -0500
+Subject: [PATCH 492/959] IKKRNBSP-3417 msm: mdss: Add ESD dropbox reporting
+
+Report ESD detections to dropbox.
+
+Port of 83ad2b4 from 8996.
+
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+
+Change-Id: I0200d2543f0bf0cf3b984878048f648b7317a421
+Reviewed-on: http://gerrit.mot.com/801639
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Andrew Wheeler <awheeler@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Submit-Approved: Andrew Wheeler <awheeler@motorola.com>
+Tested-by: Andrew Wheeler <awheeler@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi.c      |  2 +-
+ drivers/video/msm/mdss/mdss_dsi.h      |  3 ++-
+ drivers/video/msm/mdss/mdss_dsi_host.c | 31 +++++++++++++++++++++++++++++--
+ 3 files changed, 32 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi.c b/drivers/video/msm/mdss/mdss_dsi.c
+index 1c574b34d82..02e54afbd52 100644
+--- a/drivers/video/msm/mdss/mdss_dsi.c
++++ b/drivers/video/msm/mdss/mdss_dsi.c
+@@ -3341,7 +3341,7 @@ int dsi_panel_device_register(struct platform_device *ctrl_pdev,
+ 
+ 	if (ctrl_pdata->status_mode == ESD_REG ||
+ 			ctrl_pdata->status_mode == ESD_REG_NT35596)
+-		ctrl_pdata->check_status = mdss_dsi_reg_status_check;
++		ctrl_pdata->check_status = mdss_dsi_reg_status_check_dropbox;
+ 	else if (ctrl_pdata->status_mode == ESD_BTA)
+ 		ctrl_pdata->check_status = mdss_dsi_bta_status_check;
+ 
+diff --git a/drivers/video/msm/mdss/mdss_dsi.h b/drivers/video/msm/mdss/mdss_dsi.h
+index 62bef74038a..146d115ca8c 100644
+--- a/drivers/video/msm/mdss/mdss_dsi.h
++++ b/drivers/video/msm/mdss/mdss_dsi.h
+@@ -583,7 +583,8 @@ int mdss_dsi_en_wait4dynamic_done(struct mdss_dsi_ctrl_pdata *ctrl);
+ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp);
+ void mdss_dsi_cmdlist_kickoff(int intf);
+ int mdss_dsi_bta_status_check(struct mdss_dsi_ctrl_pdata *ctrl);
+-int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl);
++int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl, u8 *reg_val);
++int mdss_dsi_reg_status_check_dropbox(struct mdss_dsi_ctrl_pdata *ctrl);
+ bool __mdss_dsi_clk_enabled(struct mdss_dsi_ctrl_pdata *ctrl, u8 clk_type);
+ void mdss_dsi_ctrl_setup(struct mdss_dsi_ctrl_pdata *ctrl);
+ void mdss_dsi_dln0_phy_err(struct mdss_dsi_ctrl_pdata *ctrl, bool print_en);
+diff --git a/drivers/video/msm/mdss/mdss_dsi_host.c b/drivers/video/msm/mdss/mdss_dsi_host.c
+index 83c1e821397..8e13ed9ed6b 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_host.c
++++ b/drivers/video/msm/mdss/mdss_dsi_host.c
+@@ -27,6 +27,7 @@
+ #include "mdss_dsi.h"
+ #include "mdss_panel.h"
+ #include "mdss_debug.h"
++#include "mdss_dropbox.h"
+ 
+ #define VSYNC_PERIOD 17
+ #define DMA_TX_TIMEOUT 200
+@@ -1107,10 +1108,12 @@ static int mdss_dsi_read_status(struct mdss_dsi_ctrl_pdata *ctrl)
+  * Return: positive value if the panel is in good state, negative value or
+  * zero otherwise.
+  */
+-int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
++int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
++			u8 *reg_val)
+ {
+ 	int ret = 0;
+ 	struct mdss_dsi_ctrl_pdata *sctrl_pdata = NULL;
++	*reg_val = 0;
+ 
+ 	if (ctrl_pdata == NULL) {
+ 		pr_err("%s: Invalid input data\n", __func__);
+@@ -1151,8 +1154,10 @@ int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+ 	 */
+ 	if (ret == ctrl_pdata->status_cmds_rlen) {
+ 		if (!mdss_dsi_sync_wait_enable(ctrl_pdata) ||
+-			mdss_dsi_sync_wait_trigger(ctrl_pdata))
++			mdss_dsi_sync_wait_trigger(ctrl_pdata)) {
+ 			ret = ctrl_pdata->check_read_status(ctrl_pdata);
++			*reg_val = ctrl_pdata->status_buf.data[0];
++		}
+ 		else if (sctrl_pdata)
+ 			ret = ctrl_pdata->check_read_status(sctrl_pdata);
+ 	} else {
+@@ -1336,6 +1341,28 @@ void mdss_dsi_ctrl_setup(struct mdss_dsi_ctrl_pdata *ctrl)
+ 	mdss_dsi_op_mode_config(pdata->panel_info.mipi.mode, pdata);
+ }
+ 
++int mdss_dsi_reg_status_check_dropbox(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
++{
++	static bool dropbox_sent;
++	int ret;
++	u8 reg_val = 0;
++
++	ret = mdss_dsi_reg_status_check(ctrl_pdata, &reg_val);
++	if (ret < 1) {
++		/* This warning message includes the wrong function name on
++		   purpose due to external analytical tools */
++		pr_warn("mdss_panel_check_status: ESD detected pwr_mode =0x%x expected mask = 0x%x\n",
++			reg_val, ctrl_pdata->status_value[0]);
++		if (!dropbox_sent) {
++			mdss_dropbox_report_event(MDSS_DROPBOX_MSG_ESD, 1);
++			dropbox_sent = true;
++		}
++	} else
++		dropbox_sent = false;
++
++	return ret;
++}
++
+ /**
+  * mdss_dsi_bta_status_check() - Check dsi panel status through bta check
+  * @ctrl_pdata: pointer to the dsi controller structure
+-- 
+2.11.0
+

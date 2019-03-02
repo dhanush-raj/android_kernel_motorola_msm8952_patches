@@ -1,0 +1,35 @@
+From 9610660b735d13ad02508eddd1fc0babcbb0407e Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Thu, 20 Aug 2015 10:40:26 -0500
+Subject: [PATCH 030/959] IKKRNBSP-3333 arm/dt: 8952: delete unused regulator
+
+eldo2 is fixed regulator form qcom reference design.
+
+Change-Id: I72dab3ee1ed08aa3023d651d04b998e7b9c796e2
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/778077
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 41b4023719e..af7f29c1294 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -28,6 +28,8 @@
+ };
+ 
+ &soc {
++	/delete-node/ eldo2;
++
+ 	gpio_keys {
+ 		compatible = "gpio-keys";
+ 		input-name = "gpio-keys";
+-- 
+2.11.0
+

@@ -1,0 +1,303 @@
+From 1b91a720b3cb21c72fdfa2ea59b639c546cc057a Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Tue, 6 Jan 2015 11:26:22 -0600
+Subject: [PATCH 110/959] IKVPREL1L-6698 drivers/misc/stml0xx: Remove
+ notification LED support
+
+There will no longer be a notification LED on products
+which have the STML0XX part. Remove all notification LED
+support from the kernel driver.
+
+Change-Id: Iab035d250ee1ce20d547a9d4518ce389df25e188
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/701644
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-by: Jagatkumar Shah <jagat@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Vladimir Karpovich <vkarpovich@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/Makefile        |   3 +-
+ drivers/misc/stml0xx/stml0xx_core.c  |  28 ------
+ drivers/misc/stml0xx/stml0xx_led.c   | 171 -----------------------------------
+ drivers/misc/stml0xx/stml0xx_reset.c |   5 -
+ include/linux/stml0xx.h              |   2 -
+ 5 files changed, 1 insertion(+), 208 deletions(-)
+ delete mode 100644 drivers/misc/stml0xx/stml0xx_led.c
+
+diff --git a/drivers/misc/stml0xx/Makefile b/drivers/misc/stml0xx/Makefile
+index b1475813cfe..a206152fc1d 100644
+--- a/drivers/misc/stml0xx/Makefile
++++ b/drivers/misc/stml0xx/Makefile
+@@ -6,6 +6,5 @@ stml0xx-objs := stml0xx_core.o \
+ 		stml0xx_reset.o \
+ 		stml0xx_wake_irq.o \
+ 		stml0xx_spi.o \
+-		stml0xx_spi_crc.o \
+-                stml0xx_led.o
++		stml0xx_spi_crc.o
+ obj-$(CONFIG_SENSORS_STML0XX) += stml0xx.o
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 69491a73322..88bb868b081 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -971,28 +971,6 @@ static int stml0xx_probe(struct spi_device *spi)
+ 		goto err9;
+ 	}
+ 
+-	ps_stml0xx->led_cdev.name =  STML0XX_LED_NAME;
+-	ps_stml0xx->led_cdev.brightness_set = stml0xx_brightness_set;
+-	ps_stml0xx->led_cdev.brightness_get = stml0xx_brightness_get;
+-	ps_stml0xx->led_cdev.blink_set = stml0xx_blink_set;
+-	ps_stml0xx->led_cdev.blink_delay_on = 1000;
+-	ps_stml0xx->led_cdev.blink_delay_off = 1000;
+-	ps_stml0xx->led_cdev.max_brightness = STML0XX_LED_MAX_BRIGHTNESS;
+-	err = led_classdev_register(&spi->dev, &ps_stml0xx->led_cdev);
+-	if (err < 0) {
+-		dev_err(&ps_stml0xx->spi->dev,
+-			"couldn't register \'%s\' LED class\n",
+-			ps_stml0xx->led_cdev.name);
+-		goto err10;
+-	}
+-	err = sysfs_create_group(&ps_stml0xx->led_cdev.dev->kobj,
+-			&stml0xx_notification_attribute_group);
+-	if (err < 0) {
+-		dev_err(&ps_stml0xx->spi->dev,
+-			"couldn't register LED attribute sysfs group\n");
+-		goto err11;
+-	}
+-
+ 	ps_stml0xx->is_suspended = false;
+ 
+ 	switch_stml0xx_mode(NORMALMODE);
+@@ -1002,10 +980,6 @@ static int stml0xx_probe(struct spi_device *spi)
+ 	dev_dbg(&spi->dev, "probed finished");
+ 
+ 	return 0;
+-err11:
+-	led_classdev_unregister(&ps_stml0xx->led_cdev);
+-err10:
+-	input_free_device(ps_stml0xx->input_dev);
+ err9:
+ 	input_free_device(ps_stml0xx->input_dev);
+ err8:
+@@ -1054,8 +1028,6 @@ static int stml0xx_remove(struct spi_device *spi)
+ {
+ 	struct stml0xx_data *ps_stml0xx = spi_get_drvdata(spi);
+ 
+-	led_classdev_unregister(&ps_stml0xx->led_cdev);
+-
+ 	switch_dev_unregister(&ps_stml0xx->dsdev);
+ 	switch_dev_unregister(&ps_stml0xx->edsdev);
+ 
+diff --git a/drivers/misc/stml0xx/stml0xx_led.c b/drivers/misc/stml0xx/stml0xx_led.c
+deleted file mode 100644
+index 3baaf20df9d..00000000000
+--- a/drivers/misc/stml0xx/stml0xx_led.c
++++ /dev/null
+@@ -1,171 +0,0 @@
+-/*
+- * Copyright (C) 2014 Motorola Mobility LLC
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License version 2 as
+- * published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License
+- * along with this program; if not, write to the Free Software
+- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
+- * 02111-1307, USA
+- */
+-
+-#include <linux/stat.h>
+-#include <linux/err.h>
+-#include <linux/errno.h>
+-
+-
+-#include <linux/stml0xx.h>
+-
+-int stml0xx_led_set(struct led_classdev *led_cdev)
+-{
+-	return stml0xx_led_set_reset(led_cdev, RESET_ALLOWED);
+-}
+-
+-int stml0xx_led_set_reset(struct led_classdev *led_cdev, uint8_t allow_reset)
+-{
+-	struct stml0xx_data *ps_stml0xx = stml0xx_misc_data;
+-	unsigned char buf[SPI_MSG_SIZE];
+-	int err;
+-
+-	buf[0] = led_cdev->brightness >> 24;
+-	buf[1] = (led_cdev->brightness >> 16) & 0xFF;
+-	buf[2] = (led_cdev->brightness >> 8) & 0xFF;
+-	buf[3] = led_cdev->brightness & 0xFF;
+-
+-	buf[4] = led_cdev->blink_delay_on >> 24;
+-	buf[5] = (led_cdev->blink_delay_on >> 16) & 0xFF;
+-	buf[6] = (led_cdev->blink_delay_on >> 8) & 0xFF;
+-	buf[7] = led_cdev->blink_delay_on & 0xFF;
+-
+-	buf[8] = led_cdev->blink_delay_off >> 24;
+-	buf[9] = (led_cdev->blink_delay_off >> 16) & 0xFF;
+-	buf[10] = (led_cdev->blink_delay_off >> 8) & 0xFF;
+-	buf[11] = led_cdev->blink_delay_off & 0xFF;
+-
+-	mutex_lock(&ps_stml0xx->lock);
+-	stml0xx_wake(ps_stml0xx);
+-
+-	err = stml0xx_spi_send_write_reg_reset(LED_NOTIF_CONTROL, buf, 12,
+-		allow_reset);
+-	if (err < 0)
+-		dev_err(&stml0xx_misc_data->spi->dev,
+-			"writing to led_notif_control failed");
+-
+-	stml0xx_sleep(ps_stml0xx);
+-	mutex_unlock(&ps_stml0xx->lock);
+-
+-	return err;
+-}
+-
+-static ssize_t notification_show_control(struct device *dev,
+-	struct device_attribute *attr, char *buf)
+-{
+-	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+-
+-	scnprintf(buf, PAGE_SIZE,
+-		"RGB=0x%08X, on/off=%ld/%ld ms, ramp=%d%%/%d%%\n",
+-		led_cdev->brightness, led_cdev->blink_delay_on,
+-		led_cdev->blink_delay_off, 0, 0);
+-
+-	return strlen(buf);
+-}
+-
+-static ssize_t notification_store_control(struct device *dev,
+-	struct device_attribute *attr,
+-	const char *buf, size_t len)
+-{
+-	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+-	struct stml0xx_data *ps_stml0xx =
+-		container_of(led_cdev, struct stml0xx_data, led_cdev);
+-	unsigned rgb = 0;
+-	unsigned ms_on = 1000;
+-	unsigned ms_off = 0;
+-	unsigned rup = 0;
+-	unsigned rdown = 0;
+-
+-	if (len == 0)
+-		return 0;
+-
+-	sscanf(buf, "%x %u %u %u %u", &rgb, &ms_on, &ms_off, &rup, &rdown);
+-	dev_dbg(&ps_stml0xx->spi->dev,
+-		"0x%X, on/off=%u/%u ms, ramp=%u%%/%u%%\n",
+-		rgb, ms_on, ms_off, rup, rdown);
+-
+-	/* LED that is off is not blinking */
+-	if (rgb == 0) {
+-		ms_on = 0;
+-		ms_off = 0;
+-	}
+-
+-	led_cdev->brightness = rgb;
+-	led_cdev->blink_delay_on = ms_on;
+-	led_cdev->blink_delay_off = ms_off;
+-
+-	stml0xx_led_set(led_cdev);
+-
+-	return len;
+-}
+-
+-void stml0xx_brightness_set(struct led_classdev *led_cdev,
+-	enum led_brightness value)
+-{
+-	switch (value) {
+-	case LED_OFF:
+-		led_cdev->brightness = STML0XX_LED_OFF;
+-		break;
+-	case LED_HALF:
+-		led_cdev->brightness = STML0XX_LED_HALF_BRIGHTNESS;
+-		break;
+-	case LED_FULL:
+-		led_cdev->brightness = STML0XX_LED_MAX_BRIGHTNESS;
+-		break;
+-	}
+-
+-	stml0xx_led_set(led_cdev);
+-}
+-
+-enum led_brightness stml0xx_brightness_get(struct led_classdev *led_cdev)
+-{
+-	if (led_cdev->brightness == STML0XX_LED_OFF)
+-		return LED_OFF;
+-	else if (led_cdev->brightness == STML0XX_LED_MAX_BRIGHTNESS)
+-		return LED_FULL;
+-	else
+-		return LED_HALF;
+-
+-}
+-
+-int stml0xx_blink_set(struct led_classdev *led_cdev,
+-	unsigned long *delay_on, unsigned long *delay_off)
+-{
+-	if (*delay_on > STML0XX_LED_MAX_DELAY)
+-		*delay_on = STML0XX_LED_MAX_DELAY;
+-	if (*delay_off > STML0XX_LED_MAX_DELAY)
+-		*delay_off = STML0XX_LED_MAX_DELAY;
+-
+-	led_cdev->blink_delay_on = *delay_on;
+-	led_cdev->blink_delay_off = *delay_off;
+-
+-	stml0xx_led_set(led_cdev);
+-
+-	return 0;
+-}
+-
+-static DEVICE_ATTR(control, S_IRUGO | S_IWUSR,
+-	notification_show_control, notification_store_control);
+-
+-static struct attribute *notification_led_attributes[] = {
+-	&dev_attr_control.attr,
+-	NULL,
+-};
+-
+-struct attribute_group stml0xx_notification_attribute_group = {
+-	.attrs = notification_led_attributes
+-};
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index 164a7c52339..9c79982aa9a 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -222,11 +222,6 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 	}
+ #endif
+ 
+-	err = stml0xx_led_set_reset(&ps_stml0xx->led_cdev,
+-			RESET_NOT_ALLOWED);
+-	if (err < 0)
+-		ret_err =  err;
+-
+ 	/* sending reset to slpc hal */
+ 	stml0xx_ms_data_buffer_write(ps_stml0xx, DT_RESET, NULL, 0);
+ 
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 809e4e41b1a..870ffea1c60 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -638,8 +638,6 @@ struct stml0xx_data {
+ 
+ 	bool is_suspended;
+ 	bool pending_wake_work;
+-
+-	struct led_classdev led_cdev;
+ };
+ 
+ #ifndef ts_to_ns
+-- 
+2.11.0
+

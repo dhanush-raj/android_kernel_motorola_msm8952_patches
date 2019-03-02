@@ -1,0 +1,176 @@
+From 5e6c5d96655960fad0b234ff73237d439f9f8287 Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Tue, 7 Oct 2014 10:31:29 -0500
+Subject: [PATCH 082/959] IKLOCSEN-1722: include: linux: stml0xx: Add headset
+ detect enable.
+
+Create a new sensor hub register to allow the headset
+detection feature to be enabled/disabled.
+
+Change-Id: Ie13a04207bc7fabea5b67d9d2bbfd82ec6af9574
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/676477
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: James Rumpler <w12004@motorola.com>
+Reviewed-by: Jagatkumar Shah <jagat@motorola.com>
+Reviewed-by: Vladimir Karpovich <vkarpovich@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-by: Seungyoon Lee <yoon@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_wake_irq.c | 97 +++++++++++++++++++++++++++++++--
+ include/linux/stml0xx.h                 | 10 ++++
+ 2 files changed, 101 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index 5e4957c6eef..c8762868dac 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -43,6 +43,18 @@
+ 
+ #include <linux/stml0xx.h>
+ 
++enum headset_state_t {
++	SH_HEADSET_REMOVED,
++	SH_HEADPHONE_INSERTED,
++	SH_HEADSET_INSERTED,
++	SH_HEADSET_BUTTON_1,
++	SH_HEADSET_BUTTON_2,
++	SH_HEADSET_BUTTON_3,
++	SH_HEADSET_BUTTON_4
++};
++
++enum headset_state_t Headset_State = SH_HEADSET_REMOVED;
++
+ irqreturn_t stml0xx_wake_isr(int irq, void *dev)
+ {
+ 	struct stml0xx_data *ps_stml0xx = dev;
+@@ -199,18 +211,91 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 			"Cover status: %d", state);
+ 	}
+ 	if (irq_status & M_HEADSET) {
+-		int state;
++		uint8_t new_state;
++
+ 		err = stml0xx_spi_send_read_reg(HEADSET_DATA, buf, 1);
+ 		if (err < 0) {
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+ 				"Reading Headset state failed");
+ 			goto EXIT;
+ 		}
+-
+-		state = buf[HEADSET_STATE];
+-
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Headset state: 0x%02x", state);
++		new_state = buf[HEADSET_STATE];
++
++		switch (Headset_State) {
++		case SH_HEADSET_BUTTON_1:
++			if (!(new_state & SH_HEADSET_BUTTON_1_DOWN)) {
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++					"Headset button 1 released");
++				Headset_State = SH_HEADSET_INSERTED;
++			}
++			break;
++		case SH_HEADSET_BUTTON_2:
++			if (!(new_state & SH_HEADSET_BUTTON_2_DOWN)) {
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++					"Headset button 2 released");
++				Headset_State = SH_HEADSET_INSERTED;
++			}
++			break;
++		case SH_HEADSET_BUTTON_3:
++			if (!(new_state & SH_HEADSET_BUTTON_3_DOWN)) {
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++					"Headset button 3 released");
++				Headset_State = SH_HEADSET_INSERTED;
++			}
++			break;
++		case SH_HEADSET_BUTTON_4:
++			if (!(new_state & SH_HEADSET_BUTTON_4_DOWN)) {
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++					"Headset button 4 released");
++				Headset_State = SH_HEADSET_INSERTED;
++			}
++			break;
++		default:
++			break;
++		}
++		if (Headset_State == SH_HEADPHONE_INSERTED) {
++			if (!(new_state & SH_HEADPHONE_DETECTED)) {
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++					"Headphone removed");
++				Headset_State = SH_HEADSET_REMOVED;
++			}
++		} else if (Headset_State ==  SH_HEADSET_INSERTED) {
++			if (!(new_state & SH_HEADSET_DETECTED)) {
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++					"Headset removed");
++				Headset_State = SH_HEADSET_REMOVED;
++			}
++		}
++		if (Headset_State == SH_HEADSET_REMOVED) {
++			if (new_state & SH_HEADPHONE_DETECTED) {
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++					"Headphone inserted");
++				Headset_State = SH_HEADPHONE_INSERTED;
++			} else if (new_state & SH_HEADSET_DETECTED) {
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++					"Headset inserted");
++				Headset_State = SH_HEADSET_INSERTED;
++			}
++		}
++		if (Headset_State == SH_HEADSET_INSERTED) {
++			if (new_state & SH_HEADSET_BUTTON_1_DOWN) {
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++					"Headset button 1 pressed");
++				Headset_State = SH_HEADSET_BUTTON_1;
++			} else if (new_state & SH_HEADSET_BUTTON_2_DOWN) {
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++					"Headset button 2 pressed");
++				Headset_State = SH_HEADSET_BUTTON_2;
++			} else if (new_state & SH_HEADSET_BUTTON_3_DOWN) {
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++					"Headset button 3 pressed");
++				Headset_State = SH_HEADSET_BUTTON_3;
++			} else if (new_state & SH_HEADSET_BUTTON_4_DOWN) {
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++					"Headset button 4 pressed");
++				Headset_State = SH_HEADSET_BUTTON_4;
++			}
++		}
+ 	}
+ 	if (irq_status & M_INIT_COMPLETE) {
+ 		/* set the init complete register, */
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 0a90275af4f..eeb831796d8 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -226,6 +226,14 @@
+ #define STML0XX_EVT_SZ_ACCUM_STATE  2
+ #define STML0XX_EVT_SZ_ACCUM_MVMT   4
+ 
++#define SH_HEADSET_EMPTY          0x00
++#define SH_HEADPHONE_DETECTED     0x01
++#define SH_HEADSET_DETECTED       0x02
++#define SH_HEADSET_BUTTON_1_DOWN  0x04
++#define SH_HEADSET_BUTTON_2_DOWN  0x08
++#define SH_HEADSET_BUTTON_3_DOWN  0x10
++#define SH_HEADSET_BUTTON_4_DOWN  0x20
++
+ struct stml0xx_android_sensor_data {
+ 	int64_t timestamp;
+ 	unsigned char type;
+@@ -357,6 +365,8 @@ struct stm_response {
+ #define ALGO_INT_STATUS                 0x27
+ #define GENERIC_INT_STATUS              0x28
+ 
++#define HEADSET_CONTROL                 0x2C
++
+ #define MOTION_DATA                     0x2D
+ 
+ #define HEADSET_DATA                    0x2F
+-- 
+2.11.0
+

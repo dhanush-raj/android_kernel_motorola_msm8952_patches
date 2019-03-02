@@ -1,0 +1,37 @@
+From a2c5ac0428df65f67bdeceed594a175569ae6b54 Mon Sep 17 00:00:00 2001
+From: Alexander Filonenko <alexf@motorola.com>
+Date: Tue, 19 Jan 2016 15:35:07 -0600
+Subject: [PATCH 623/959] IKSWM-16992 input: synaptics_dsx_i2c: update LP1 id
+
+Update ID of LP1 power mode on touch side to match changes
+in display driver.
+
+Change-Id: Iff9d4b4cc48b0836cf41ab850f640ee7a5fa0799
+Signed-off-by: Alexander Filonenko <alexf@motorola.com>
+Reviewed-on: http://gerrit.mot.com/814420
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Konstantin Makariev <kmakariev@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/touchscreen/synaptics_dsx_i2c.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.c b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+index 0ec3ebce2e7..9a9f0fdab2e 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.c
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+@@ -6825,7 +6825,7 @@ static int synaptics_dsx_panel_cb(struct notifier_block *nb,
+ 				return 0;
+ 			synaptics_dsx_display_off(&rmi4_data->i2c_client->dev);
+ 		} else if (*blank == FB_BLANK_UNBLANK ||
+-			(*blank == FB_BLANK_VSYNC_SUSPEND &&
++			(*blank == FB_BLANK_NORMAL &&
+ 			atomic_read(&rmi4_data->touch_stopped))) {
+ 			synaptics_dsx_display_on(&rmi4_data->i2c_client->dev);
+ 		}
+-- 
+2.11.0
+

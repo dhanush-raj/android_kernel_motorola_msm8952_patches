@@ -1,0 +1,38 @@
+From 540bf93b36fbfea7ea10a5541f8d2678e16d20a7 Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Wed, 30 Sep 2015 17:25:13 -0700
+Subject: [PATCH 341/959] IKKRNBSP-3406 arm/dts: 8952: enable CABC input of
+ PMIC for display
+
+As WLED back light is controlled by PMIC, enable CABC input of PMIC to
+make display CABC output effective.
+
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+
+Change-Id: I6f0df9bdce04f3c52ce50c8f2083b4d2d0fca972
+Reviewed-on: http://gerrit.mot.com/787579
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index d1ceaec33bd..c1fe3a67de3 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -649,6 +649,7 @@
+ 
+ 	qcom,pmi8950@3 {
+ 		qcom,leds@d800 {
++			qcom,en-cabc;
+ 			qcom,fs-curr-ua = <20000>;
+ 			/delete-property/ qcom,en-ext-pfet-sc-pro;
+ 		};
+-- 
+2.11.0
+

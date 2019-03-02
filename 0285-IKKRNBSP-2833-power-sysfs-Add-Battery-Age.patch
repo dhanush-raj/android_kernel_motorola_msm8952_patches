@@ -1,0 +1,50 @@
+From 407d33abea922ca7feebafa41d591f6284f751f3 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Tue, 5 May 2015 17:08:47 -0500
+Subject: [PATCH 285/959] IKKRNBSP-2833: power: sysfs: Add Battery Age
+
+Add the Parameter for Battery Age.  This allows
+for a Percentage of Design Capacity to be sent
+to User Space.
+
+Change-Id: I2f566f39c3b951fab2bf9c6b0c271822c53012ca
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/744705
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Vidyadhar Gurram <rnh786@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/power_supply_sysfs.c | 1 +
+ include/linux/power_supply.h       | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/drivers/power/power_supply_sysfs.c b/drivers/power/power_supply_sysfs.c
+index 592af6df433..08eada39d7f 100644
+--- a/drivers/power/power_supply_sysfs.c
++++ b/drivers/power/power_supply_sysfs.c
+@@ -226,6 +226,7 @@ static struct device_attribute power_supply_attrs[] = {
+ 	POWER_SUPPLY_ATTR(resistance_id),
+ 	POWER_SUPPLY_ATTR(resistance_now),
+ 	POWER_SUPPLY_ATTR(taper_reached),
++	POWER_SUPPLY_ATTR(age),
+ 	/* Local extensions */
+ 	POWER_SUPPLY_ATTR(usb_hc),
+ 	POWER_SUPPLY_ATTR(usb_otg),
+diff --git a/include/linux/power_supply.h b/include/linux/power_supply.h
+index eff9b6ee26d..2621cff1463 100644
+--- a/include/linux/power_supply.h
++++ b/include/linux/power_supply.h
+@@ -192,6 +192,7 @@ enum power_supply_property {
+ 	POWER_SUPPLY_PROP_RESISTANCE_ID,
+ 	POWER_SUPPLY_PROP_RESISTANCE_NOW,
+ 	POWER_SUPPLY_PROP_TAPER_REACHED,
++	POWER_SUPPLY_PROP_AGE,
+ 	/* Local extensions */
+ 	POWER_SUPPLY_PROP_USB_HC,
+ 	POWER_SUPPLY_PROP_USB_OTG,
+-- 
+2.11.0
+

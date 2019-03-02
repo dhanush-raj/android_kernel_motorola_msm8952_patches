@@ -1,0 +1,43 @@
+From 3790d352f7f91055d531574150daa8c0d029f005 Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Tue, 24 Nov 2015 11:17:34 -0800
+Subject: [PATCH 625/959] IKSWM-12412 mmc: export firmware version to userspace
+
+Export the MMC firmware version to userspace.
+
+Change-Id: I5704b2eda687fc2cc2efec75f3ff59a9b0500b29
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/802493
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sheng-Zhe Zhao <a18689@motorola.com>
+Reviewed-by: Russell Knize <rknize@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/mmc/core/mmc.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/mmc/core/mmc.c b/drivers/mmc/core/mmc.c
+index c524e3184fd..a1547c0d230 100644
+--- a/drivers/mmc/core/mmc.c
++++ b/drivers/mmc/core/mmc.c
+@@ -726,6 +726,7 @@ MMC_DEV_ATTR(raw_rpmb_size_mult, "%#x\n", card->ext_csd.raw_rpmb_size_mult);
+ MMC_DEV_ATTR(enhanced_rpmb_supported, "%#x\n",
+ 		card->ext_csd.enhanced_rpmb_supported);
+ MMC_DEV_ATTR(rel_sectors, "%#x\n", card->ext_csd.rel_sectors);
++MMC_DEV_ATTR(firmware_version, "0x%08x\n", card->ext_csd.fw_version);
+ 
+ static struct attribute *mmc_std_attrs[] = {
+ 	&dev_attr_cid.attr,
+@@ -745,6 +746,7 @@ static struct attribute *mmc_std_attrs[] = {
+ 	&dev_attr_raw_rpmb_size_mult.attr,
+ 	&dev_attr_enhanced_rpmb_supported.attr,
+ 	&dev_attr_rel_sectors.attr,
++	&dev_attr_firmware_version.attr,
+ 	NULL,
+ };
+ 
+-- 
+2.11.0
+

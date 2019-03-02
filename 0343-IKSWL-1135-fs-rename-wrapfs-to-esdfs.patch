@@ -1,0 +1,2075 @@
+From abce221d5baa79623a91f5f517e9d19fbc58fac6 Mon Sep 17 00:00:00 2001
+From: "Russ W. Knize" <Russ.Knize@motorola.com>
+Date: Sun, 7 Apr 2013 16:21:43 -0500
+Subject: [PATCH 343/959] IKSWL-1135: fs: rename wrapfs to esdfs
+
+Wrapfs is the base of the new Emulated SD Card file system for
+Android, which replaces the FUSE-backed "sdcard" service.
+
+Change-Id: Ie3a64b9d01aba7fe054a3183bb1668bfecf157af
+Signed-off-by: Russ Knize <Russ.Knize@motorola.com>
+Reviewed-on: http://gerrit.mot.com/658209
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+SLTApproved: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/Kconfig                    |   2 +-
+ fs/Makefile                   |   2 +-
+ fs/esdfs/Kconfig              |   5 ++
+ fs/esdfs/Makefile             |   7 ++
+ fs/{wrapfs => esdfs}/dentry.c |  18 ++--
+ fs/esdfs/esdfs.h              | 205 ++++++++++++++++++++++++++++++++++++++++++
+ fs/{wrapfs => esdfs}/file.c   | 122 ++++++++++++-------------
+ fs/{wrapfs => esdfs}/inode.c  | 155 ++++++++++++++++----------------
+ fs/{wrapfs => esdfs}/lookup.c | 106 +++++++++++-----------
+ fs/{wrapfs => esdfs}/main.c   |  72 +++++++--------
+ fs/{wrapfs => esdfs}/mmap.c   |  18 ++--
+ fs/{wrapfs => esdfs}/super.c  |  86 +++++++++---------
+ fs/wrapfs/Kconfig             |   8 --
+ fs/wrapfs/Makefile            |   7 --
+ fs/wrapfs/wrapfs.h            | 205 ------------------------------------------
+ include/uapi/linux/magic.h    |   2 +-
+ 16 files changed, 509 insertions(+), 511 deletions(-)
+ create mode 100644 fs/esdfs/Kconfig
+ create mode 100644 fs/esdfs/Makefile
+ rename fs/{wrapfs => esdfs}/dentry.c (70%)
+ create mode 100644 fs/esdfs/esdfs.h
+ rename fs/{wrapfs => esdfs}/file.c (66%)
+ rename fs/{wrapfs => esdfs}/inode.c (71%)
+ rename fs/{wrapfs => esdfs}/lookup.c (70%)
+ rename fs/{wrapfs => esdfs}/main.c (65%)
+ rename fs/{wrapfs => esdfs}/mmap.c (74%)
+ rename fs/{wrapfs => esdfs}/super.c (57%)
+ delete mode 100644 fs/wrapfs/Kconfig
+ delete mode 100644 fs/wrapfs/Makefile
+ delete mode 100644 fs/wrapfs/wrapfs.h
+
+diff --git a/fs/Kconfig b/fs/Kconfig
+index e8bc31dceb7..27a375d9008 100644
+--- a/fs/Kconfig
++++ b/fs/Kconfig
+@@ -189,7 +189,7 @@ source "fs/adfs/Kconfig"
+ source "fs/affs/Kconfig"
+ source "fs/ecryptfs/Kconfig"
+ source "fs/sdcardfs/Kconfig"
+-source "fs/wrapfs/Kconfig"
++source "fs/esdfs/Kconfig"
+ source "fs/hfs/Kconfig"
+ source "fs/hfsplus/Kconfig"
+ source "fs/befs/Kconfig"
+diff --git a/fs/Makefile b/fs/Makefile
+index c6b064c95d5..3ba49cf1ef2 100644
+--- a/fs/Makefile
++++ b/fs/Makefile
+@@ -82,7 +82,7 @@ obj-$(CONFIG_ISO9660_FS)	+= isofs/
+ obj-$(CONFIG_HFSPLUS_FS)	+= hfsplus/ # Before hfs to find wrapped HFS+
+ obj-$(CONFIG_HFS_FS)		+= hfs/
+ obj-$(CONFIG_ECRYPT_FS)		+= ecryptfs/
+-obj-$(CONFIG_WRAP_FS)		+= wrapfs/
++obj-$(CONFIG_ESD_FS)		+= esdfs/
+ obj-$(CONFIG_SDCARD_FS)		+= sdcardfs/
+ obj-$(CONFIG_VXFS_FS)		+= freevxfs/
+ obj-$(CONFIG_NFS_FS)		+= nfs/
+diff --git a/fs/esdfs/Kconfig b/fs/esdfs/Kconfig
+new file mode 100644
+index 00000000000..b439c581d70
+--- /dev/null
++++ b/fs/esdfs/Kconfig
+@@ -0,0 +1,5 @@
++config ESD_FS
++	tristate "Emulated 'SD card' file system for Android (EXPERIMENTAL)"
++	help
++	  Esdfs is a wrapfs-based file system, designed to implement the
++	  Android "sdcard" FUSE-backed file system from within the kernel.
+diff --git a/fs/esdfs/Makefile b/fs/esdfs/Makefile
+new file mode 100644
+index 00000000000..a8a185181f7
+--- /dev/null
++++ b/fs/esdfs/Makefile
+@@ -0,0 +1,7 @@
++ESDFS_VERSION="0.1"
++
++EXTRA_CFLAGS += -DESDFS_VERSION=\"$(ESDFS_VERSION)\"
++
++obj-$(CONFIG_ESD_FS) += esdfs.o
++
++esdfs-y := dentry.o file.o inode.o main.o super.o lookup.o mmap.o
+diff --git a/fs/wrapfs/dentry.c b/fs/esdfs/dentry.c
+similarity index 70%
+rename from fs/wrapfs/dentry.c
+rename to fs/esdfs/dentry.c
+index 356b75e2f76..bbd8c39a41e 100644
+--- a/fs/wrapfs/dentry.c
++++ b/fs/esdfs/dentry.c
+@@ -9,14 +9,14 @@
+  * published by the Free Software Foundation.
+  */
+ 
+-#include "wrapfs.h"
++#include "esdfs.h"
+ 
+ /*
+  * returns: -ERRNO if error (returned to user)
+  *          0: tell VFS to invalidate dentry
+  *          1: dentry is valid
+  */
+-static int wrapfs_d_revalidate(struct dentry *dentry, unsigned int flags)
++static int esdfs_d_revalidate(struct dentry *dentry, unsigned int flags)
+ {
+ 	struct path lower_path;
+ 	struct dentry *lower_dentry;
+@@ -25,25 +25,25 @@ static int wrapfs_d_revalidate(struct dentry *dentry, unsigned int flags)
+ 	if (flags & LOOKUP_RCU)
+ 		return -ECHILD;
+ 
+-	wrapfs_get_lower_path(dentry, &lower_path);
++	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+ 	if (!lower_dentry->d_op || !lower_dentry->d_op->d_revalidate)
+ 		goto out;
+ 	err = lower_dentry->d_op->d_revalidate(lower_dentry, flags);
+ out:
+-	wrapfs_put_lower_path(dentry, &lower_path);
++	esdfs_put_lower_path(dentry, &lower_path);
+ 	return err;
+ }
+ 
+-static void wrapfs_d_release(struct dentry *dentry)
++static void esdfs_d_release(struct dentry *dentry)
+ {
+ 	/* release and reset the lower paths */
+-	wrapfs_put_reset_lower_path(dentry);
++	esdfs_put_reset_lower_path(dentry);
+ 	free_dentry_private_data(dentry);
+ 	return;
+ }
+ 
+-const struct dentry_operations wrapfs_dops = {
+-	.d_revalidate	= wrapfs_d_revalidate,
+-	.d_release	= wrapfs_d_release,
++const struct dentry_operations esdfs_dops = {
++	.d_revalidate	= esdfs_d_revalidate,
++	.d_release	= esdfs_d_release,
+ };
+diff --git a/fs/esdfs/esdfs.h b/fs/esdfs/esdfs.h
+new file mode 100644
+index 00000000000..877732e7dec
+--- /dev/null
++++ b/fs/esdfs/esdfs.h
+@@ -0,0 +1,205 @@
++/*
++ * Copyright (c) 1998-2014 Erez Zadok
++ * Copyright (c) 2009	   Shrikar Archak
++ * Copyright (c) 2003-2014 Stony Brook University
++ * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#ifndef _ESDFS_H_
++#define _ESDFS_H_
++
++#include <linux/dcache.h>
++#include <linux/file.h>
++#include <linux/fs.h>
++#include <linux/mm.h>
++#include <linux/mount.h>
++#include <linux/namei.h>
++#include <linux/seq_file.h>
++#include <linux/statfs.h>
++#include <linux/fs_stack.h>
++#include <linux/magic.h>
++#include <linux/uaccess.h>
++#include <linux/slab.h>
++#include <linux/sched.h>
++
++/* the file system name */
++#define ESDFS_NAME "esdfs"
++
++/* esdfs root inode number */
++#define ESDFS_ROOT_INO     1
++
++/* useful for tracking code reachability */
++#define UDBG printk(KERN_DEFAULT "DBG:%s:%s:%d\n", __FILE__, __func__, __LINE__)
++
++/* operations vectors defined in specific files */
++extern const struct file_operations esdfs_main_fops;
++extern const struct file_operations esdfs_dir_fops;
++extern const struct inode_operations esdfs_main_iops;
++extern const struct inode_operations esdfs_dir_iops;
++extern const struct inode_operations esdfs_symlink_iops;
++extern const struct super_operations esdfs_sops;
++extern const struct dentry_operations esdfs_dops;
++extern const struct address_space_operations esdfs_aops, esdfs_dummy_aops;
++extern const struct vm_operations_struct esdfs_vm_ops;
++
++extern int esdfs_init_inode_cache(void);
++extern void esdfs_destroy_inode_cache(void);
++extern int esdfs_init_dentry_cache(void);
++extern void esdfs_destroy_dentry_cache(void);
++extern int new_dentry_private_data(struct dentry *dentry);
++extern void free_dentry_private_data(struct dentry *dentry);
++extern int init_lower_nd(struct nameidata *nd, unsigned int flags);
++extern struct dentry *esdfs_lookup(struct inode *dir, struct dentry *dentry,
++				    unsigned int flags);
++extern struct inode *esdfs_iget(struct super_block *sb,
++				 struct inode *lower_inode);
++extern int esdfs_interpose(struct dentry *dentry, struct super_block *sb,
++			    struct path *lower_path);
++
++/* file private data */
++struct esdfs_file_info {
++	struct file *lower_file;
++	const struct vm_operations_struct *lower_vm_ops;
++};
++
++/* esdfs inode data in memory */
++struct esdfs_inode_info {
++	struct inode *lower_inode;
++	struct inode vfs_inode;
++};
++
++/* esdfs dentry data in memory */
++struct esdfs_dentry_info {
++	spinlock_t lock;	/* protects lower_path */
++	struct path lower_path;
++};
++
++/* esdfs super-block data in memory */
++struct esdfs_sb_info {
++	struct super_block *lower_sb;
++};
++
++/*
++ * inode to private data
++ *
++ * Since we use containers and the struct inode is _inside_ the
++ * esdfs_inode_info structure, ESDFS_I will always (given a non-NULL
++ * inode pointer), return a valid non-NULL pointer.
++ */
++static inline struct esdfs_inode_info *ESDFS_I(const struct inode *inode)
++{
++	return container_of(inode, struct esdfs_inode_info, vfs_inode);
++}
++
++/* dentry to private data */
++#define ESDFS_D(dent) ((struct esdfs_dentry_info *)(dent)->d_fsdata)
++
++/* superblock to private data */
++#define ESDFS_SB(super) ((struct esdfs_sb_info *)(super)->s_fs_info)
++
++/* file to private Data */
++#define ESDFS_F(file) ((struct esdfs_file_info *)((file)->private_data))
++
++/* file to lower file */
++static inline struct file *esdfs_lower_file(const struct file *f)
++{
++	return ESDFS_F(f)->lower_file;
++}
++
++static inline void esdfs_set_lower_file(struct file *f, struct file *val)
++{
++	ESDFS_F(f)->lower_file = val;
++}
++
++/* inode to lower inode. */
++static inline struct inode *esdfs_lower_inode(const struct inode *i)
++{
++	return ESDFS_I(i)->lower_inode;
++}
++
++static inline void esdfs_set_lower_inode(struct inode *i, struct inode *val)
++{
++	ESDFS_I(i)->lower_inode = val;
++}
++
++/* superblock to lower superblock */
++static inline struct super_block *esdfs_lower_super(
++	const struct super_block *sb)
++{
++	return ESDFS_SB(sb)->lower_sb;
++}
++
++static inline void esdfs_set_lower_super(struct super_block *sb,
++					  struct super_block *val)
++{
++	ESDFS_SB(sb)->lower_sb = val;
++}
++
++/* path based (dentry/mnt) macros */
++static inline void pathcpy(struct path *dst, const struct path *src)
++{
++	dst->dentry = src->dentry;
++	dst->mnt = src->mnt;
++}
++/* Returns struct path.  Caller must path_put it. */
++static inline void esdfs_get_lower_path(const struct dentry *dent,
++					 struct path *lower_path)
++{
++	spin_lock(&ESDFS_D(dent)->lock);
++	pathcpy(lower_path, &ESDFS_D(dent)->lower_path);
++	path_get(lower_path);
++	spin_unlock(&ESDFS_D(dent)->lock);
++	return;
++}
++static inline void esdfs_put_lower_path(const struct dentry *dent,
++					 struct path *lower_path)
++{
++	path_put(lower_path);
++	return;
++}
++static inline void esdfs_set_lower_path(const struct dentry *dent,
++					 struct path *lower_path)
++{
++	spin_lock(&ESDFS_D(dent)->lock);
++	pathcpy(&ESDFS_D(dent)->lower_path, lower_path);
++	spin_unlock(&ESDFS_D(dent)->lock);
++	return;
++}
++static inline void esdfs_reset_lower_path(const struct dentry *dent)
++{
++	spin_lock(&ESDFS_D(dent)->lock);
++	ESDFS_D(dent)->lower_path.dentry = NULL;
++	ESDFS_D(dent)->lower_path.mnt = NULL;
++	spin_unlock(&ESDFS_D(dent)->lock);
++	return;
++}
++static inline void esdfs_put_reset_lower_path(const struct dentry *dent)
++{
++	struct path lower_path;
++	spin_lock(&ESDFS_D(dent)->lock);
++	pathcpy(&lower_path, &ESDFS_D(dent)->lower_path);
++	ESDFS_D(dent)->lower_path.dentry = NULL;
++	ESDFS_D(dent)->lower_path.mnt = NULL;
++	spin_unlock(&ESDFS_D(dent)->lock);
++	path_put(&lower_path);
++	return;
++}
++
++/* locking helpers */
++static inline struct dentry *lock_parent(struct dentry *dentry)
++{
++	struct dentry *dir = dget_parent(dentry);
++	mutex_lock_nested(&dir->d_inode->i_mutex, I_MUTEX_PARENT);
++	return dir;
++}
++
++static inline void unlock_dir(struct dentry *dir)
++{
++	mutex_unlock(&dir->d_inode->i_mutex);
++	dput(dir);
++}
++#endif	/* not _ESDFS_H_ */
+diff --git a/fs/wrapfs/file.c b/fs/esdfs/file.c
+similarity index 66%
+rename from fs/wrapfs/file.c
+rename to fs/esdfs/file.c
+index 0ac42fea950..8e51e0eb195 100644
+--- a/fs/wrapfs/file.c
++++ b/fs/esdfs/file.c
+@@ -9,16 +9,16 @@
+  * published by the Free Software Foundation.
+  */
+ 
+-#include "wrapfs.h"
++#include "esdfs.h"
+ 
+-static ssize_t wrapfs_read(struct file *file, char __user *buf,
++static ssize_t esdfs_read(struct file *file, char __user *buf,
+ 			   size_t count, loff_t *ppos)
+ {
+ 	int err;
+ 	struct file *lower_file;
+ 	struct dentry *dentry = file->f_path.dentry;
+ 
+-	lower_file = wrapfs_lower_file(file);
++	lower_file = esdfs_lower_file(file);
+ 	err = vfs_read(lower_file, buf, count, ppos);
+ 	/* update our inode atime upon a successful lower read */
+ 	if (err >= 0)
+@@ -28,14 +28,14 @@ static ssize_t wrapfs_read(struct file *file, char __user *buf,
+ 	return err;
+ }
+ 
+-static ssize_t wrapfs_write(struct file *file, const char __user *buf,
++static ssize_t esdfs_write(struct file *file, const char __user *buf,
+ 			    size_t count, loff_t *ppos)
+ {
+ 	int err = 0;
+ 	struct file *lower_file;
+ 	struct dentry *dentry = file->f_path.dentry;
+ 
+-	lower_file = wrapfs_lower_file(file);
++	lower_file = esdfs_lower_file(file);
+ 	err = vfs_write(lower_file, buf, count, ppos);
+ 	/* update our inode times+sizes upon a successful lower write */
+ 	if (err >= 0) {
+@@ -48,13 +48,13 @@ static ssize_t wrapfs_write(struct file *file, const char __user *buf,
+ 	return err;
+ }
+ 
+-static int wrapfs_readdir(struct file *file, void *dirent, filldir_t filldir)
++static int esdfs_readdir(struct file *file, void *dirent, filldir_t filldir)
+ {
+ 	int err = 0;
+ 	struct file *lower_file = NULL;
+ 	struct dentry *dentry = file->f_path.dentry;
+ 
+-	lower_file = wrapfs_lower_file(file);
++	lower_file = esdfs_lower_file(file);
+ 	err = vfs_readdir(lower_file, filldir, dirent);
+ 	file->f_pos = lower_file->f_pos;
+ 	if (err >= 0)		/* copy the atime */
+@@ -63,13 +63,13 @@ static int wrapfs_readdir(struct file *file, void *dirent, filldir_t filldir)
+ 	return err;
+ }
+ 
+-static long wrapfs_unlocked_ioctl(struct file *file, unsigned int cmd,
++static long esdfs_unlocked_ioctl(struct file *file, unsigned int cmd,
+ 				  unsigned long arg)
+ {
+ 	long err = -ENOTTY;
+ 	struct file *lower_file;
+ 
+-	lower_file = wrapfs_lower_file(file);
++	lower_file = esdfs_lower_file(file);
+ 
+ 	/* XXX: use vfs_ioctl if/when VFS exports it */
+ 	if (!lower_file || !lower_file->f_op)
+@@ -86,13 +86,13 @@ out:
+ }
+ 
+ #ifdef CONFIG_COMPAT
+-static long wrapfs_compat_ioctl(struct file *file, unsigned int cmd,
++static long esdfs_compat_ioctl(struct file *file, unsigned int cmd,
+ 				unsigned long arg)
+ {
+ 	long err = -ENOTTY;
+ 	struct file *lower_file;
+ 
+-	lower_file = wrapfs_lower_file(file);
++	lower_file = esdfs_lower_file(file);
+ 
+ 	/* XXX: use vfs_ioctl if/when VFS exports it */
+ 	if (!lower_file || !lower_file->f_op)
+@@ -105,7 +105,7 @@ out:
+ }
+ #endif
+ 
+-static int wrapfs_mmap(struct file *file, struct vm_area_struct *vma)
++static int esdfs_mmap(struct file *file, struct vm_area_struct *vma)
+ {
+ 	int err = 0;
+ 	bool willwrite;
+@@ -125,10 +125,10 @@ static int wrapfs_mmap(struct file *file, struct vm_area_struct *vma)
+ 	 * not, return EINVAL (the same error that
+ 	 * generic_file_readonly_mmap returns in that case).
+ 	 */
+-	lower_file = wrapfs_lower_file(file);
++	lower_file = esdfs_lower_file(file);
+ 	if (willwrite && !lower_file->f_mapping->a_ops->writepage) {
+ 		err = -EINVAL;
+-		printk(KERN_ERR "wrapfs: lower file system does not "
++		printk(KERN_ERR "esdfs: lower file system does not "
+ 		       "support writeable mmap\n");
+ 		goto out;
+ 	}
+@@ -138,10 +138,10 @@ static int wrapfs_mmap(struct file *file, struct vm_area_struct *vma)
+ 	 *
+ 	 * XXX: the VFS should have a cleaner way of finding the lower vm_ops
+ 	 */
+-	if (!WRAPFS_F(file)->lower_vm_ops) {
++	if (!ESDFS_F(file)->lower_vm_ops) {
+ 		err = lower_file->f_op->mmap(lower_file, vma);
+ 		if (err) {
+-			printk(KERN_ERR "wrapfs: lower mmap failed %d\n", err);
++			printk(KERN_ERR "esdfs: lower mmap failed %d\n", err);
+ 			goto out;
+ 		}
+ 		saved_vm_ops = vma->vm_ops; /* save: came from lower ->mmap */
+@@ -152,17 +152,17 @@ static int wrapfs_mmap(struct file *file, struct vm_area_struct *vma)
+ 	 * don't want its test for ->readpage which returns -ENOEXEC.
+ 	 */
+ 	file_accessed(file);
+-	vma->vm_ops = &wrapfs_vm_ops;
++	vma->vm_ops = &esdfs_vm_ops;
+ 
+-	file->f_mapping->a_ops = &wrapfs_aops; /* set our aops */
+-	if (!WRAPFS_F(file)->lower_vm_ops) /* save for our ->fault */
+-		WRAPFS_F(file)->lower_vm_ops = saved_vm_ops;
++	file->f_mapping->a_ops = &esdfs_aops; /* set our aops */
++	if (!ESDFS_F(file)->lower_vm_ops) /* save for our ->fault */
++		ESDFS_F(file)->lower_vm_ops = saved_vm_ops;
+ 
+ out:
+ 	return err;
+ }
+ 
+-static int wrapfs_open(struct inode *inode, struct file *file)
++static int esdfs_open(struct inode *inode, struct file *file)
+ {
+ 	int err = 0;
+ 	struct file *lower_file = NULL;
+@@ -175,41 +175,41 @@ static int wrapfs_open(struct inode *inode, struct file *file)
+ 	}
+ 
+ 	file->private_data =
+-		kzalloc(sizeof(struct wrapfs_file_info), GFP_KERNEL);
+-	if (!WRAPFS_F(file)) {
++		kzalloc(sizeof(struct esdfs_file_info), GFP_KERNEL);
++	if (!ESDFS_F(file)) {
+ 		err = -ENOMEM;
+ 		goto out_err;
+ 	}
+ 
+ 	/* open lower object and link wrapfs's file struct to lower's */
+-	wrapfs_get_lower_path(file->f_path.dentry, &lower_path);
++	esdfs_get_lower_path(file->f_path.dentry, &lower_path);
+ 	lower_file = dentry_open(&lower_path, file->f_flags, current_cred());
+ 	path_put(&lower_path);
+ 	if (IS_ERR(lower_file)) {
+ 		err = PTR_ERR(lower_file);
+-		lower_file = wrapfs_lower_file(file);
++		lower_file = esdfs_lower_file(file);
+ 		if (lower_file) {
+-			wrapfs_set_lower_file(file, NULL);
++			esdfs_set_lower_file(file, NULL);
+ 			fput(lower_file); /* fput calls dput for lower_dentry */
+ 		}
+ 	} else {
+-		wrapfs_set_lower_file(file, lower_file);
++		esdfs_set_lower_file(file, lower_file);
+ 	}
+ 
+ 	if (err)
+-		kfree(WRAPFS_F(file));
++		kfree(ESDFS_F(file));
+ 	else
+-		fsstack_copy_attr_all(inode, wrapfs_lower_inode(inode));
++		fsstack_copy_attr_all(inode, esdfs_lower_inode(inode));
+ out_err:
+ 	return err;
+ }
+ 
+-static int wrapfs_flush(struct file *file, fl_owner_t id)
++static int esdfs_flush(struct file *file, fl_owner_t id)
+ {
+ 	int err = 0;
+ 	struct file *lower_file = NULL;
+ 
+-	lower_file = wrapfs_lower_file(file);
++	lower_file = esdfs_lower_file(file);
+ 	if (lower_file && lower_file->f_op && lower_file->f_op->flush)
+ 		err = lower_file->f_op->flush(lower_file, id);
+ 
+@@ -217,21 +217,21 @@ static int wrapfs_flush(struct file *file, fl_owner_t id)
+ }
+ 
+ /* release all lower object references & free the file info structure */
+-static int wrapfs_file_release(struct inode *inode, struct file *file)
++static int esdfs_file_release(struct inode *inode, struct file *file)
+ {
+ 	struct file *lower_file;
+ 
+-	lower_file = wrapfs_lower_file(file);
++	lower_file = esdfs_lower_file(file);
+ 	if (lower_file) {
+-		wrapfs_set_lower_file(file, NULL);
++		esdfs_set_lower_file(file, NULL);
+ 		fput(lower_file);
+ 	}
+ 
+-	kfree(WRAPFS_F(file));
++	kfree(ESDFS_F(file));
+ 	return 0;
+ }
+ 
+-static int wrapfs_fsync(struct file *file, loff_t start, loff_t end,
++static int esdfs_fsync(struct file *file, loff_t start, loff_t end,
+ 			int datasync)
+ {
+ 	int err;
+@@ -242,54 +242,54 @@ static int wrapfs_fsync(struct file *file, loff_t start, loff_t end,
+ 	err = generic_file_fsync(file, start, end, datasync);
+ 	if (err)
+ 		goto out;
+-	lower_file = wrapfs_lower_file(file);
+-	wrapfs_get_lower_path(dentry, &lower_path);
++	lower_file = esdfs_lower_file(file);
++	esdfs_get_lower_path(dentry, &lower_path);
+ 	err = vfs_fsync_range(lower_file, start, end, datasync);
+-	wrapfs_put_lower_path(dentry, &lower_path);
++	esdfs_put_lower_path(dentry, &lower_path);
+ out:
+ 	return err;
+ }
+ 
+-static int wrapfs_fasync(int fd, struct file *file, int flag)
++static int esdfs_fasync(int fd, struct file *file, int flag)
+ {
+ 	int err = 0;
+ 	struct file *lower_file = NULL;
+ 
+-	lower_file = wrapfs_lower_file(file);
++	lower_file = esdfs_lower_file(file);
+ 	if (lower_file->f_op && lower_file->f_op->fasync)
+ 		err = lower_file->f_op->fasync(fd, lower_file, flag);
+ 
+ 	return err;
+ }
+ 
+-const struct file_operations wrapfs_main_fops = {
++const struct file_operations esdfs_main_fops = {
+ 	.llseek		= generic_file_llseek,
+-	.read		= wrapfs_read,
+-	.write		= wrapfs_write,
+-	.unlocked_ioctl	= wrapfs_unlocked_ioctl,
++	.read		= esdfs_read,
++	.write		= esdfs_write,
++	.unlocked_ioctl	= esdfs_unlocked_ioctl,
+ #ifdef CONFIG_COMPAT
+-	.compat_ioctl	= wrapfs_compat_ioctl,
++	.compat_ioctl	= esdfs_compat_ioctl,
+ #endif
+-	.mmap		= wrapfs_mmap,
+-	.open		= wrapfs_open,
+-	.flush		= wrapfs_flush,
+-	.release	= wrapfs_file_release,
+-	.fsync		= wrapfs_fsync,
+-	.fasync		= wrapfs_fasync,
++	.mmap		= esdfs_mmap,
++	.open		= esdfs_open,
++	.flush		= esdfs_flush,
++	.release	= esdfs_file_release,
++	.fsync		= esdfs_fsync,
++	.fasync		= esdfs_fasync,
+ };
+ 
+ /* trimmed directory options */
+-const struct file_operations wrapfs_dir_fops = {
++const struct file_operations esdfs_dir_fops = {
+ 	.llseek		= generic_file_llseek,
+ 	.read		= generic_read_dir,
+-	.readdir	= wrapfs_readdir,
+-	.unlocked_ioctl	= wrapfs_unlocked_ioctl,
++	.readdir	= esdfs_readdir,
++	.unlocked_ioctl	= esdfs_unlocked_ioctl,
+ #ifdef CONFIG_COMPAT
+-	.compat_ioctl	= wrapfs_compat_ioctl,
++	.compat_ioctl	= esdfs_compat_ioctl,
+ #endif
+-	.open		= wrapfs_open,
+-	.release	= wrapfs_file_release,
+-	.flush		= wrapfs_flush,
+-	.fsync		= wrapfs_fsync,
+-	.fasync		= wrapfs_fasync,
++	.open		= esdfs_open,
++	.release	= esdfs_file_release,
++	.flush		= esdfs_flush,
++	.fsync		= esdfs_fsync,
++	.fasync		= esdfs_fasync,
+ };
+diff --git a/fs/wrapfs/inode.c b/fs/esdfs/inode.c
+similarity index 71%
+rename from fs/wrapfs/inode.c
+rename to fs/esdfs/inode.c
+index b6f287adc7b..9016b728d41 100644
+--- a/fs/wrapfs/inode.c
++++ b/fs/esdfs/inode.c
+@@ -9,9 +9,9 @@
+  * published by the Free Software Foundation.
+  */
+ 
+-#include "wrapfs.h"
++#include "esdfs.h"
+ 
+-static int wrapfs_create(struct inode *dir, struct dentry *dentry,
++static int esdfs_create(struct inode *dir, struct dentry *dentry,
+ 			 umode_t mode, bool want_excl)
+ {
+ 	int err = 0;
+@@ -19,7 +19,7 @@ static int wrapfs_create(struct inode *dir, struct dentry *dentry,
+ 	struct dentry *lower_parent_dentry = NULL;
+ 	struct path lower_path;
+ 
+-	wrapfs_get_lower_path(dentry, &lower_path);
++	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+ 	lower_parent_dentry = lock_parent(lower_dentry);
+ 
+@@ -27,19 +27,20 @@ static int wrapfs_create(struct inode *dir, struct dentry *dentry,
+ 			 want_excl);
+ 	if (err)
+ 		goto out;
+-	err = wrapfs_interpose(dentry, dir->i_sb, &lower_path);
++
++	err = esdfs_interpose(dentry, dir->i_sb, &lower_path);
+ 	if (err)
+ 		goto out;
+-	fsstack_copy_attr_times(dir, wrapfs_lower_inode(dir));
++	fsstack_copy_attr_times(dir, esdfs_lower_inode(dir));
+ 	fsstack_copy_inode_size(dir, lower_parent_dentry->d_inode);
+ 
+ out:
+ 	unlock_dir(lower_parent_dentry);
+-	wrapfs_put_lower_path(dentry, &lower_path);
++	esdfs_put_lower_path(dentry, &lower_path);
+ 	return err;
+ }
+ 
+-static int wrapfs_link(struct dentry *old_dentry, struct inode *dir,
++static int esdfs_link(struct dentry *old_dentry, struct inode *dir,
+ 		       struct dentry *new_dentry)
+ {
+ 	struct dentry *lower_old_dentry;
+@@ -50,8 +51,8 @@ static int wrapfs_link(struct dentry *old_dentry, struct inode *dir,
+ 	struct path lower_old_path, lower_new_path;
+ 
+ 	file_size_save = i_size_read(old_dentry->d_inode);
+-	wrapfs_get_lower_path(old_dentry, &lower_old_path);
+-	wrapfs_get_lower_path(new_dentry, &lower_new_path);
++	esdfs_get_lower_path(old_dentry, &lower_old_path);
++	esdfs_get_lower_path(new_dentry, &lower_new_path);
+ 	lower_old_dentry = lower_old_path.dentry;
+ 	lower_new_dentry = lower_new_path.dentry;
+ 	lower_dir_dentry = lock_parent(lower_new_dentry);
+@@ -61,30 +62,30 @@ static int wrapfs_link(struct dentry *old_dentry, struct inode *dir,
+ 	if (err || !lower_new_dentry->d_inode)
+ 		goto out;
+ 
+-	err = wrapfs_interpose(new_dentry, dir->i_sb, &lower_new_path);
++	err = esdfs_interpose(new_dentry, dir->i_sb, &lower_new_path);
+ 	if (err)
+ 		goto out;
+ 	fsstack_copy_attr_times(dir, lower_new_dentry->d_inode);
+ 	fsstack_copy_inode_size(dir, lower_new_dentry->d_inode);
+ 	set_nlink(old_dentry->d_inode,
+-		  wrapfs_lower_inode(old_dentry->d_inode)->i_nlink);
++		  esdfs_lower_inode(old_dentry->d_inode)->i_nlink);
+ 	i_size_write(new_dentry->d_inode, file_size_save);
+ out:
+ 	unlock_dir(lower_dir_dentry);
+-	wrapfs_put_lower_path(old_dentry, &lower_old_path);
+-	wrapfs_put_lower_path(new_dentry, &lower_new_path);
++	esdfs_put_lower_path(old_dentry, &lower_old_path);
++	esdfs_put_lower_path(new_dentry, &lower_new_path);
+ 	return err;
+ }
+ 
+-static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
++static int esdfs_unlink(struct inode *dir, struct dentry *dentry)
+ {
+ 	int err;
+ 	struct dentry *lower_dentry;
+-	struct inode *lower_dir_inode = wrapfs_lower_inode(dir);
++	struct inode *lower_dir_inode = esdfs_lower_inode(dir);
+ 	struct dentry *lower_dir_dentry;
+ 	struct path lower_path;
+ 
+-	wrapfs_get_lower_path(dentry, &lower_path);
++	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+ 	dget(lower_dentry);
+ 	lower_dir_dentry = lock_parent(lower_dentry);
+@@ -105,17 +106,17 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
+ 	fsstack_copy_attr_times(dir, lower_dir_inode);
+ 	fsstack_copy_inode_size(dir, lower_dir_inode);
+ 	set_nlink(dentry->d_inode,
+-		  wrapfs_lower_inode(dentry->d_inode)->i_nlink);
++		  esdfs_lower_inode(dentry->d_inode)->i_nlink);
+ 	dentry->d_inode->i_ctime = dir->i_ctime;
+ 	d_drop(dentry); /* this is needed, else LTP fails (VFS won't do it) */
+ out:
+ 	unlock_dir(lower_dir_dentry);
+ 	dput(lower_dentry);
+-	wrapfs_put_lower_path(dentry, &lower_path);
++	esdfs_put_lower_path(dentry, &lower_path);
+ 	return err;
+ }
+ 
+-static int wrapfs_symlink(struct inode *dir, struct dentry *dentry,
++static int esdfs_symlink(struct inode *dir, struct dentry *dentry,
+ 			  const char *symname)
+ {
+ 	int err = 0;
+@@ -123,33 +124,33 @@ static int wrapfs_symlink(struct inode *dir, struct dentry *dentry,
+ 	struct dentry *lower_parent_dentry = NULL;
+ 	struct path lower_path;
+ 
+-	wrapfs_get_lower_path(dentry, &lower_path);
++	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+ 	lower_parent_dentry = lock_parent(lower_dentry);
+ 
+ 	err = vfs_symlink(lower_parent_dentry->d_inode, lower_dentry, symname);
+ 	if (err)
+ 		goto out;
+-	err = wrapfs_interpose(dentry, dir->i_sb, &lower_path);
++	err = esdfs_interpose(dentry, dir->i_sb, &lower_path);
+ 	if (err)
+ 		goto out;
+-	fsstack_copy_attr_times(dir, wrapfs_lower_inode(dir));
++	fsstack_copy_attr_times(dir, esdfs_lower_inode(dir));
+ 	fsstack_copy_inode_size(dir, lower_parent_dentry->d_inode);
+ 
+ out:
+ 	unlock_dir(lower_parent_dentry);
+-	wrapfs_put_lower_path(dentry, &lower_path);
++	esdfs_put_lower_path(dentry, &lower_path);
+ 	return err;
+ }
+ 
+-static int wrapfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
++static int esdfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
+ {
+ 	int err = 0;
+ 	struct dentry *lower_dentry;
+ 	struct dentry *lower_parent_dentry = NULL;
+ 	struct path lower_path;
+ 
+-	wrapfs_get_lower_path(dentry, &lower_path);
++	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+ 	lower_parent_dentry = lock_parent(lower_dentry);
+ 
+@@ -157,29 +158,29 @@ static int wrapfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
+ 	if (err)
+ 		goto out;
+ 
+-	err = wrapfs_interpose(dentry, dir->i_sb, &lower_path);
++	err = esdfs_interpose(dentry, dir->i_sb, &lower_path);
+ 	if (err)
+ 		goto out;
+ 
+-	fsstack_copy_attr_times(dir, wrapfs_lower_inode(dir));
++	fsstack_copy_attr_times(dir, esdfs_lower_inode(dir));
+ 	fsstack_copy_inode_size(dir, lower_parent_dentry->d_inode);
+ 	/* update number of links on parent directory */
+-	set_nlink(dir, wrapfs_lower_inode(dir)->i_nlink);
++	set_nlink(dir, esdfs_lower_inode(dir)->i_nlink);
+ 
+ out:
+ 	unlock_dir(lower_parent_dentry);
+-	wrapfs_put_lower_path(dentry, &lower_path);
++	esdfs_put_lower_path(dentry, &lower_path);
+ 	return err;
+ }
+ 
+-static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
++static int esdfs_rmdir(struct inode *dir, struct dentry *dentry)
+ {
+ 	struct dentry *lower_dentry;
+ 	struct dentry *lower_dir_dentry;
+ 	int err;
+ 	struct path lower_path;
+ 
+-	wrapfs_get_lower_path(dentry, &lower_path);
++	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+ 	lower_dir_dentry = lock_parent(lower_dentry);
+ 
+@@ -196,11 +197,11 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
+ 
+ out:
+ 	unlock_dir(lower_dir_dentry);
+-	wrapfs_put_lower_path(dentry, &lower_path);
++	esdfs_put_lower_path(dentry, &lower_path);
+ 	return err;
+ }
+ 
+-static int wrapfs_mknod(struct inode *dir, struct dentry *dentry, umode_t mode,
++static int esdfs_mknod(struct inode *dir, struct dentry *dentry, umode_t mode,
+ 			dev_t dev)
+ {
+ 	int err = 0;
+@@ -208,7 +209,7 @@ static int wrapfs_mknod(struct inode *dir, struct dentry *dentry, umode_t mode,
+ 	struct dentry *lower_parent_dentry = NULL;
+ 	struct path lower_path;
+ 
+-	wrapfs_get_lower_path(dentry, &lower_path);
++	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+ 	lower_parent_dentry = lock_parent(lower_dentry);
+ 
+@@ -216,23 +217,23 @@ static int wrapfs_mknod(struct inode *dir, struct dentry *dentry, umode_t mode,
+ 	if (err)
+ 		goto out;
+ 
+-	err = wrapfs_interpose(dentry, dir->i_sb, &lower_path);
++	err = esdfs_interpose(dentry, dir->i_sb, &lower_path);
+ 	if (err)
+ 		goto out;
+-	fsstack_copy_attr_times(dir, wrapfs_lower_inode(dir));
++	fsstack_copy_attr_times(dir, esdfs_lower_inode(dir));
+ 	fsstack_copy_inode_size(dir, lower_parent_dentry->d_inode);
+ 
+ out:
+ 	unlock_dir(lower_parent_dentry);
+-	wrapfs_put_lower_path(dentry, &lower_path);
++	esdfs_put_lower_path(dentry, &lower_path);
+ 	return err;
+ }
+ 
+ /*
+- * The locking rules in wrapfs_rename are complex.  We could use a simpler
++ * The locking rules in esdfs_rename are complex.  We could use a simpler
+  * superblock-level name-space lock for renames and copy-ups.
+  */
+-static int wrapfs_rename(struct inode *old_dir, struct dentry *old_dentry,
++static int esdfs_rename(struct inode *old_dir, struct dentry *old_dentry,
+ 			 struct inode *new_dir, struct dentry *new_dentry)
+ {
+ 	int err = 0;
+@@ -243,8 +244,8 @@ static int wrapfs_rename(struct inode *old_dir, struct dentry *old_dentry,
+ 	struct dentry *trap = NULL;
+ 	struct path lower_old_path, lower_new_path;
+ 
+-	wrapfs_get_lower_path(old_dentry, &lower_old_path);
+-	wrapfs_get_lower_path(new_dentry, &lower_new_path);
++	esdfs_get_lower_path(old_dentry, &lower_old_path);
++	esdfs_get_lower_path(new_dentry, &lower_new_path);
+ 	lower_old_dentry = lower_old_path.dentry;
+ 	lower_new_dentry = lower_new_path.dentry;
+ 	lower_old_dir_dentry = dget_parent(lower_old_dentry);
+@@ -280,18 +281,18 @@ out:
+ 	unlock_rename(lower_old_dir_dentry, lower_new_dir_dentry);
+ 	dput(lower_old_dir_dentry);
+ 	dput(lower_new_dir_dentry);
+-	wrapfs_put_lower_path(old_dentry, &lower_old_path);
+-	wrapfs_put_lower_path(new_dentry, &lower_new_path);
++	esdfs_put_lower_path(old_dentry, &lower_old_path);
++	esdfs_put_lower_path(new_dentry, &lower_new_path);
+ 	return err;
+ }
+ 
+-static int wrapfs_readlink(struct dentry *dentry, char __user *buf, int bufsiz)
++static int esdfs_readlink(struct dentry *dentry, char __user *buf, int bufsiz)
+ {
+ 	int err;
+ 	struct dentry *lower_dentry;
+ 	struct path lower_path;
+ 
+-	wrapfs_get_lower_path(dentry, &lower_path);
++	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+ 	if (!lower_dentry->d_inode->i_op ||
+ 	    !lower_dentry->d_inode->i_op->readlink) {
+@@ -306,11 +307,11 @@ static int wrapfs_readlink(struct dentry *dentry, char __user *buf, int bufsiz)
+ 	fsstack_copy_attr_atime(dentry->d_inode, lower_dentry->d_inode);
+ 
+ out:
+-	wrapfs_put_lower_path(dentry, &lower_path);
++	esdfs_put_lower_path(dentry, &lower_path);
+ 	return err;
+ }
+ 
+-static void *wrapfs_follow_link(struct dentry *dentry, struct nameidata *nd)
++static void *esdfs_follow_link(struct dentry *dentry, struct nameidata *nd)
+ {
+ 	char *buf;
+ 	int len = PAGE_SIZE, err;
+@@ -326,7 +327,7 @@ static void *wrapfs_follow_link(struct dentry *dentry, struct nameidata *nd)
+ 	/* read the symlink, and then we will follow it */
+ 	old_fs = get_fs();
+ 	set_fs(KERNEL_DS);
+-	err = wrapfs_readlink(dentry, buf, len);
++	err = esdfs_readlink(dentry, buf, len);
+ 	set_fs(old_fs);
+ 	if (err < 0) {
+ 		kfree(buf);
+@@ -340,7 +341,7 @@ out:
+ }
+ 
+ /* this @nd *IS* still used */
+-static void wrapfs_put_link(struct dentry *dentry, struct nameidata *nd,
++static void esdfs_put_link(struct dentry *dentry, struct nameidata *nd,
+ 			    void *cookie)
+ {
+ 	char *buf = nd_get_link(nd);
+@@ -348,17 +349,17 @@ static void wrapfs_put_link(struct dentry *dentry, struct nameidata *nd,
+ 		kfree(buf);
+ }
+ 
+-static int wrapfs_permission(struct inode *inode, int mask)
++static int esdfs_permission(struct inode *inode, int mask)
+ {
+ 	struct inode *lower_inode;
+ 	int err;
+ 
+-	lower_inode = wrapfs_lower_inode(inode);
++	lower_inode = esdfs_lower_inode(inode);
+ 	err = inode_permission(lower_inode, mask);
+ 	return err;
+ }
+ 
+-static int wrapfs_setattr(struct dentry *dentry, struct iattr *ia)
++static int esdfs_setattr(struct dentry *dentry, struct iattr *ia)
+ {
+ 	int err = 0;
+ 	struct dentry *lower_dentry;
+@@ -378,14 +379,14 @@ static int wrapfs_setattr(struct dentry *dentry, struct iattr *ia)
+ 	if (err)
+ 		goto out_err;
+ 
+-	wrapfs_get_lower_path(dentry, &lower_path);
++	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+-	lower_inode = wrapfs_lower_inode(inode);
++	lower_inode = esdfs_lower_inode(inode);
+ 
+ 	/* prepare our own lower struct iattr (with the lower file) */
+ 	memcpy(&lower_ia, ia, sizeof(lower_ia));
+ 	if (ia->ia_valid & ATTR_FILE)
+-		lower_ia.ia_file = wrapfs_lower_file(ia->ia_file);
++		lower_ia.ia_file = esdfs_lower_file(ia->ia_file);
+ 
+ 	/*
+ 	 * If shrinking, first truncate upper level to cancel writing dirty
+@@ -430,34 +431,34 @@ static int wrapfs_setattr(struct dentry *dentry, struct iattr *ia)
+ 	 */
+ 
+ out:
+-	wrapfs_put_lower_path(dentry, &lower_path);
++	esdfs_put_lower_path(dentry, &lower_path);
+ out_err:
+ 	return err;
+ }
+ 
+-const struct inode_operations wrapfs_symlink_iops = {
+-	.readlink	= wrapfs_readlink,
+-	.permission	= wrapfs_permission,
+-	.follow_link	= wrapfs_follow_link,
+-	.setattr	= wrapfs_setattr,
+-	.put_link	= wrapfs_put_link,
++const struct inode_operations esdfs_symlink_iops = {
++	.readlink	= esdfs_readlink,
++	.permission	= esdfs_permission,
++	.follow_link	= esdfs_follow_link,
++	.setattr	= esdfs_setattr,
++	.put_link	= esdfs_put_link,
+ };
+ 
+-const struct inode_operations wrapfs_dir_iops = {
+-	.create		= wrapfs_create,
+-	.lookup		= wrapfs_lookup,
+-	.link		= wrapfs_link,
+-	.unlink		= wrapfs_unlink,
+-	.symlink	= wrapfs_symlink,
+-	.mkdir		= wrapfs_mkdir,
+-	.rmdir		= wrapfs_rmdir,
+-	.mknod		= wrapfs_mknod,
+-	.rename		= wrapfs_rename,
+-	.permission	= wrapfs_permission,
+-	.setattr	= wrapfs_setattr,
++const struct inode_operations esdfs_dir_iops = {
++	.create		= esdfs_create,
++	.lookup		= esdfs_lookup,
++	.link		= esdfs_link,
++	.unlink		= esdfs_unlink,
++	.symlink	= esdfs_symlink,
++	.mkdir		= esdfs_mkdir,
++	.rmdir		= esdfs_rmdir,
++	.mknod		= esdfs_mknod,
++	.rename		= esdfs_rename,
++	.permission	= esdfs_permission,
++	.setattr	= esdfs_setattr,
+ };
+ 
+-const struct inode_operations wrapfs_main_iops = {
+-	.permission	= wrapfs_permission,
+-	.setattr	= wrapfs_setattr,
++const struct inode_operations esdfs_main_iops = {
++	.permission	= esdfs_permission,
++	.setattr	= esdfs_setattr,
+ };
+diff --git a/fs/wrapfs/lookup.c b/fs/esdfs/lookup.c
+similarity index 70%
+rename from fs/wrapfs/lookup.c
+rename to fs/esdfs/lookup.c
+index d08de9f5db0..51c63892e76 100644
+--- a/fs/wrapfs/lookup.c
++++ b/fs/esdfs/lookup.c
+@@ -9,42 +9,42 @@
+  * published by the Free Software Foundation.
+  */
+ 
+-#include "wrapfs.h"
++#include "esdfs.h"
+ 
+ /* The dentry cache is just so we have properly sized dentries */
+-static struct kmem_cache *wrapfs_dentry_cachep;
++static struct kmem_cache *esdfs_dentry_cachep;
+ 
+-int wrapfs_init_dentry_cache(void)
++int esdfs_init_dentry_cache(void)
+ {
+-	wrapfs_dentry_cachep =
+-		kmem_cache_create("wrapfs_dentry",
+-				  sizeof(struct wrapfs_dentry_info),
++	esdfs_dentry_cachep =
++		kmem_cache_create("esdfs_dentry",
++				  sizeof(struct esdfs_dentry_info),
+ 				  0, SLAB_RECLAIM_ACCOUNT, NULL);
+ 
+-	return wrapfs_dentry_cachep ? 0 : -ENOMEM;
++	return esdfs_dentry_cachep ? 0 : -ENOMEM;
+ }
+ 
+-void wrapfs_destroy_dentry_cache(void)
++void esdfs_destroy_dentry_cache(void)
+ {
+-	if (wrapfs_dentry_cachep)
+-		kmem_cache_destroy(wrapfs_dentry_cachep);
++	if (esdfs_dentry_cachep)
++		kmem_cache_destroy(esdfs_dentry_cachep);
+ }
+ 
+ void free_dentry_private_data(struct dentry *dentry)
+ {
+ 	if (!dentry || !dentry->d_fsdata)
+ 		return;
+-	kmem_cache_free(wrapfs_dentry_cachep, dentry->d_fsdata);
++	kmem_cache_free(esdfs_dentry_cachep, dentry->d_fsdata);
+ 	dentry->d_fsdata = NULL;
+ }
+ 
+ /* allocate new dentry private data */
+ int new_dentry_private_data(struct dentry *dentry)
+ {
+-	struct wrapfs_dentry_info *info = WRAPFS_D(dentry);
++	struct esdfs_dentry_info *info = ESDFS_D(dentry);
+ 
+ 	/* use zalloc to init dentry_info.lower_path */
+-	info = kmem_cache_zalloc(wrapfs_dentry_cachep, GFP_ATOMIC);
++	info = kmem_cache_zalloc(esdfs_dentry_cachep, GFP_ATOMIC);
+ 	if (!info)
+ 		return -ENOMEM;
+ 
+@@ -82,24 +82,24 @@ out:
+ 	return err;
+ }
+ 
+-static int wrapfs_inode_test(struct inode *inode, void *candidate_lower_inode)
++static int esdfs_inode_test(struct inode *inode, void *candidate_lower_inode)
+ {
+-	struct inode *current_lower_inode = wrapfs_lower_inode(inode);
++	struct inode *current_lower_inode = esdfs_lower_inode(inode);
+ 	if (current_lower_inode == (struct inode *)candidate_lower_inode)
+ 		return 1; /* found a match */
+ 	else
+ 		return 0; /* no match */
+ }
+ 
+-static int wrapfs_inode_set(struct inode *inode, void *lower_inode)
++static int esdfs_inode_set(struct inode *inode, void *lower_inode)
+ {
+-	/* we do actual inode initialization in wrapfs_iget */
++	/* we do actual inode initialization in esdfs_iget */
+ 	return 0;
+ }
+ 
+-struct inode *wrapfs_iget(struct super_block *sb, struct inode *lower_inode)
++struct inode *esdfs_iget(struct super_block *sb, struct inode *lower_inode)
+ {
+-	struct wrapfs_inode_info *info;
++	struct esdfs_inode_info *info;
+ 	struct inode *inode; /* the new inode to return */
+ 	int err;
+ 
+@@ -110,8 +110,8 @@ struct inode *wrapfs_iget(struct super_block *sb, struct inode *lower_inode)
+ 			      * instead.
+ 			      */
+ 			     lower_inode->i_ino, /* hashval */
+-			     wrapfs_inode_test,	/* inode comparison function */
+-			     wrapfs_inode_set, /* inode init function */
++			     esdfs_inode_test,	/* inode comparison function */
++			     esdfs_inode_set, /* inode init function */
+ 			     lower_inode); /* data passed to test+set fxns */
+ 	if (!inode) {
+ 		err = -EACCES;
+@@ -123,32 +123,32 @@ struct inode *wrapfs_iget(struct super_block *sb, struct inode *lower_inode)
+ 		return inode;
+ 
+ 	/* initialize new inode */
+-	info = WRAPFS_I(inode);
++	info = ESDFS_I(inode);
+ 
+ 	inode->i_ino = lower_inode->i_ino;
+ 	if (!igrab(lower_inode)) {
+ 		err = -ESTALE;
+ 		return ERR_PTR(err);
+ 	}
+-	wrapfs_set_lower_inode(inode, lower_inode);
++	esdfs_set_lower_inode(inode, lower_inode);
+ 
+ 	inode->i_version++;
+ 
+ 	/* use different set of inode ops for symlinks & directories */
+ 	if (S_ISDIR(lower_inode->i_mode))
+-		inode->i_op = &wrapfs_dir_iops;
++		inode->i_op = &esdfs_dir_iops;
+ 	else if (S_ISLNK(lower_inode->i_mode))
+-		inode->i_op = &wrapfs_symlink_iops;
++		inode->i_op = &esdfs_symlink_iops;
+ 	else
+-		inode->i_op = &wrapfs_main_iops;
++		inode->i_op = &esdfs_main_iops;
+ 
+ 	/* use different set of file ops for directories */
+ 	if (S_ISDIR(lower_inode->i_mode))
+-		inode->i_fop = &wrapfs_dir_fops;
++		inode->i_fop = &esdfs_dir_fops;
+ 	else
+-		inode->i_fop = &wrapfs_main_fops;
++		inode->i_fop = &esdfs_main_fops;
+ 
+-	inode->i_mapping->a_ops = &wrapfs_aops;
++	inode->i_mapping->a_ops = &esdfs_aops;
+ 
+ 	inode->i_atime.tv_sec = 0;
+ 	inode->i_atime.tv_nsec = 0;
+@@ -172,14 +172,14 @@ struct inode *wrapfs_iget(struct super_block *sb, struct inode *lower_inode)
+ }
+ 
+ /*
+- * Connect a wrapfs inode dentry/inode with several lower ones.  This is
++ * Connect a esdfs inode dentry/inode with several lower ones.  This is
+  * the classic stackable file system "vnode interposition" action.
+  *
+- * @dentry: wrapfs's dentry which interposes on lower one
+- * @sb: wrapfs's super_block
++ * @dentry: esdfs's dentry which interposes on lower one
++ * @sb: esdfs's super_block
+  * @lower_path: the lower path (caller does path_get/put)
+  */
+-int wrapfs_interpose(struct dentry *dentry, struct super_block *sb,
++int esdfs_interpose(struct dentry *dentry, struct super_block *sb,
+ 		     struct path *lower_path)
+ {
+ 	int err = 0;
+@@ -188,7 +188,7 @@ int wrapfs_interpose(struct dentry *dentry, struct super_block *sb,
+ 	struct super_block *lower_sb;
+ 
+ 	lower_inode = lower_path->dentry->d_inode;
+-	lower_sb = wrapfs_lower_super(sb);
++	lower_sb = esdfs_lower_super(sb);
+ 
+ 	/* check that the lower file system didn't cross a mount point */
+ 	if (lower_inode->i_sb != lower_sb) {
+@@ -197,12 +197,12 @@ int wrapfs_interpose(struct dentry *dentry, struct super_block *sb,
+ 	}
+ 
+ 	/*
+-	 * We allocate our new inode below by calling wrapfs_iget,
++	 * We allocate our new inode below by calling esdfs_iget,
+ 	 * which will initialize some of the new inode's fields
+ 	 */
+ 
+-	/* inherit lower inode number for wrapfs's inode */
+-	inode = wrapfs_iget(sb, lower_inode);
++	/* inherit lower inode number for esdfs's inode */
++	inode = esdfs_iget(sb, lower_inode);
+ 	if (IS_ERR(inode)) {
+ 		err = PTR_ERR(inode);
+ 		goto out;
+@@ -215,14 +215,14 @@ out:
+ }
+ 
+ /*
+- * Main driver function for wrapfs's lookup.
++ * Main driver function for esdfs's lookup.
+  *
+  * Returns: NULL (ok), ERR_PTR if an error occurred.
+  * Fills in lower_parent_path with <dentry,mnt> on success.
+  */
+-static struct dentry *__wrapfs_lookup(struct dentry *dentry,
+-				      unsigned int flags,
+-				      struct path *lower_parent_path)
++static struct dentry *__esdfs_lookup(struct dentry *dentry,
++				     unsigned int flags,
++				     struct path *lower_parent_path)
+ {
+ 	int err = 0;
+ 	struct vfsmount *lower_dir_mnt;
+@@ -233,7 +233,7 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry,
+ 	struct qstr this;
+ 
+ 	/* must initialize dentry operations */
+-	d_set_d_op(dentry, &wrapfs_dops);
++	d_set_d_op(dentry, &esdfs_dops);
+ 
+ 	if (IS_ROOT(dentry))
+ 		goto out;
+@@ -250,10 +250,10 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry,
+ 
+ 	/* no error: handle positive dentries */
+ 	if (!err) {
+-		wrapfs_set_lower_path(dentry, &lower_path);
+-		err = wrapfs_interpose(dentry, dentry->d_sb, &lower_path);
++		esdfs_set_lower_path(dentry, &lower_path);
++		err = esdfs_interpose(dentry, dentry->d_sb, &lower_path);
+ 		if (err) /* path_put underlying path on error */
+-			wrapfs_put_reset_lower_path(dentry);
++			esdfs_put_reset_lower_path(dentry);
+ 		goto out;
+ 	}
+ 
+@@ -282,7 +282,7 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry,
+ setup_lower:
+ 	lower_path.dentry = lower_dentry;
+ 	lower_path.mnt = mntget(lower_dir_mnt);
+-	wrapfs_set_lower_path(dentry, &lower_path);
++	esdfs_set_lower_path(dentry, &lower_path);
+ 
+ 	/*
+ 	 * If the intent is to create a file, then don't return an error, so
+@@ -296,8 +296,8 @@ out:
+ 	return ERR_PTR(err);
+ }
+ 
+-struct dentry *wrapfs_lookup(struct inode *dir, struct dentry *dentry,
+-			     unsigned int flags)
++struct dentry *esdfs_lookup(struct inode *dir, struct dentry *dentry,
++			    unsigned int flags)
+ {
+ 	struct dentry *ret, *parent;
+ 	struct path lower_parent_path;
+@@ -305,7 +305,7 @@ struct dentry *wrapfs_lookup(struct inode *dir, struct dentry *dentry,
+ 
+ 	parent = dget_parent(dentry);
+ 
+-	wrapfs_get_lower_path(parent, &lower_parent_path);
++	esdfs_get_lower_path(parent, &lower_parent_path);
+ 
+ 	/* allocate dentry private data.  We free it in ->d_release */
+ 	err = new_dentry_private_data(dentry);
+@@ -313,20 +313,20 @@ struct dentry *wrapfs_lookup(struct inode *dir, struct dentry *dentry,
+ 		ret = ERR_PTR(err);
+ 		goto out;
+ 	}
+-	ret = __wrapfs_lookup(dentry, flags, &lower_parent_path);
++	ret = __esdfs_lookup(dentry, flags, &lower_parent_path);
+ 	if (IS_ERR(ret))
+ 		goto out;
+ 	if (ret)
+ 		dentry = ret;
+ 	if (dentry->d_inode)
+ 		fsstack_copy_attr_times(dentry->d_inode,
+-					wrapfs_lower_inode(dentry->d_inode));
++					esdfs_lower_inode(dentry->d_inode));
+ 	/* update parent directory's atime */
+ 	fsstack_copy_attr_atime(parent->d_inode,
+-				wrapfs_lower_inode(parent->d_inode));
++				esdfs_lower_inode(parent->d_inode));
+ 
+ out:
+-	wrapfs_put_lower_path(parent, &lower_parent_path);
++	esdfs_put_lower_path(parent, &lower_parent_path);
+ 	dput(parent);
+ 	return ret;
+ }
+diff --git a/fs/wrapfs/main.c b/fs/esdfs/main.c
+similarity index 65%
+rename from fs/wrapfs/main.c
+rename to fs/esdfs/main.c
+index 5ce79304f6e..5c3f3dde605 100644
+--- a/fs/wrapfs/main.c
++++ b/fs/esdfs/main.c
+@@ -9,14 +9,14 @@
+  * published by the Free Software Foundation.
+  */
+ 
+-#include "wrapfs.h"
++#include "esdfs.h"
+ #include <linux/module.h>
+ 
+ /*
+- * There is no need to lock the wrapfs_super_info's rwsem as there is no
++ * There is no need to lock the esdfs_super_info's rwsem as there is no
+  * way anyone can have a reference to the superblock at this point in time.
+  */
+-static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
++static int esdfs_read_super(struct super_block *sb, void *raw_data, int silent)
+ {
+ 	int err = 0;
+ 	struct super_block *lower_sb;
+@@ -26,7 +26,7 @@ static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
+ 
+ 	if (!dev_name) {
+ 		printk(KERN_ERR
+-		       "wrapfs: read_super: missing dev_name argument\n");
++		       "esdfs: read_super: missing dev_name argument\n");
+ 		err = -EINVAL;
+ 		goto out;
+ 	}
+@@ -35,15 +35,15 @@ static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
+ 	err = kern_path(dev_name, LOOKUP_FOLLOW | LOOKUP_DIRECTORY,
+ 			&lower_path);
+ 	if (err) {
+-		printk(KERN_ERR	"wrapfs: error accessing "
++		printk(KERN_ERR	"esdfs: error accessing "
+ 		       "lower directory '%s'\n", dev_name);
+ 		goto out;
+ 	}
+ 
+ 	/* allocate superblock private data */
+-	sb->s_fs_info = kzalloc(sizeof(struct wrapfs_sb_info), GFP_KERNEL);
+-	if (!WRAPFS_SB(sb)) {
+-		printk(KERN_CRIT "wrapfs: read_super: out of memory\n");
++	sb->s_fs_info = kzalloc(sizeof(struct esdfs_sb_info), GFP_KERNEL);
++	if (!ESDFS_SB(sb)) {
++		printk(KERN_CRIT "esdfs: read_super: out of memory\n");
+ 		err = -ENOMEM;
+ 		goto out_free;
+ 	}
+@@ -51,7 +51,7 @@ static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
+ 	/* set the lower superblock field of upper superblock */
+ 	lower_sb = lower_path.dentry->d_sb;
+ 	atomic_inc(&lower_sb->s_active);
+-	wrapfs_set_lower_super(sb, lower_sb);
++	esdfs_set_lower_super(sb, lower_sb);
+ 
+ 	/* inherit maxbytes from lower file system */
+ 	sb->s_maxbytes = lower_sb->s_maxbytes;
+@@ -62,10 +62,10 @@ static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
+ 	 */
+ 	sb->s_time_gran = 1;
+ 
+-	sb->s_op = &wrapfs_sops;
++	sb->s_op = &esdfs_sops;
+ 
+ 	/* get a new inode and allocate our root dentry */
+-	inode = wrapfs_iget(sb, lower_path.dentry->d_inode);
++	inode = esdfs_iget(sb, lower_path.dentry->d_inode);
+ 	if (IS_ERR(inode)) {
+ 		err = PTR_ERR(inode);
+ 		goto out_sput;
+@@ -75,7 +75,7 @@ static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
+ 		err = -ENOMEM;
+ 		goto out_iput;
+ 	}
+-	d_set_d_op(sb->s_root, &wrapfs_dops);
++	d_set_d_op(sb->s_root, &esdfs_dops);
+ 
+ 	/* link the upper and lower dentries */
+ 	sb->s_root->d_fsdata = NULL;
+@@ -86,7 +86,7 @@ static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
+ 	/* if get here: cannot have error */
+ 
+ 	/* set the lower dentries for s_root */
+-	wrapfs_set_lower_path(sb->s_root, &lower_path);
++	esdfs_set_lower_path(sb->s_root, &lower_path);
+ 
+ 	/*
+ 	 * No need to call interpose because we already have a positive
+@@ -96,7 +96,7 @@ static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
+ 	d_rehash(sb->s_root);
+ 	if (!silent)
+ 		printk(KERN_INFO
+-		       "wrapfs: mounted on top of %s type %s\n",
++		       "esdfs: mounted on top of %s type %s\n",
+ 		       dev_name, lower_sb->s_type->name);
+ 	goto out; /* all is well */
+ 
+@@ -108,7 +108,7 @@ out_iput:
+ out_sput:
+ 	/* drop refs we took earlier */
+ 	atomic_dec(&lower_sb->s_active);
+-	kfree(WRAPFS_SB(sb));
++	kfree(ESDFS_SB(sb));
+ 	sb->s_fs_info = NULL;
+ out_free:
+ 	path_put(&lower_path);
+@@ -117,58 +117,58 @@ out:
+ 	return err;
+ }
+ 
+-struct dentry *wrapfs_mount(struct file_system_type *fs_type, int flags,
++struct dentry *esdfs_mount(struct file_system_type *fs_type, int flags,
+ 			    const char *dev_name, void *raw_data)
+ {
+ 	void *lower_path_name = (void *) dev_name;
+ 
+ 	return mount_nodev(fs_type, flags, lower_path_name,
+-			   wrapfs_read_super);
++			   esdfs_read_super);
+ }
+ 
+-static struct file_system_type wrapfs_fs_type = {
++static struct file_system_type esdfs_fs_type = {
+ 	.owner		= THIS_MODULE,
+-	.name		= WRAPFS_NAME,
+-	.mount		= wrapfs_mount,
++	.name		= ESDFS_NAME,
++	.mount		= esdfs_mount,
+ 	.kill_sb	= generic_shutdown_super,
+ 	.fs_flags	= 0,
+ };
+ MODULE_ALIAS_FS(WRAPFS_NAME);
+ 
+-static int __init init_wrapfs_fs(void)
++static int __init init_esdfs_fs(void)
+ {
+ 	int err;
+ 
+-	pr_info("Registering wrapfs " WRAPFS_VERSION "\n");
++	pr_info("Registering esdfs " ESDFS_VERSION "\n");
+ 
+-	err = wrapfs_init_inode_cache();
++	err = esdfs_init_inode_cache();
+ 	if (err)
+ 		goto out;
+-	err = wrapfs_init_dentry_cache();
++	err = esdfs_init_dentry_cache();
+ 	if (err)
+ 		goto out;
+-	err = register_filesystem(&wrapfs_fs_type);
++	err = register_filesystem(&esdfs_fs_type);
+ out:
+ 	if (err) {
+-		wrapfs_destroy_inode_cache();
+-		wrapfs_destroy_dentry_cache();
++		esdfs_destroy_inode_cache();
++		esdfs_destroy_dentry_cache();
+ 	}
+ 	return err;
+ }
+ 
+-static void __exit exit_wrapfs_fs(void)
++static void __exit exit_esdfs_fs(void)
+ {
+-	wrapfs_destroy_inode_cache();
+-	wrapfs_destroy_dentry_cache();
+-	unregister_filesystem(&wrapfs_fs_type);
+-	pr_info("Completed wrapfs module unload\n");
++	esdfs_destroy_inode_cache();
++	esdfs_destroy_dentry_cache();
++	unregister_filesystem(&esdfs_fs_type);
++	pr_info("Completed esdfs module unload\n");
+ }
+ 
+ MODULE_AUTHOR("Erez Zadok, Filesystems and Storage Lab, Stony Brook University"
+ 	      " (http://www.fsl.cs.sunysb.edu/)");
+-MODULE_DESCRIPTION("Wrapfs " WRAPFS_VERSION
+-		   " (http://wrapfs.filesystems.org/)");
++MODULE_DESCRIPTION("Wrapfs " ESDFS_VERSION
++		   " (http://esdfs.filesystems.org/)");
+ MODULE_LICENSE("GPL");
+ 
+-module_init(init_wrapfs_fs);
+-module_exit(exit_wrapfs_fs);
++module_init(init_esdfs_fs);
++module_exit(exit_esdfs_fs);
+diff --git a/fs/wrapfs/mmap.c b/fs/esdfs/mmap.c
+similarity index 74%
+rename from fs/wrapfs/mmap.c
+rename to fs/esdfs/mmap.c
+index a1fefada516..461b28fce9d 100644
+--- a/fs/wrapfs/mmap.c
++++ b/fs/esdfs/mmap.c
+@@ -9,9 +9,9 @@
+  * published by the Free Software Foundation.
+  */
+ 
+-#include "wrapfs.h"
++#include "esdfs.h"
+ 
+-static int wrapfs_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
++static int esdfs_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+ {
+ 	int err;
+ 	struct file *file, *lower_file;
+@@ -20,14 +20,14 @@ static int wrapfs_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+ 
+ 	memcpy(&lower_vma, vma, sizeof(struct vm_area_struct));
+ 	file = lower_vma.vm_file;
+-	lower_vm_ops = WRAPFS_F(file)->lower_vm_ops;
++	lower_vm_ops = ESDFS_F(file)->lower_vm_ops;
+ 	BUG_ON(!lower_vm_ops);
+ 
+-	lower_file = wrapfs_lower_file(file);
++	lower_file = esdfs_lower_file(file);
+ 	/*
+ 	 * XXX: vm_ops->fault may be called in parallel.  Because we have to
+ 	 * resort to temporarily changing the vma->vm_file to point to the
+-	 * lower file, a concurrent invocation of wrapfs_fault could see a
++	 * lower file, a concurrent invocation of esdfs_fault could see a
+ 	 * different value.  In this workaround, we keep a different copy of
+ 	 * the vma structure in our stack, so we never expose a different
+ 	 * value of the vma->vm_file called to us, even temporarily.  A
+@@ -40,14 +40,14 @@ static int wrapfs_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+ }
+ 
+ /*
+- * XXX: the default address_space_ops for wrapfs is empty.  We cannot set
++ * XXX: the default address_space_ops for esdfs is empty.  We cannot set
+  * our inode->i_mapping->a_ops to NULL because too many code paths expect
+  * the a_ops vector to be non-NULL.
+  */
+-const struct address_space_operations wrapfs_aops = {
++const struct address_space_operations esdfs_aops = {
+ 	/* empty on purpose */
+ };
+ 
+-const struct vm_operations_struct wrapfs_vm_ops = {
+-	.fault		= wrapfs_fault,
++const struct vm_operations_struct esdfs_vm_ops = {
++	.fault		= esdfs_fault,
+ };
+diff --git a/fs/wrapfs/super.c b/fs/esdfs/super.c
+similarity index 57%
+rename from fs/wrapfs/super.c
+rename to fs/esdfs/super.c
+index 4e78840e157..896734d965e 100644
+--- a/fs/wrapfs/super.c
++++ b/fs/esdfs/super.c
+@@ -9,44 +9,44 @@
+  * published by the Free Software Foundation.
+  */
+ 
+-#include "wrapfs.h"
++#include "esdfs.h"
+ 
+ /*
+  * The inode cache is used with alloc_inode for both our inode info and the
+  * vfs inode.
+  */
+-static struct kmem_cache *wrapfs_inode_cachep;
++static struct kmem_cache *esdfs_inode_cachep;
+ 
+ /* final actions when unmounting a file system */
+-static void wrapfs_put_super(struct super_block *sb)
++static void esdfs_put_super(struct super_block *sb)
+ {
+-	struct wrapfs_sb_info *spd;
++	struct esdfs_sb_info *spd;
+ 	struct super_block *s;
+ 
+-	spd = WRAPFS_SB(sb);
++	spd = ESDFS_SB(sb);
+ 	if (!spd)
+ 		return;
+ 
+ 	/* decrement lower super references */
+-	s = wrapfs_lower_super(sb);
+-	wrapfs_set_lower_super(sb, NULL);
++	s = esdfs_lower_super(sb);
++	esdfs_set_lower_super(sb, NULL);
+ 	atomic_dec(&s->s_active);
+ 
+ 	kfree(spd);
+ 	sb->s_fs_info = NULL;
+ }
+ 
+-static int wrapfs_statfs(struct dentry *dentry, struct kstatfs *buf)
++static int esdfs_statfs(struct dentry *dentry, struct kstatfs *buf)
+ {
+ 	int err;
+ 	struct path lower_path;
+ 
+-	wrapfs_get_lower_path(dentry, &lower_path);
++	esdfs_get_lower_path(dentry, &lower_path);
+ 	err = vfs_statfs(&lower_path, buf);
+-	wrapfs_put_lower_path(dentry, &lower_path);
++	esdfs_put_lower_path(dentry, &lower_path);
+ 
+ 	/* set return buf to our f/s to avoid confusing user-level utils */
+-	buf->f_type = WRAPFS_SUPER_MAGIC;
++	buf->f_type = ESDFS_SUPER_MAGIC;
+ 
+ 	return err;
+ }
+@@ -55,7 +55,7 @@ static int wrapfs_statfs(struct dentry *dentry, struct kstatfs *buf)
+  * @flags: numeric mount options
+  * @options: mount options string
+  */
+-static int wrapfs_remount_fs(struct super_block *sb, int *flags, char *options)
++static int esdfs_remount_fs(struct super_block *sb, int *flags, char *options)
+ {
+ 	int err = 0;
+ 
+@@ -66,7 +66,7 @@ static int wrapfs_remount_fs(struct super_block *sb, int *flags, char *options)
+ 	 */
+ 	if ((*flags & ~(MS_RDONLY | MS_MANDLOCK | MS_SILENT)) != 0) {
+ 		printk(KERN_ERR
+-		       "wrapfs: remount flags 0x%x unsupported\n", *flags);
++		       "esdfs: remount flags 0x%x unsupported\n", *flags);
+ 		err = -EINVAL;
+ 	}
+ 
+@@ -79,7 +79,7 @@ static int wrapfs_remount_fs(struct super_block *sb, int *flags, char *options)
+  * that needs to be, before the inode is completely destroyed and put
+  * on the inode free list.
+  */
+-static void wrapfs_evict_inode(struct inode *inode)
++static void esdfs_evict_inode(struct inode *inode)
+ {
+ 	struct inode *lower_inode;
+ 
+@@ -89,80 +89,80 @@ static void wrapfs_evict_inode(struct inode *inode)
+ 	 * Decrement a reference to a lower_inode, which was incremented
+ 	 * by our read_inode when it was created initially.
+ 	 */
+-	lower_inode = wrapfs_lower_inode(inode);
+-	wrapfs_set_lower_inode(inode, NULL);
++	lower_inode = esdfs_lower_inode(inode);
++	esdfs_set_lower_inode(inode, NULL);
+ 	iput(lower_inode);
+ }
+ 
+-static struct inode *wrapfs_alloc_inode(struct super_block *sb)
++static struct inode *esdfs_alloc_inode(struct super_block *sb)
+ {
+-	struct wrapfs_inode_info *i;
++	struct esdfs_inode_info *i;
+ 
+-	i = kmem_cache_alloc(wrapfs_inode_cachep, GFP_KERNEL);
++	i = kmem_cache_alloc(esdfs_inode_cachep, GFP_KERNEL);
+ 	if (!i)
+ 		return NULL;
+ 
+ 	/* memset everything up to the inode to 0 */
+-	memset(i, 0, offsetof(struct wrapfs_inode_info, vfs_inode));
++	memset(i, 0, offsetof(struct esdfs_inode_info, vfs_inode));
+ 
+ 	i->vfs_inode.i_version = 1;
+ 	return &i->vfs_inode;
+ }
+ 
+-static void wrapfs_destroy_inode(struct inode *inode)
++static void esdfs_destroy_inode(struct inode *inode)
+ {
+-	kmem_cache_free(wrapfs_inode_cachep, WRAPFS_I(inode));
++	kmem_cache_free(esdfs_inode_cachep, ESDFS_I(inode));
+ }
+ 
+-/* wrapfs inode cache constructor */
++/* esdfs inode cache constructor */
+ static void init_once(void *obj)
+ {
+-	struct wrapfs_inode_info *i = obj;
++	struct esdfs_inode_info *i = obj;
+ 
+ 	inode_init_once(&i->vfs_inode);
+ }
+ 
+-int wrapfs_init_inode_cache(void)
++int esdfs_init_inode_cache(void)
+ {
+ 	int err = 0;
+ 
+-	wrapfs_inode_cachep =
+-		kmem_cache_create("wrapfs_inode_cache",
+-				  sizeof(struct wrapfs_inode_info), 0,
++	esdfs_inode_cachep =
++		kmem_cache_create("esdfs_inode_cache",
++				  sizeof(struct esdfs_inode_info), 0,
+ 				  SLAB_RECLAIM_ACCOUNT, init_once);
+-	if (!wrapfs_inode_cachep)
++	if (!esdfs_inode_cachep)
+ 		err = -ENOMEM;
+ 	return err;
+ }
+ 
+-/* wrapfs inode cache destructor */
+-void wrapfs_destroy_inode_cache(void)
++/* esdfs inode cache destructor */
++void esdfs_destroy_inode_cache(void)
+ {
+-	if (wrapfs_inode_cachep)
+-		kmem_cache_destroy(wrapfs_inode_cachep);
++	if (esdfs_inode_cachep)
++		kmem_cache_destroy(esdfs_inode_cachep);
+ }
+ 
+ /*
+  * Used only in nfs, to kill any pending RPC tasks, so that subsequent
+  * code can actually succeed and won't leave tasks that need handling.
+  */
+-static void wrapfs_umount_begin(struct super_block *sb)
++static void esdfs_umount_begin(struct super_block *sb)
+ {
+ 	struct super_block *lower_sb;
+ 
+-	lower_sb = wrapfs_lower_super(sb);
++	lower_sb = esdfs_lower_super(sb);
+ 	if (lower_sb && lower_sb->s_op && lower_sb->s_op->umount_begin)
+ 		lower_sb->s_op->umount_begin(lower_sb);
+ }
+ 
+-const struct super_operations wrapfs_sops = {
+-	.put_super	= wrapfs_put_super,
+-	.statfs		= wrapfs_statfs,
+-	.remount_fs	= wrapfs_remount_fs,
+-	.evict_inode	= wrapfs_evict_inode,
+-	.umount_begin	= wrapfs_umount_begin,
++const struct super_operations esdfs_sops = {
++	.put_super	= esdfs_put_super,
++	.statfs		= esdfs_statfs,
++	.remount_fs	= esdfs_remount_fs,
++	.evict_inode	= esdfs_evict_inode,
++	.umount_begin	= esdfs_umount_begin,
+ 	.show_options	= generic_show_options,
+-	.alloc_inode	= wrapfs_alloc_inode,
+-	.destroy_inode	= wrapfs_destroy_inode,
++	.alloc_inode	= esdfs_alloc_inode,
++	.destroy_inode	= esdfs_destroy_inode,
+ 	.drop_inode	= generic_delete_inode,
+ };
+diff --git a/fs/wrapfs/Kconfig b/fs/wrapfs/Kconfig
+deleted file mode 100644
+index a495c7d05d2..00000000000
+--- a/fs/wrapfs/Kconfig
++++ /dev/null
+@@ -1,8 +0,0 @@
+-config WRAP_FS
+-	tristate "Wrapfs stackable file system (EXPERIMENTAL)"
+-	help
+-	  Wrapfs is a stackable file system which simply passes its
+-	  operations to the lower layer.  It is designed as a useful
+-	  template for developing or debugging other stackable file systems,
+-	  and more (see Documentation/filesystems/wrapfs.txt).  See
+-	  <http://wrapfs.filesystems.org/> for details.
+diff --git a/fs/wrapfs/Makefile b/fs/wrapfs/Makefile
+deleted file mode 100644
+index f318d111c21..00000000000
+--- a/fs/wrapfs/Makefile
++++ /dev/null
+@@ -1,7 +0,0 @@
+-WRAPFS_VERSION="0.1"
+-
+-EXTRA_CFLAGS += -DWRAPFS_VERSION=\"$(WRAPFS_VERSION)\"
+-
+-obj-$(CONFIG_WRAP_FS) += wrapfs.o
+-
+-wrapfs-y := dentry.o file.o inode.o main.o super.o lookup.o mmap.o
+diff --git a/fs/wrapfs/wrapfs.h b/fs/wrapfs/wrapfs.h
+deleted file mode 100644
+index e4998d7d857..00000000000
+--- a/fs/wrapfs/wrapfs.h
++++ /dev/null
+@@ -1,205 +0,0 @@
+-/*
+- * Copyright (c) 1998-2014 Erez Zadok
+- * Copyright (c) 2009	   Shrikar Archak
+- * Copyright (c) 2003-2014 Stony Brook University
+- * Copyright (c) 2003-2014 The Research Foundation of SUNY
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License version 2 as
+- * published by the Free Software Foundation.
+- */
+-
+-#ifndef _WRAPFS_H_
+-#define _WRAPFS_H_
+-
+-#include <linux/dcache.h>
+-#include <linux/file.h>
+-#include <linux/fs.h>
+-#include <linux/mm.h>
+-#include <linux/mount.h>
+-#include <linux/namei.h>
+-#include <linux/seq_file.h>
+-#include <linux/statfs.h>
+-#include <linux/fs_stack.h>
+-#include <linux/magic.h>
+-#include <linux/uaccess.h>
+-#include <linux/slab.h>
+-#include <linux/sched.h>
+-
+-/* the file system name */
+-#define WRAPFS_NAME "wrapfs"
+-
+-/* wrapfs root inode number */
+-#define WRAPFS_ROOT_INO     1
+-
+-/* useful for tracking code reachability */
+-#define UDBG printk(KERN_DEFAULT "DBG:%s:%s:%d\n", __FILE__, __func__, __LINE__)
+-
+-/* operations vectors defined in specific files */
+-extern const struct file_operations wrapfs_main_fops;
+-extern const struct file_operations wrapfs_dir_fops;
+-extern const struct inode_operations wrapfs_main_iops;
+-extern const struct inode_operations wrapfs_dir_iops;
+-extern const struct inode_operations wrapfs_symlink_iops;
+-extern const struct super_operations wrapfs_sops;
+-extern const struct dentry_operations wrapfs_dops;
+-extern const struct address_space_operations wrapfs_aops, wrapfs_dummy_aops;
+-extern const struct vm_operations_struct wrapfs_vm_ops;
+-
+-extern int wrapfs_init_inode_cache(void);
+-extern void wrapfs_destroy_inode_cache(void);
+-extern int wrapfs_init_dentry_cache(void);
+-extern void wrapfs_destroy_dentry_cache(void);
+-extern int new_dentry_private_data(struct dentry *dentry);
+-extern void free_dentry_private_data(struct dentry *dentry);
+-extern int init_lower_nd(struct nameidata *nd, unsigned int flags);
+-extern struct dentry *wrapfs_lookup(struct inode *dir, struct dentry *dentry,
+-				    unsigned int flags);
+-extern struct inode *wrapfs_iget(struct super_block *sb,
+-				 struct inode *lower_inode);
+-extern int wrapfs_interpose(struct dentry *dentry, struct super_block *sb,
+-			    struct path *lower_path);
+-
+-/* file private data */
+-struct wrapfs_file_info {
+-	struct file *lower_file;
+-	const struct vm_operations_struct *lower_vm_ops;
+-};
+-
+-/* wrapfs inode data in memory */
+-struct wrapfs_inode_info {
+-	struct inode *lower_inode;
+-	struct inode vfs_inode;
+-};
+-
+-/* wrapfs dentry data in memory */
+-struct wrapfs_dentry_info {
+-	spinlock_t lock;	/* protects lower_path */
+-	struct path lower_path;
+-};
+-
+-/* wrapfs super-block data in memory */
+-struct wrapfs_sb_info {
+-	struct super_block *lower_sb;
+-};
+-
+-/*
+- * inode to private data
+- *
+- * Since we use containers and the struct inode is _inside_ the
+- * wrapfs_inode_info structure, WRAPFS_I will always (given a non-NULL
+- * inode pointer), return a valid non-NULL pointer.
+- */
+-static inline struct wrapfs_inode_info *WRAPFS_I(const struct inode *inode)
+-{
+-	return container_of(inode, struct wrapfs_inode_info, vfs_inode);
+-}
+-
+-/* dentry to private data */
+-#define WRAPFS_D(dent) ((struct wrapfs_dentry_info *)(dent)->d_fsdata)
+-
+-/* superblock to private data */
+-#define WRAPFS_SB(super) ((struct wrapfs_sb_info *)(super)->s_fs_info)
+-
+-/* file to private Data */
+-#define WRAPFS_F(file) ((struct wrapfs_file_info *)((file)->private_data))
+-
+-/* file to lower file */
+-static inline struct file *wrapfs_lower_file(const struct file *f)
+-{
+-	return WRAPFS_F(f)->lower_file;
+-}
+-
+-static inline void wrapfs_set_lower_file(struct file *f, struct file *val)
+-{
+-	WRAPFS_F(f)->lower_file = val;
+-}
+-
+-/* inode to lower inode. */
+-static inline struct inode *wrapfs_lower_inode(const struct inode *i)
+-{
+-	return WRAPFS_I(i)->lower_inode;
+-}
+-
+-static inline void wrapfs_set_lower_inode(struct inode *i, struct inode *val)
+-{
+-	WRAPFS_I(i)->lower_inode = val;
+-}
+-
+-/* superblock to lower superblock */
+-static inline struct super_block *wrapfs_lower_super(
+-	const struct super_block *sb)
+-{
+-	return WRAPFS_SB(sb)->lower_sb;
+-}
+-
+-static inline void wrapfs_set_lower_super(struct super_block *sb,
+-					  struct super_block *val)
+-{
+-	WRAPFS_SB(sb)->lower_sb = val;
+-}
+-
+-/* path based (dentry/mnt) macros */
+-static inline void pathcpy(struct path *dst, const struct path *src)
+-{
+-	dst->dentry = src->dentry;
+-	dst->mnt = src->mnt;
+-}
+-/* Returns struct path.  Caller must path_put it. */
+-static inline void wrapfs_get_lower_path(const struct dentry *dent,
+-					 struct path *lower_path)
+-{
+-	spin_lock(&WRAPFS_D(dent)->lock);
+-	pathcpy(lower_path, &WRAPFS_D(dent)->lower_path);
+-	path_get(lower_path);
+-	spin_unlock(&WRAPFS_D(dent)->lock);
+-	return;
+-}
+-static inline void wrapfs_put_lower_path(const struct dentry *dent,
+-					 struct path *lower_path)
+-{
+-	path_put(lower_path);
+-	return;
+-}
+-static inline void wrapfs_set_lower_path(const struct dentry *dent,
+-					 struct path *lower_path)
+-{
+-	spin_lock(&WRAPFS_D(dent)->lock);
+-	pathcpy(&WRAPFS_D(dent)->lower_path, lower_path);
+-	spin_unlock(&WRAPFS_D(dent)->lock);
+-	return;
+-}
+-static inline void wrapfs_reset_lower_path(const struct dentry *dent)
+-{
+-	spin_lock(&WRAPFS_D(dent)->lock);
+-	WRAPFS_D(dent)->lower_path.dentry = NULL;
+-	WRAPFS_D(dent)->lower_path.mnt = NULL;
+-	spin_unlock(&WRAPFS_D(dent)->lock);
+-	return;
+-}
+-static inline void wrapfs_put_reset_lower_path(const struct dentry *dent)
+-{
+-	struct path lower_path;
+-	spin_lock(&WRAPFS_D(dent)->lock);
+-	pathcpy(&lower_path, &WRAPFS_D(dent)->lower_path);
+-	WRAPFS_D(dent)->lower_path.dentry = NULL;
+-	WRAPFS_D(dent)->lower_path.mnt = NULL;
+-	spin_unlock(&WRAPFS_D(dent)->lock);
+-	path_put(&lower_path);
+-	return;
+-}
+-
+-/* locking helpers */
+-static inline struct dentry *lock_parent(struct dentry *dentry)
+-{
+-	struct dentry *dir = dget_parent(dentry);
+-	mutex_lock_nested(&dir->d_inode->i_mutex, I_MUTEX_PARENT);
+-	return dir;
+-}
+-
+-static inline void unlock_dir(struct dentry *dir)
+-{
+-	mutex_unlock(&dir->d_inode->i_mutex);
+-	dput(dir);
+-}
+-#endif	/* not _WRAPFS_H_ */
+diff --git a/include/uapi/linux/magic.h b/include/uapi/linux/magic.h
+index 70d8dcec09f..1e259938cb9 100644
+--- a/include/uapi/linux/magic.h
++++ b/include/uapi/linux/magic.h
+@@ -54,7 +54,7 @@
+ 
+ #define SDCARDFS_SUPER_MAGIC	0x5dca2df5
+ 
+-#define WRAPFS_SUPER_MAGIC	0xb550ca10
++#define ESDFS_SUPER_MAGIC	0xb550ca10
+ 
+ #define SMB_SUPER_MAGIC		0x517B
+ #define CGROUP_SUPER_MAGIC	0x27e0eb
+-- 
+2.11.0
+

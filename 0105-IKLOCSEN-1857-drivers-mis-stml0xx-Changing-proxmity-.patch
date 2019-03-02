@@ -1,0 +1,39 @@
+From 167dd4b04acd67d72225273d48553186165f6d88 Mon Sep 17 00:00:00 2001
+From: mguntaka <mguntaka@motorola.com>
+Date: Fri, 5 Dec 2014 16:15:17 -0600
+Subject: [PATCH 105/959] IKLOCSEN-1857:drivers:mis:stml0xx:Changing proxmity
+ settings values
+
+This change is intended to increase sensitivity of proximity
+distance sensing
+
+Change-Id: Idd6a8cb091310955bab9dd2cc05cac24d1e08a1e
+Signed-off-by: mguntaka <mguntaka@motorola.com>
+Reviewed-on: http://gerrit.mot.com/695665
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Vladimir Karpovich <vkarpovich@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 7a802bb600d..f79ca38e5a1 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -394,8 +394,8 @@ static struct stml0xx_platform_data *stml0xx_of_init(struct spi_device *spi)
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Not using stml0xx_fw_version override");
+ 
+-	pdata->ct406_detect_threshold = 0x006E;
+-	pdata->ct406_undetect_threshold = 0x0050;
++	pdata->ct406_detect_threshold = 0x00C8;
++	pdata->ct406_undetect_threshold = 0x00A5;
+ 	pdata->ct406_recalibrate_threshold = 0x0064;
+ 	pdata->ct406_pulse_count = 0x04;
+ 	of_property_read_u32(np, "ct406_detect_threshold",
+-- 
+2.11.0
+

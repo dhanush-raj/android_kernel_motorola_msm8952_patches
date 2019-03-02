@@ -1,0 +1,151 @@
+From d75e6637ed171a8c45d89e0c6ff5ead5cee02df8 Mon Sep 17 00:00:00 2001
+From: Andrew Wheeler <awheeler@motorola.com>
+Date: Wed, 6 Jan 2016 16:05:47 -0600
+Subject: [PATCH 585/959] IKQCOMSD1-3112 Revert "power: qpnp-smbcharger: Add
+ support for detecting damaged battery"
+
+NULL pointer exception at bootup if we include this commit.  It appears
+to make dts changes that are not compatible with our driver.
+
+This reverts commit aa5c358830247511f8cc842de205f8172d84da81.
+
+Change-Id: I659a03492a395e710d862439076096744709d873
+---
+ .../devicetree/bindings/power/qpnp-smbcharger.txt  |  6 ++---
+ arch/arm/boot/dts/qcom/msm-pmi8950.dtsi            |  2 +-
+ arch/arm/boot/dts/qcom/msm-pmi8994.dtsi            |  2 +-
+ drivers/power/qpnp-smbcharger.c                    | 29 ++++++----------------
+ 4 files changed, 12 insertions(+), 27 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/power/qpnp-smbcharger.txt b/Documentation/devicetree/bindings/power/qpnp-smbcharger.txt
+index 4b140a99949..c70244b7fad 100644
+--- a/Documentation/devicetree/bindings/power/qpnp-smbcharger.txt
++++ b/Documentation/devicetree/bindings/power/qpnp-smbcharger.txt
+@@ -18,7 +18,7 @@ end of this file.
+ 			limiting configuration.
+ - qcom,dc-chgpth:	DC charge path detection and input current
+ 			limiting configuration.
+-- qcom,chg-misc:	Miscellaneous features such as watchdog timers
++- qcom,chg-misc:	Miscellaneous features such as safety timers
+ 			and SYSOK pin control
+ - qcom,chg-otg:		OTG configuration control.
+ 
+@@ -86,7 +86,7 @@ Sub node required properties:
+ 						valid threshold.
+ 
+ 			qcom,chgr-misc:
+-			 - wdog-timeout-mins:	Charger watchdog timer
++			 - safety-timeout-mins:	Charger watchdog timer
+ 						interrupt.
+ 			 - temp-shutdown:	Triggers when charger goes
+ 						overtemp and causes a shutdown.
+@@ -404,7 +404,7 @@ Example:
+ 
+ 			interrupt-names =	"power-ok",
+ 						"temp-shutdown",
+-						"wdog-timeout",
++						"safety-timeout",
+ 						"flash-fail",
+ 						"otst2",
+ 						"otst3";
+diff --git a/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi b/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi
+index af8a7f12b19..23865dc8738 100644
+--- a/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi
++++ b/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi
+@@ -298,7 +298,7 @@
+ 
+ 				interrupt-names =	"power-ok",
+ 							"temp-shutdown",
+-							"wdog-timeout",
++							"safety-timeout",
+ 							"flash-fail",
+ 							"otst2",
+ 							"otst3";
+diff --git a/arch/arm/boot/dts/qcom/msm-pmi8994.dtsi b/arch/arm/boot/dts/qcom/msm-pmi8994.dtsi
+index f66689e5767..b1419a3249f 100644
+--- a/arch/arm/boot/dts/qcom/msm-pmi8994.dtsi
++++ b/arch/arm/boot/dts/qcom/msm-pmi8994.dtsi
+@@ -296,7 +296,7 @@
+ 
+ 				interrupt-names =	"power-ok",
+ 							"temp-shutdown",
+-							"wdog-timeout",
++							"safety-timeout",
+ 							"flash-fail",
+ 							"otst2",
+ 							"otst3";
+diff --git a/drivers/power/qpnp-smbcharger.c b/drivers/power/qpnp-smbcharger.c
+index 19b48d16099..f2677cdb012 100644
+--- a/drivers/power/qpnp-smbcharger.c
++++ b/drivers/power/qpnp-smbcharger.c
+@@ -221,7 +221,7 @@ struct smbchg_chip {
+ 	struct mutex			taper_irq_lock;
+ 	int				recharge_irq;
+ 	int				fastchg_irq;
+-	int				wdog_timeout_irq;
++	int				safety_timeout_irq;
+ 	int				power_ok_irq;
+ 	int				dcin_uv_irq;
+ 	int				usbin_uv_irq;
+@@ -6127,26 +6127,11 @@ static irqreturn_t vbat_low_handler(int irq, void *_chip)
+ 	return IRQ_HANDLED;
+ }
+ 
+-#define CHG_COMP_SFT_BIT	BIT(3)
+ static irqreturn_t chg_error_handler(int irq, void *_chip)
+ {
+ 	struct smbchg_chip *chip = _chip;
+-	int rc = 0;
+-	u8 reg;
+ 
+ 	pr_smb(PR_INTERRUPT, "chg-error triggered\n");
+-
+-	rc = smbchg_read(chip, &reg, chip->chgr_base + RT_STS, 1);
+-	if (rc < 0) {
+-		dev_err(chip->dev, "Unable to read RT_STS rc = %d\n", rc);
+-	} else {
+-		pr_smb(PR_INTERRUPT, "triggered: 0x%02x\n", reg);
+-		if (reg & CHG_COMP_SFT_BIT)
+-			set_property_on_fg(chip,
+-					POWER_SUPPLY_PROP_SAFETY_TIMER_EXPIRED,
+-					1);
+-	}
+-
+ 	smbchg_parallel_usb_check_ok(chip);
+ 	if (chip->psy_registered)
+ 		power_supply_changed(&chip->batt_psy);
+@@ -6240,13 +6225,13 @@ static irqreturn_t recharge_handler(int irq, void *_chip)
+ 	return IRQ_HANDLED;
+ }
+ 
+-static irqreturn_t wdog_timeout_handler(int irq, void *_chip)
++static irqreturn_t safety_timeout_handler(int irq, void *_chip)
+ {
+ 	struct smbchg_chip *chip = _chip;
+ 	u8 reg = 0;
+ 
+ 	smbchg_read(chip, &reg, chip->misc_base + RT_STS, 1);
+-	pr_warn_ratelimited("wdog timeout rt_stat = 0x%02x\n", reg);
++	pr_warn_ratelimited("safety timeout rt_stat = 0x%02x\n", reg);
+ 	if (chip->psy_registered)
+ 		power_supply_changed(&chip->batt_psy);
+ 	smbchg_charging_status_change(chip);
+@@ -7610,11 +7595,11 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
+ 			REQUEST_IRQ(chip, spmi_resource, chip->chg_hot_irq,
+ 				"temp-shutdown", chg_hot_handler, flags, rc);
+ 			REQUEST_IRQ(chip, spmi_resource,
+-				chip->wdog_timeout_irq,
+-				"wdog-timeout",
+-				wdog_timeout_handler, flags, rc);
++				chip->safety_timeout_irq,
++				"safety-timeout",
++				safety_timeout_handler, flags, rc);
+ 			enable_irq_wake(chip->chg_hot_irq);
+-			enable_irq_wake(chip->wdog_timeout_irq);
++			enable_irq_wake(chip->safety_timeout_irq);
+ 			break;
+ 		case SMBCHG_OTG_SUBTYPE:
+ 			break;
+-- 
+2.11.0
+

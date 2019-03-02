@@ -1,0 +1,36 @@
+From caffa62b1a72700276bf4ae82758527915bd4093 Mon Sep 17 00:00:00 2001
+From: Sridhar Vashist <svashist@motorola.com>
+Date: Thu, 29 Oct 2015 15:24:54 -0500
+Subject: [PATCH 427/959] IKQCOMSD1-3017: ASoC: wch-mbhc: disable mbhc by
+ default.
+
+Disable QC mbhc by default as Mot products dont use it.
+
+Change-Id: I57f2b3115bee3dfe7f16e6ba0f9b899dbe862c12
+Signed-off-by: Sridhar Vashist <svashist@motorola.com>
+Reviewed-on: http://gerrit.mot.com/795892
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jonathan Eklund <jeklund@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/codecs/Kconfig | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/sound/soc/codecs/Kconfig b/sound/soc/codecs/Kconfig
+index 8ee2b1bf868..7475ff1a17f 100644
+--- a/sound/soc/codecs/Kconfig
++++ b/sound/soc/codecs/Kconfig
+@@ -405,7 +405,6 @@ config AUDIO_EXT_CLK
+ 
+ config SND_SOC_WCD_MBHC
+ 	tristate
+-	default y if SND_SOC_MSM8909_WCD=y || SND_SOC_MSM8X16_WCD=y
+ 
+ config SND_SOC_WL1273
+ 	tristate
+-- 
+2.11.0
+

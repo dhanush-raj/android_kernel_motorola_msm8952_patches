@@ -1,0 +1,56 @@
+From d4fcfa56e567a5c8e9490541938d89acb9477d2c Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Wed, 20 Jan 2016 11:27:40 -0800
+Subject: [PATCH 637/959] IKSWM-17394: mmc: skip the request which is not
+ tagged yet
+
+  When CMDQ meets errors, it will try to reset cmdq hw and
+  re-put the busy request into request_queue. Meanwhile, the
+  mmc_cmdq thread may have get the request and try to process it.
+  Requeue the request will change the request tag to an invalid value,
+  which will cause the mmc_blk_cmdq_issue_rq triiger a kernel panic.
+
+ Solution:
+   Skip all the requestes that have just been requeued(not tagged)
+   by error handler. Those requestes will be re-picked by mmc_cmdq
+   thread in next run.
+
+Change-Id: I68ef8315e3fa5499c24fdfcc67110009a3d901c4
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/814747
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sheng-Zhe Zhao <a18689@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/mmc/card/block.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/mmc/card/block.c b/drivers/mmc/card/block.c
+index 129e30b6aba..1c6926f5e88 100644
+--- a/drivers/mmc/card/block.c
++++ b/drivers/mmc/card/block.c
+@@ -2950,6 +2950,9 @@ static int mmc_blk_cmdq_issue_rw_rq(struct mmc_queue *mq, struct request *req)
+ 		spin_unlock_bh(&host->clk_scaling.lock);
+ 	}
+ 
++	if (!blk_rq_tagged(req))
++		return 0;
++
+ 	BUG_ON(test_and_set_bit(req->tag, &host->cmdq_ctx.data_active_reqs));
+ 	BUG_ON((req->tag < 0) || (req->tag > card->ext_csd.cmdq_depth));
+ 	BUG_ON(test_and_set_bit(req->tag, &host->cmdq_ctx.active_reqs));
+@@ -3699,7 +3702,7 @@ static int mmc_blk_cmdq_issue_rq(struct mmc_queue *mq, struct request *req)
+ 			ret = mmc_blk_cmdq_issue_discard_rq(mq, req);
+ 	} else if (cmd_flags & REQ_FLUSH) {
+ 		ret = mmc_blk_cmdq_issue_flush_rq(mq, req);
+-	} else {
++	} else if (cmd_flags & REQ_QUEUED) {
+ 		ret = mmc_blk_cmdq_issue_rw_rq(mq, req);
+ 	}
+ 
+-- 
+2.11.0
+

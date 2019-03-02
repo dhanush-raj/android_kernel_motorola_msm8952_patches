@@ -1,0 +1,251 @@
+From f19ae59df0954ced366046cf1674a529f04c8f7f Mon Sep 17 00:00:00 2001
+From: Yuanyuan Zhong <zyy@motorola.com>
+Date: Thu, 13 Mar 2014 10:43:30 -0500
+Subject: [PATCH 191/959] IKSWM-4458 msm: mmi: export pvs bin info
+
+Export PVS Bin to /proc/cpu/msm_acpu_pvs.
+This is ported from:
+    IKKRNBSP-1618: arm: msm: mmi: add socinfo to panic log
+    IKKRNBSP-2127 msm: mmi: export pvs bin info
+Function to export socinfo to panic log is removed. Will add it back
+when panic logging is ready.
+
+Change-Id: I91d26212d9912ab636caf5c76041fb320bc3a605
+Signed-off-by: Yuanyuan Zhong <zyy@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/617758
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/clk/qcom/clock-a7.c         |   3 +
+ drivers/clk/qcom/clock-krait-8974.c |   2 +
+ drivers/soc/qcom/Kconfig            |   6 ++
+ drivers/soc/qcom/Makefile           |   1 +
+ drivers/soc/qcom/mmi_soc_info.c     | 113 ++++++++++++++++++++++++++++++++++++
+ include/soc/qcom/mmi_soc_info.h     |  27 +++++++++
+ 6 files changed, 152 insertions(+)
+ create mode 100644 drivers/soc/qcom/mmi_soc_info.c
+ create mode 100644 include/soc/qcom/mmi_soc_info.h
+
+diff --git a/drivers/clk/qcom/clock-a7.c b/drivers/clk/qcom/clock-a7.c
+index 6fc6db4659a..bd9a8425492 100644
+--- a/drivers/clk/qcom/clock-a7.c
++++ b/drivers/clk/qcom/clock-a7.c
+@@ -29,6 +29,7 @@
+ #include <linux/pm_opp.h>
+ #include <soc/qcom/clock-local2.h>
+ #include <dt-bindings/clock/msm-clocks-a7.h>
++#include <soc/qcom/mmi_soc_info.h>
+ 
+ #include "clock.h"
+ 
+@@ -409,6 +410,8 @@ static int clock_a7_probe(struct platform_device *pdev)
+ 	else
+ 		get_speed_bin(pdev, &speed_bin, &version);
+ 
++	mmi_acpu_bin_set(&speed_bin, NULL, &version);
++
+ 	snprintf(prop_name, ARRAY_SIZE(prop_name),
+ 			"qcom,speed%d-bin-v%d", speed_bin, version);
+ 	rc = of_get_fmax_vdd_class(pdev, &a7ssmux.c, prop_name);
+diff --git a/drivers/clk/qcom/clock-krait-8974.c b/drivers/clk/qcom/clock-krait-8974.c
+index 299a68cdd5f..e532c213b00 100644
+--- a/drivers/clk/qcom/clock-krait-8974.c
++++ b/drivers/clk/qcom/clock-krait-8974.c
+@@ -27,6 +27,7 @@
+ #include <linux/clk/msm-clock-generic.h>
+ #include <soc/qcom/clock-local2.h>
+ #include <soc/qcom/clock-krait.h>
++#include <soc/qcom/mmi_soc_info.h>
+ 
+ #include <asm/cputype.h>
+ #include <dt-bindings/clock/msm-clocks-krait.h>
+@@ -791,6 +792,7 @@ static int clock_krait_8974_driver_probe(struct platform_device *pdev)
+ 	}
+ 
+ 	get_krait_bin_format_b(pdev, &speed, &pvs, &svs_pvs, &pvs_ver);
++	mmi_acpu_bin_set(&speed, &pvs, &pvs_ver);
+ 	snprintf(table_name, ARRAY_SIZE(table_name),
+ 			"qcom,speed%d-pvs%d-bin-v%d", speed, pvs, pvs_ver);
+ 
+diff --git a/drivers/soc/qcom/Kconfig b/drivers/soc/qcom/Kconfig
+index 0187895905e..57e11dff11b 100644
+--- a/drivers/soc/qcom/Kconfig
++++ b/drivers/soc/qcom/Kconfig
+@@ -723,4 +723,10 @@ config BOOTINFO
+ 	  from both kernel context (via function call) and user
+ 	  context (via /proc/bootinfo).
+ 
++config MMI_SOC_INFO
++	default n
++	bool "Motorola Mobility SOC Info"
++	help
++	  Provide mechanism to export MSM SOC info.
++
+ endif # ARCH_MSM
+diff --git a/drivers/soc/qcom/Makefile b/drivers/soc/qcom/Makefile
+index d2e55736776..bd6cf32a4c3 100644
+--- a/drivers/soc/qcom/Makefile
++++ b/drivers/soc/qcom/Makefile
+@@ -94,3 +94,4 @@ obj-$(CONFIG_MSM_TEST_PACMAN)        += msm_test_pacman.o
+ obj-$(CONFIG_TRACER_PKT) += tracer_pkt.o
+ obj-$(CONFIG_MSM_VSENS) += vsens.o
+ obj-$(CONFIG_BOOTINFO) += bootinfo.o
++obj-$(CONFIG_MMI_SOC_INFO) += mmi_soc_info.o
+diff --git a/drivers/soc/qcom/mmi_soc_info.c b/drivers/soc/qcom/mmi_soc_info.c
+new file mode 100644
+index 00000000000..20349bccc61
+--- /dev/null
++++ b/drivers/soc/qcom/mmi_soc_info.c
+@@ -0,0 +1,113 @@
++/*
++ * Copyright (C) 2013 - 2014 Motorola Mobility LLC
++ *
++ * This software is licensed under the terms of the GNU General Public
++ * License version 2, as published by the Free Software Foundation, and
++ * may be copied, distributed, and modified under those terms.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#include <linux/module.h>
++#include <linux/proc_fs.h>
++#include <soc/qcom/socinfo.h>
++
++struct mmi_msm_bin {
++	int	set;
++	int	speed;
++	int	pvs;
++	int	ver;
++};
++
++#define MMI_MSM_BIN_INVAL	INT_MAX
++#define ACPU_BIN_SET		BIT(0)
++
++static struct mmi_msm_bin mmi_msm_bin_info;
++static DEFINE_SPINLOCK(mmi_msm_bin_lock);
++
++static inline void mmi_panic_annotate(const char *str)
++{
++}
++
++static ssize_t mmi_acpu_proc_read(struct file *file, char __user *buf,
++				size_t count, loff_t *ppos)
++{
++	int data = (int)PDE_DATA(file_inode(file));
++	char local_buf[8];
++	int len = snprintf(local_buf, 2, "%1x", data);
++
++	return simple_read_from_buffer(buf, count, ppos, local_buf, len);
++}
++
++static const struct file_operations mmi_acpu_proc_fops = {
++	.read = mmi_acpu_proc_read,
++	.llseek = default_llseek,
++};
++
++void mmi_acpu_bin_set(int *speed, int *pvs, int *ver)
++{
++	unsigned long flags;
++
++	spin_lock_irqsave(&mmi_msm_bin_lock, flags);
++	if (mmi_msm_bin_info.set & ACPU_BIN_SET) {
++		spin_unlock_irqrestore(&mmi_msm_bin_lock, flags);
++		return;
++	}
++	mmi_msm_bin_info.speed = speed ? *speed : MMI_MSM_BIN_INVAL;
++	mmi_msm_bin_info.pvs = pvs ? *pvs : MMI_MSM_BIN_INVAL;
++	mmi_msm_bin_info.ver = ver ? *ver : MMI_MSM_BIN_INVAL;
++	mmi_msm_bin_info.set |= ACPU_BIN_SET;
++	spin_unlock_irqrestore(&mmi_msm_bin_lock, flags);
++}
++
++static void __init mmi_msm_acpu_bin_export(void)
++{
++	struct proc_dir_entry *proc;
++	unsigned long flags;
++	char acpu[64];
++
++	spin_lock_irqsave(&mmi_msm_bin_lock, flags);
++	if (!(mmi_msm_bin_info.set & ACPU_BIN_SET)) {
++		spin_unlock_irqrestore(&mmi_msm_bin_lock, flags);
++		pr_err("ACPU Bin is not available.\n");
++		return;
++	}
++	spin_unlock_irqrestore(&mmi_msm_bin_lock, flags);
++
++	mmi_panic_annotate("ACPU: ");
++	if (mmi_msm_bin_info.speed != MMI_MSM_BIN_INVAL) {
++		snprintf(acpu, sizeof(acpu), "Speed bin %d ",
++				mmi_msm_bin_info.speed);
++		mmi_panic_annotate(acpu);
++	}
++	if (mmi_msm_bin_info.pvs != MMI_MSM_BIN_INVAL) {
++		proc = proc_create_data("cpu/msm_acpu_pvs",
++			(S_IFREG | S_IRUGO), NULL,
++			&mmi_acpu_proc_fops, (void *)mmi_msm_bin_info.pvs);
++		if (!proc)
++			pr_err("Failed to create /proc/cpu/msm_acpu_pvs.\n");
++		else
++			proc_set_size(proc, 1);
++		snprintf(acpu, sizeof(acpu), "PVS bin %d ",
++				mmi_msm_bin_info.pvs);
++		mmi_panic_annotate(acpu);
++	}
++	if (mmi_msm_bin_info.ver != MMI_MSM_BIN_INVAL) {
++		snprintf(acpu, sizeof(acpu), "PVS version %d ",
++				mmi_msm_bin_info.ver);
++		mmi_panic_annotate(acpu);
++	}
++	mmi_panic_annotate("\n");
++}
++
++static int __init init_mmi_soc_info(void)
++{
++	mmi_msm_acpu_bin_export();
++	return 0;
++}
++module_init(init_mmi_soc_info);
++MODULE_DESCRIPTION("Motorola Mobility LLC. SOC Info");
++MODULE_LICENSE("GPL v2");
+diff --git a/include/soc/qcom/mmi_soc_info.h b/include/soc/qcom/mmi_soc_info.h
+new file mode 100644
+index 00000000000..cf4135dede0
+--- /dev/null
++++ b/include/soc/qcom/mmi_soc_info.h
+@@ -0,0 +1,27 @@
++/*
++ * Copyright (C) 2014 Motorola Mobility, LLC
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++ * 02111-1307, USA
++ */
++#ifndef __MMI_SOC_INFO_H
++#define __MMI_SOC_INFO_H
++
++#ifdef CONFIG_MMI_SOC_INFO
++void mmi_acpu_bin_set(int *speed, int *pvs, int *ver);
++#else
++static inline void mmi_acpu_bin_set(int *speed, int *pvs, int *ver) { }
++#endif
++
++#endif /* __MMI_SOC_INFO_H */
+-- 
+2.11.0
+

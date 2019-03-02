@@ -1,0 +1,37 @@
+From 7c165f07f34e332427f4969b0b8ef2bcf1911ea2 Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Thu, 14 Jan 2016 23:35:59 -0600
+Subject: [PATCH 619/959] IKSWM-16995: input: misc: vl53l0: parameter setting
+ changes for range freq
+
+before the change the camera case was fixed on 120ms
+
+Change-Id: Ib7f3a9a46e5ef1daa9167515e8aef087cc0f7f6d
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/813583
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Hideki Yoshino <hideki.yoshino@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/vl53L0/stmvl53l0_module.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/drivers/input/misc/vl53L0/stmvl53l0_module.c b/drivers/input/misc/vl53L0/stmvl53l0_module.c
+index 7c09780e6f7..920226cd94e 100644
+--- a/drivers/input/misc/vl53L0/stmvl53l0_module.c
++++ b/drivers/input/misc/vl53L0/stmvl53l0_module.c
+@@ -975,8 +975,6 @@ data->rangeData.MeasurementTimeUsec = tv.tv_usec;
+ wake_up(&data->range_data_wait);
+ 	if (CAM_MODE == data->w_mode) {
+ 		vl53l0_dbgmsg("CAM_MODE\n");
+-		papi_func_tbl->SetMeasurementTimingBudgetMicroSeconds(
+-			data, 120000);
+ 
+ 		if (data->enableDebug)
+ 			vl53l0_errmsg("range:%d, signalRateRtnMegaCps:%d, \
+-- 
+2.11.0
+

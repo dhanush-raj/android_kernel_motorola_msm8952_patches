@@ -1,0 +1,40 @@
+From 1059fcc060756c7c6bbc53aab0646dfb1b9fcb34 Mon Sep 17 00:00:00 2001
+From: wds042 <wds042@motorola.com>
+Date: Fri, 15 Apr 2016 10:32:51 -0300
+Subject: [PATCH 862/959] IKSWM-32189 - Add Amazon (amz) ro.carrier in the
+ kernel table
+
+This is need to support new ro.carrier for Amazon as stated in document
+
+https://docs.google.com/spreadsheets/d/1cFLnFjai0L0q2qvPR6p19GUbBxlx4HoK5JgFc7uqSSI/edit#gid=3
+
+Change-Id: Ic265761294059e5d201ab413f5dbe5b4b68f2e74
+Signed-off-by: wds042 <wds042@motorola.com>
+Reviewed-on: http://gerrit.mot.com/844846
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Tarciano Facco Pegoraro <tarciano@motorola.com>
+Reviewed-by: Eliseu Massing Junior <eliseu@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi b/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
+index ad44866bf37..9e8228bd84e 100644
+--- a/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
++++ b/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
+@@ -161,7 +161,7 @@
+ 		"wndca",	/* 144 */
+ 		"dmc",		/* 145 */
+ 		"bby",  	/* 146 */
+-		"undefined",	/* 147 */
++		"amz",		/* 147 */
+ 		"undefined",	/* 148 */
+ 		"undefined",	/* 149 */
+ 		"undefined",	/* 150 */
+-- 
+2.11.0
+

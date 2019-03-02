@@ -1,0 +1,994 @@
+From c7aadfe750658b97778b86988d732e33420719c2 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Tue, 7 Apr 2015 13:42:08 -0700
+Subject: [PATCH 785/959] IKKRNBSP-3755 msm: memutils: memcpy, memmove,
+ copy_page optimization
+
+1. Preload farther to take advantage of the memory bus, and fit for 64-byte
+   cache lines.
+2. According to tune result, change preload distance as 10 cache lines.
+3. According to tune result, Unroll some pairs of ldm/stm as well.
+4. According to tune result, re-arrange the ld/str order as back-to-back
+   for copy_from_user.
+
+We get 35% to 40% improvement for memcpy, memmove, copy_to_user and
+copy_from_user. The raw data is as below:
+
+BASELINE:
+    ===========================================================================
+    memcpy 1000MB at 2MB       : took 1875465 usec, bandwidth 1066.066 MB/s
+    copy_to_user 1000MB at 2MB : took 1861383 usec, bandwidth 1074.074 MB/s
+    copy_from_user 1000MB at 2M: took 1860940 usec, bandwidth 1074.074 MB/s
+    memmove 1000MB at 2MB      : took 2300831 usec, bandwidth 869.869 MB/s
+    copy_to_user 1000GB at 4kB : took 1896857 usec, bandwidth 1054.054 MB/s
+    copy_from_user 1000GB at 4k: took 1879630 usec, bandwidth 1064.064 MB/s
+    copy_page 1000GB at 4kB    : took 1902620 usec, bandwidth 1051.051 MB/s
+    memmove 1000GB at 4kB      : took 2342414 usec, bandwidth 853.853 MB/s
+
+OPTIMIZED:
+    ===========================================================================
+    memcpy 1000MB at 2MB       : took 1377614 usec, bandwidth 1451.451 MB/s
+    copy_to_user 1000MB at 2MB : took 1409082 usec, bandwidth 1419.419 MB/s
+    copy_from_user 1000MB at 2M: took 1411788 usec, bandwidth 1416.416 MB/s
+    memmove 1000MB at 2MB      : took 1575561 usec, bandwidth 1269.269 MB/s
+    copy_to_user 1000GB at 4kB : took 1442973 usec, bandwidth 1386.386 MB/s
+    copy_from_user 1000GB at 4k: took 1443340 usec, bandwidth 1385.385 MB/s
+    copy_page 1000GB at 4kB    : took 1406800 usec, bandwidth 1421.421 MB/s
+    memmove 1000GB at 4kB      : took 1651743 usec, bandwidth 1210.210 MB/s
+
+Change-Id: Ica3c47dd8badeea1d81be17b0ad63e2cacd339bc
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+Reviewed-on: http://gerrit.mot.com/732625
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: John Zafiris <johnz@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/832112
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ arch/arm/lib/Makefile                       |  10 +-
+ arch/arm/mach-msm/Kconfig                   |   7 +
+ arch/arm/mach-msm/Makefile                  |   1 +
+ arch/arm/mach-msm/memutils/Makefile         |   4 +
+ arch/arm/mach-msm/memutils/copy_from_user.S | 123 +++++++++++++
+ arch/arm/mach-msm/memutils/copy_page.c      |   6 +
+ arch/arm/mach-msm/memutils/copy_template.S  | 275 ++++++++++++++++++++++++++++
+ arch/arm/mach-msm/memutils/copy_to_user.S   | 125 +++++++++++++
+ arch/arm/mach-msm/memutils/memcpy.S         |  68 +++++++
+ arch/arm/mach-msm/memutils/memmove.S        | 209 +++++++++++++++++++++
+ 10 files changed, 825 insertions(+), 3 deletions(-)
+ create mode 100644 arch/arm/mach-msm/memutils/Makefile
+ create mode 100644 arch/arm/mach-msm/memutils/copy_from_user.S
+ create mode 100644 arch/arm/mach-msm/memutils/copy_page.c
+ create mode 100644 arch/arm/mach-msm/memutils/copy_template.S
+ create mode 100644 arch/arm/mach-msm/memutils/copy_to_user.S
+ create mode 100644 arch/arm/mach-msm/memutils/memcpy.S
+ create mode 100644 arch/arm/mach-msm/memutils/memmove.S
+
+diff --git a/arch/arm/lib/Makefile b/arch/arm/lib/Makefile
+index af72969820b..1e532b7c6b8 100644
+--- a/arch/arm/lib/Makefile
++++ b/arch/arm/lib/Makefile
+@@ -6,8 +6,8 @@
+ 
+ lib-y		:= backtrace.o changebit.o csumipv6.o csumpartial.o   \
+ 		   csumpartialcopy.o csumpartialcopyuser.o clearbit.o \
+-		   delay.o delay-loop.o findbit.o memchr.o memcpy.o   \
+-		   memmove.o memset.o memzero.o setbit.o              \
++		   delay.o delay-loop.o findbit.o memchr.o            \
++		   memset.o memzero.o setbit.o                        \
+ 		   strchr.o strrchr.o                                 \
+ 		   testchangebit.o testclearbit.o testsetbit.o        \
+ 		   ashldi3.o ashrdi3.o lshrdi3.o muldi3.o             \
+@@ -15,10 +15,13 @@ lib-y		:= backtrace.o changebit.o csumipv6.o csumpartial.o   \
+ 		   io-readsb.o io-writesb.o io-readsl.o io-writesl.o  \
+ 		   call_with_stack.o
+ 
+-mmu-y	:= clear_user.o copy_page.o getuser.o putuser.o
++mmu-y	:= clear_user.o getuser.o putuser.o
+ 
+ # the code in uaccess.S is not preemption safe and
+ # probably faster on ARMv3 only
++ifneq ($(CONFIG_HAS_MACH_MEMUTILS),y)
++  mmu-y += copy_page.o
++  lib-y += memmove.o memcpy.o
+ ifeq ($(CONFIG_PREEMPT),y)
+   mmu-y	+= copy_from_user.o copy_to_user.o
+ else
+@@ -28,6 +31,7 @@ else
+   mmu-y	+= uaccess.o
+ endif
+ endif
++endif
+ 
+ # using lib_ here won't override already available weak symbols
+ obj-$(CONFIG_UACCESS_WITH_MEMCPY) += uaccess_with_memcpy.o
+diff --git a/arch/arm/mach-msm/Kconfig b/arch/arm/mach-msm/Kconfig
+index e9c5263390e..8298ce3d966 100644
+--- a/arch/arm/mach-msm/Kconfig
++++ b/arch/arm/mach-msm/Kconfig
+@@ -112,6 +112,7 @@ config ARCH_MSM8909
+ 	select MSM_BIMC_BWMON
+ 	select MSM_JTAG_MM if CORESIGHT_ETM
+ 	select RCU_BOOST if DEBUG_KMEMLEAK
++        select HAS_MACH_MEMUTILS
+ 
+ config ARCH_MSM8916
+ 	bool "MSM8916"
+@@ -1104,4 +1105,10 @@ config FSM9900_GSM_NL
+ 	  The serial port connection can be established to communicate with the
+ 	  GSM NL module.
+ 
++config HAS_MACH_MEMUTILS
++	default n
++	bool "Motorola MSM memcpy enhancements"
++	help
++	Faster memcpy performance for MSM8916.
++
+ endif
+diff --git a/arch/arm/mach-msm/Makefile b/arch/arm/mach-msm/Makefile
+index 1cce85c82ec..d3e4f67d7ae 100644
+--- a/arch/arm/mach-msm/Makefile
++++ b/arch/arm/mach-msm/Makefile
+@@ -73,4 +73,5 @@ obj-$(CONFIG_MSM_SMCMOD) += smcmod.o
+ 
+ obj-$(CONFIG_ARCH_MSM8974) += msm_mpmctr.o
+ 
++obj-$(CONFIG_HAS_MACH_MEMUTILS) += memutils/
+ obj-$(CONFIG_PERFMAP) += perfmap.o
+diff --git a/arch/arm/mach-msm/memutils/Makefile b/arch/arm/mach-msm/memutils/Makefile
+new file mode 100644
+index 00000000000..7f3b6ae0226
+--- /dev/null
++++ b/arch/arm/mach-msm/memutils/Makefile
+@@ -0,0 +1,4 @@
++
++mach-mem-y		:= memcpy.o copy_from_user.o copy_to_user.o copy_page.o memmove.o
++
++obj-$(CONFIG_HAS_MACH_MEMUTILS) += $(mach-mem-y)
+diff --git a/arch/arm/mach-msm/memutils/copy_from_user.S b/arch/arm/mach-msm/memutils/copy_from_user.S
+new file mode 100644
+index 00000000000..b6ea5b48930
+--- /dev/null
++++ b/arch/arm/mach-msm/memutils/copy_from_user.S
+@@ -0,0 +1,123 @@
++/*
++ *  linux/arch/arm/lib/copy_from_user.S
++ *
++ *  Author:	Nicolas Pitre
++ *  Created:	Sep 29, 2005
++ *  Copyright:	MontaVista Software, Inc.
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License version 2 as
++ *  published by the Free Software Foundation.
++ */
++
++#include <linux/linkage.h>
++#include <asm/assembler.h>
++
++/*
++ * Prototype:
++ *
++ *	size_t __copy_from_user(void *to, const void *from, size_t n)
++ *
++ * Purpose:
++ *
++ *	copy a block to kernel memory from user memory
++ *
++ * Params:
++ *
++ *	to = kernel memory
++ *	from = user memory
++ *	n = number of bytes to copy
++ *
++ * Return value:
++ *
++ *	Number of bytes NOT copied.
++ */
++
++#ifndef CONFIG_THUMB2_KERNEL
++#define LDR1W_SHIFT	0
++#else
++#define LDR1W_SHIFT	1
++#endif
++#define STR1W_SHIFT	0
++
++	.macro ldr1w ptr reg abort
++	ldrusr	\reg, \ptr, 4, abort=\abort
++	.endm
++
++	.macro ldr4w ptr reg1 reg2 reg3 reg4 abort
++	ldr1w \ptr, \reg1, \abort
++	ldr1w \ptr, \reg2, \abort
++	ldr1w \ptr, \reg3, \abort
++	ldr1w \ptr, \reg4, \abort
++	.endm
++
++	.macro ldr8w ptr reg1 reg2 reg3 reg4 reg5 reg6 reg7 reg8 abort
++	ldr4w \ptr, \reg1, \reg2, \reg3, \reg4, \abort
++	ldr4w \ptr, \reg5, \reg6, \reg7, \reg8, \abort
++	.endm
++
++	.macro ldr1b ptr reg cond=al abort
++	ldrusr	\reg, \ptr, 1, \cond, abort=\abort
++	.endm
++
++	.macro str1w ptr reg abort
++	W(str) \reg, [\ptr], #4
++	.endm
++
++	.macro str8w ptr reg1 reg2 reg3 reg4 reg5 reg6 reg7 reg8 abort
++	stmia \ptr!, {\reg1, \reg2, \reg3, \reg4, \reg5, \reg6, \reg7, \reg8}
++	.endm
++
++	.macro ldstr8w ptrl ptrw reg1 reg2 reg3 reg4 reg5 reg6 reg7 reg8 abort
++	ldr1w \ptrl, \reg1, \abort
++	str1w \ptrw, \reg1, \abort
++	ldr1w \ptrl, \reg2, \abort
++	str1w \ptrw, \reg2, \abort
++	ldr1w \ptrl, \reg3, \abort
++	str1w \ptrw, \reg3, \abort
++	ldr1w \ptrl, \reg4, \abort
++	str1w \ptrw, \reg4, \abort
++	ldr1w \ptrl, \reg5, \abort
++	str1w \ptrw, \reg5, \abort
++	ldr1w \ptrl, \reg6, \abort
++	str1w \ptrw, \reg6, \abort
++	ldr1w \ptrl, \reg7, \abort
++	str1w \ptrw, \reg7, \abort
++	ldr1w \ptrl, \reg8, \abort
++	str1w \ptrw, \reg8, \abort
++	.endm
++
++	.macro str1b ptr reg cond=al abort
++	str\cond\()b \reg, [\ptr], #1
++	.endm
++
++	.macro enter reg1 reg2
++	mov	r3, #0
++	stmdb	sp!, {r0, r2, r3, \reg1, \reg2}
++	.endm
++
++	.macro exit reg1 reg2
++	add	sp, sp, #8
++	ldmfd	sp!, {r0, \reg1, \reg2}
++	.endm
++
++	.text
++
++ENTRY(__copy_from_user)
++
++#include "copy_template.S"
++
++ENDPROC(__copy_from_user)
++
++	.pushsection .fixup,"ax"
++	.align 0
++	copy_abort_preamble
++	ldmfd	sp!, {r1, r2}
++	sub	r3, r0, r1
++	rsb	r1, r3, r2
++	str	r1, [sp]
++	bl	__memzero
++	ldr	r0, [sp], #4
++	copy_abort_end
++	.popsection
++
+diff --git a/arch/arm/mach-msm/memutils/copy_page.c b/arch/arm/mach-msm/memutils/copy_page.c
+new file mode 100644
+index 00000000000..5e276c4b9ed
+--- /dev/null
++++ b/arch/arm/mach-msm/memutils/copy_page.c
+@@ -0,0 +1,6 @@
++#include <linux/string.h>
++#include <asm/page.h>
++void copy_page(void *to, const void *from)
++{
++	memcpy(to, from, PAGE_SIZE);
++}
+diff --git a/arch/arm/mach-msm/memutils/copy_template.S b/arch/arm/mach-msm/memutils/copy_template.S
+new file mode 100644
+index 00000000000..3237b68e95c
+--- /dev/null
++++ b/arch/arm/mach-msm/memutils/copy_template.S
+@@ -0,0 +1,275 @@
++/*
++ *  linux/arch/arm/lib/copy_template.s
++ *
++ *  Code template for optimized memory copy functions
++ *
++ *  Author:	Nicolas Pitre
++ *  Created:	Sep 28, 2005
++ *  Copyright:	MontaVista Software, Inc.
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License version 2 as
++ *  published by the Free Software Foundation.
++ */
++
++/*
++ * Theory of operation
++ * -------------------
++ *
++ * This file provides the core code for a forward memory copy used in
++ * the implementation of memcopy(), copy_to_user() and copy_from_user().
++ *
++ * The including file must define the following accessor macros
++ * according to the need of the given function:
++ *
++ * ldr1w ptr reg abort
++ *
++ *	This loads one word from 'ptr', stores it in 'reg' and increments
++ *	'ptr' to the next word. The 'abort' argument is used for fixup tables.
++ *
++ * ldr4w ptr reg1 reg2 reg3 reg4 abort
++ * ldr8w ptr, reg1 reg2 reg3 reg4 reg5 reg6 reg7 reg8 abort
++ *
++ *	This loads four or eight words starting from 'ptr', stores them
++ *	in provided registers and increments 'ptr' past those words.
++ *	The'abort' argument is used for fixup tables.
++ *
++ * ldr1b ptr reg cond abort
++ *
++ *	Similar to ldr1w, but it loads a byte and increments 'ptr' one byte.
++ *	It also must apply the condition code if provided, otherwise the
++ *	"al" condition is assumed by default.
++ *
++ * str1w ptr reg abort
++ * str8w ptr reg1 reg2 reg3 reg4 reg5 reg6 reg7 reg8 abort
++ * str1b ptr reg cond abort
++ *
++ *	Same as their ldr* counterparts, but data is stored to 'ptr' location
++ *	rather than being loaded.
++ *
++ * enter reg1 reg2
++ *
++ *	Preserve the provided registers on the stack plus any additional
++ *	data as needed by the implementation including this code. Called
++ *	upon code entry.
++ *
++ * exit reg1 reg2
++ *
++ *	Restore registers with the values previously saved with the
++ *	'preserv' macro. Called upon code termination.
++ *
++ * LDR1W_SHIFT
++ * STR1W_SHIFT
++ *
++ *	Correction to be applied to the "ip" register when branching into
++ *	the ldr1w or str1w instructions (some of these macros may expand to
++ *	than one 32bit instruction in Thumb-2)
++ */
++
++
++		enter	r4, lr
++
++		subs	r2, r2, #4
++		blt	8f
++		ands	ip, r0, #3
++	PLD(	pld	[r1, #0]		)
++		bne	9f
++		ands	ip, r1, #3
++		bne	10f
++
++1:		subs	r2, r2, #(28)
++		stmfd	sp!, {r5 - r8}
++		blt	5f
++
++	CALGN(	ands	ip, r0, #31		)
++	CALGN(	rsb	r3, ip, #32		)
++	CALGN(	sbcnes	r4, r3, r2		)  @ C is always set here
++	CALGN(	bcs	2f			)
++	CALGN(	adr	r4, 6f			)
++	CALGN(	subs	r2, r2, r3		)  @ C gets set
++	CALGN(	add	pc, r4, ip		)
++
++	PLD(	pld	[r1, #0]		)
++	PLD(	pld	[r1, #64]		)
++	PLD(	pld	[r1, #128]		)
++	PLD(	pld	[r1, #192]		)
++	PLD(	pld	[r1, #256]		)
++	PLD(	pld	[r1, #320]		)
++2:	PLD(	subs	r2, r2, #512		)
++	/* R2 is now -800 offset from the size passed in*/
++	PLD(	pld	[r1, #384]		)
++	PLD(	blt	4f			)
++	PLD(	pld	[r1, #448]		)
++	PLD(	pld	[r1, #512]		)
++
++3:	PLD(	pld	[r1, #576]		)
++4:	PLD(	ldstr8w	r1, r0, r3, r4, r5, r6, r7, r8, ip, lr, abort=20f )
++		subs	r2, r2, #32
++		bge	3b
++	PLD(	cmn	r2, #512		)
++	PLD(	bge	4b			)
++
++5:		ands	ip, r2, #28
++		rsb	ip, ip, #32
++#if LDR1W_SHIFT > 0
++		lsl	ip, ip, #LDR1W_SHIFT
++#endif
++		addne	pc, pc, ip		@ C is always clear here
++		b	7f
++6:
++		.rept	(1 << LDR1W_SHIFT)
++		W(nop)
++		.endr
++		ldr1w	r1, r3, abort=20f
++		ldr1w	r1, r4, abort=20f
++		ldr1w	r1, r5, abort=20f
++		ldr1w	r1, r6, abort=20f
++		ldr1w	r1, r7, abort=20f
++		ldr1w	r1, r8, abort=20f
++		ldr1w	r1, lr, abort=20f
++
++#if LDR1W_SHIFT < STR1W_SHIFT
++		lsl	ip, ip, #STR1W_SHIFT - LDR1W_SHIFT
++#elif LDR1W_SHIFT > STR1W_SHIFT
++		lsr	ip, ip, #LDR1W_SHIFT - STR1W_SHIFT
++#endif
++		add	pc, pc, ip
++		nop
++		.rept	(1 << STR1W_SHIFT)
++		W(nop)
++		.endr
++		str1w	r0, r3, abort=20f
++		str1w	r0, r4, abort=20f
++		str1w	r0, r5, abort=20f
++		str1w	r0, r6, abort=20f
++		str1w	r0, r7, abort=20f
++		str1w	r0, r8, abort=20f
++		str1w	r0, lr, abort=20f
++
++	CALGN(	bcs	2b			)
++
++7:		ldmfd	sp!, {r5 - r8}
++
++8:		movs	r2, r2, lsl #31
++		ldr1b	r1, r3, ne, abort=21f
++		ldr1b	r1, r4, cs, abort=21f
++		ldr1b	r1, ip, cs, abort=21f
++		str1b	r0, r3, ne, abort=21f
++		str1b	r0, r4, cs, abort=21f
++		str1b	r0, ip, cs, abort=21f
++
++		exit	r4, pc
++
++9:		rsb	ip, ip, #4
++		cmp	ip, #2
++		ldr1b	r1, r3, gt, abort=21f
++		ldr1b	r1, r4, ge, abort=21f
++		ldr1b	r1, lr, abort=21f
++		str1b	r0, r3, gt, abort=21f
++		str1b	r0, r4, ge, abort=21f
++		subs	r2, r2, ip
++		str1b	r0, lr, abort=21f
++		blt	8b
++		ands	ip, r1, #3
++		beq	1b
++
++10:		bic	r1, r1, #3
++		cmp	ip, #2
++		ldr1w	r1, lr, abort=21f
++		beq	17f
++		bgt	18f
++
++
++		.macro	forward_copy_shift pull push
++
++		subs	r2, r2, #28
++		blt	14f
++
++	CALGN(	ands	ip, r0, #31		)
++	CALGN(	rsb	ip, ip, #32		)
++	CALGN(	sbcnes	r4, ip, r2		)  @ C is always set here
++	CALGN(	subcc	r2, r2, ip		)
++	CALGN(	bcc	15f			)
++
++11:		stmfd	sp!, {r5 - r9}
++
++	PLD(	pld	[r1, #0]		)
++	PLD(	pld	[r1, #64]		)
++	PLD(	pld	[r1, #128]		)
++	PLD(	pld	[r1, #192]		)
++	PLD(	pld	[r1, #256]		)
++	PLD(	pld	[r1, #320]		)
++	PLD(	subs	r2, r2, #448		)
++	PLD(	pld	[r1, #384]		)
++	PLD(	blt	13f			)
++	PLD(	pld	[r1, #448]		)
++12:	PLD(	pld	[r1, #512]		)
++13:		ldr4w	r1, r4, r5, r6, r7, abort=19f
++		mov	r3, lr, pull #\pull
++		subs	r2, r2, #32
++		ldr4w	r1, r8, r9, ip, lr, abort=19f
++		orr	r3, r3, r4, push #\push
++		mov	r4, r4, pull #\pull
++		orr	r4, r4, r5, push #\push
++		mov	r5, r5, pull #\pull
++		orr	r5, r5, r6, push #\push
++		mov	r6, r6, pull #\pull
++		orr	r6, r6, r7, push #\push
++		mov	r7, r7, pull #\pull
++		orr	r7, r7, r8, push #\push
++		mov	r8, r8, pull #\pull
++		orr	r8, r8, r9, push #\push
++		mov	r9, r9, pull #\pull
++		orr	r9, r9, ip, push #\push
++		mov	ip, ip, pull #\pull
++		orr	ip, ip, lr, push #\push
++		str8w	r0, r3, r4, r5, r6, r7, r8, r9, ip, , abort=19f
++		bge	12b
++	PLD(	cmn	r2, #448		)
++	PLD(	bge	13b			)
++
++		ldmfd	sp!, {r5 - r9}
++
++14:		ands	ip, r2, #28
++		beq	16f
++
++15:		mov	r3, lr, pull #\pull
++		ldr1w	r1, lr, abort=21f
++		subs	ip, ip, #4
++		orr	r3, r3, lr, push #\push
++		str1w	r0, r3, abort=21f
++		bgt	15b
++	CALGN(	cmp	r2, #0			)
++	CALGN(	bge	11b			)
++
++16:		sub	r1, r1, #(\push / 8)
++		b	8b
++
++		.endm
++
++
++		forward_copy_shift	pull=8	push=24
++
++17:		forward_copy_shift	pull=16	push=16
++
++18:		forward_copy_shift	pull=24	push=8
++
++
++/*
++ * Abort preamble and completion macros.
++ * If a fixup handler is required then those macros must surround it.
++ * It is assumed that the fixup code will handle the private part of
++ * the exit macro.
++ */
++
++	.macro	copy_abort_preamble
++19:	ldmfd	sp!, {r5 - r9}
++	b	21f
++20:	ldmfd	sp!, {r5 - r8}
++21:
++	.endm
++
++	.macro	copy_abort_end
++	ldmfd	sp!, {r4, pc}
++	.endm
++
+diff --git a/arch/arm/mach-msm/memutils/copy_to_user.S b/arch/arm/mach-msm/memutils/copy_to_user.S
+new file mode 100644
+index 00000000000..ca54c28a705
+--- /dev/null
++++ b/arch/arm/mach-msm/memutils/copy_to_user.S
+@@ -0,0 +1,125 @@
++/*
++ *  linux/arch/arm/lib/copy_to_user.S
++ *
++ *  Author:	Nicolas Pitre
++ *  Created:	Sep 29, 2005
++ *  Copyright:	MontaVista Software, Inc.
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License version 2 as
++ *  published by the Free Software Foundation.
++ */
++
++#include <linux/linkage.h>
++#include <asm/assembler.h>
++
++/*
++ * Prototype:
++ *
++ *	size_t __copy_to_user(void *to, const void *from, size_t n)
++ *
++ * Purpose:
++ *
++ *	copy a block to user memory from kernel memory
++ *
++ * Params:
++ *
++ *	to = user memory
++ *	from = kernel memory
++ *	n = number of bytes to copy
++ *
++ * Return value:
++ *
++ *	Number of bytes NOT copied.
++ */
++
++#define LDR1W_SHIFT	0
++#ifndef CONFIG_THUMB2_KERNEL
++#define STR1W_SHIFT	0
++#else
++#define STR1W_SHIFT	1
++#endif
++
++	.macro ldr1w ptr reg abort
++	W(ldr) \reg, [\ptr], #4
++	.endm
++
++	.macro ldr4w ptr reg1 reg2 reg3 reg4 abort
++	ldmia \ptr!, {\reg1, \reg2, \reg3, \reg4}
++	.endm
++
++	.macro ldr8w ptr reg1 reg2 reg3 reg4 reg5 reg6 reg7 reg8 abort
++	ldmia \ptr!, {\reg1, \reg2, \reg3, \reg4, \reg5, \reg6, \reg7, \reg8}
++	.endm
++
++	.macro ldr1b ptr reg cond=al abort
++	ldr\cond\()b \reg, [\ptr], #1
++	.endm
++
++	.macro str1w ptr reg abort
++	strusr	\reg, \ptr, 4, abort=\abort
++	.endm
++
++	.macro str8w ptr reg1 reg2 reg3 reg4 reg5 reg6 reg7 reg8 abort
++	str1w \ptr, \reg1, \abort
++	str1w \ptr, \reg2, \abort
++	str1w \ptr, \reg3, \abort
++	str1w \ptr, \reg4, \abort
++	str1w \ptr, \reg5, \abort
++	str1w \ptr, \reg6, \abort
++	str1w \ptr, \reg7, \abort
++	str1w \ptr, \reg8, \abort
++	.endm
++
++	.macro ldstr8w ptrl ptrw reg1 reg2 reg3 reg4 reg5 reg6 reg7 reg8 abort
++	ldr1w \ptrl, \reg1, \abort
++	str1w \ptrw, \reg1, \abort
++	ldr1w \ptrl, \reg2, \abort
++	str1w \ptrw, \reg2, \abort
++	ldr1w \ptrl, \reg3, \abort
++	str1w \ptrw, \reg3, \abort
++	ldr1w \ptrl, \reg4, \abort
++	str1w \ptrw, \reg4, \abort
++	ldr1w \ptrl, \reg5, \abort
++	str1w \ptrw, \reg5, \abort
++	ldr1w \ptrl, \reg6, \abort
++	str1w \ptrw, \reg6, \abort
++	ldr1w \ptrl, \reg7, \abort
++	str1w \ptrw, \reg7, \abort
++	ldr1w \ptrl, \reg8, \abort
++	str1w \ptrw, \reg8, \abort
++	.endm
++
++	.macro str1b ptr reg cond=al abort
++	strusr	\reg, \ptr, 1, \cond, abort=\abort
++	.endm
++
++	.macro enter reg1 reg2
++	mov	r3, #0
++	stmdb	sp!, {r0, r2, r3, \reg1, \reg2}
++	.endm
++
++	.macro exit reg1 reg2
++	add	sp, sp, #8
++	ldmfd	sp!, {r0, \reg1, \reg2}
++	.endm
++
++	.text
++
++ENTRY(__copy_to_user_std)
++WEAK(__copy_to_user)
++
++#include "copy_template.S"
++
++ENDPROC(__copy_to_user)
++ENDPROC(__copy_to_user_std)
++
++	.pushsection .fixup,"ax"
++	.align 0
++	copy_abort_preamble
++	ldmfd	sp!, {r1, r2, r3}
++	sub	r0, r0, r1
++	rsb	r0, r0, r2
++	copy_abort_end
++	.popsection
++
+diff --git a/arch/arm/mach-msm/memutils/memcpy.S b/arch/arm/mach-msm/memutils/memcpy.S
+new file mode 100644
+index 00000000000..a35b9bf16b2
+--- /dev/null
++++ b/arch/arm/mach-msm/memutils/memcpy.S
+@@ -0,0 +1,68 @@
++/*
++ *  linux/arch/arm/lib/memcpy.S
++ *
++ *  Author:	Nicolas Pitre
++ *  Created:	Sep 28, 2005
++ *  Copyright:	MontaVista Software, Inc.
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License version 2 as
++ *  published by the Free Software Foundation.
++ */
++
++#include <linux/linkage.h>
++#include <asm/assembler.h>
++
++#define LDR1W_SHIFT	0
++#define STR1W_SHIFT	0
++
++	.macro ldr1w ptr reg abort
++	W(ldr) \reg, [\ptr], #4
++	.endm
++
++	.macro ldr4w ptr reg1 reg2 reg3 reg4 abort
++	ldmia \ptr!, {\reg1, \reg2, \reg3, \reg4}
++	.endm
++
++	.macro ldr8w ptr reg1 reg2 reg3 reg4 reg5 reg6 reg7 reg8 abort
++	ldmia \ptr!, {\reg1, \reg2, \reg3, \reg4, \reg5, \reg6, \reg7, \reg8}
++	.endm
++
++	.macro ldr1b ptr reg cond=al abort
++	ldr\cond\()b \reg, [\ptr], #1
++	.endm
++
++	.macro str1w ptr reg abort
++	W(str) \reg, [\ptr], #4
++	.endm
++
++	.macro str8w ptr reg1 reg2 reg3 reg4 reg5 reg6 reg7 reg8 abort
++	stmia \ptr!, {\reg1, \reg2, \reg3, \reg4, \reg5, \reg6, \reg7, \reg8}
++	.endm
++
++	.macro ldstr8w ptrl ptrw reg1 reg2 reg3 reg4 reg5 reg6 reg7 reg8 abort
++	ldmia \ptrl!, {\reg1, \reg2, \reg3, \reg4, \reg5, \reg6, \reg7, \reg8}
++	stmia \ptrw!, {\reg1, \reg2, \reg3, \reg4, \reg5, \reg6, \reg7, \reg8}
++	.endm
++
++	.macro str1b ptr reg cond=al abort
++	str\cond\()b \reg, [\ptr], #1
++	.endm
++
++	.macro enter reg1 reg2
++	stmdb sp!, {r0, \reg1, \reg2}
++	.endm
++
++	.macro exit reg1 reg2
++	ldmfd sp!, {r0, \reg1, \reg2}
++	.endm
++
++	.text
++
++/* Prototype: void *memcpy(void *dest, const void *src, size_t n); */
++
++ENTRY(memcpy)
++
++#include "copy_template.S"
++
++ENDPROC(memcpy)
+diff --git a/arch/arm/mach-msm/memutils/memmove.S b/arch/arm/mach-msm/memutils/memmove.S
+new file mode 100644
+index 00000000000..08dedfac48a
+--- /dev/null
++++ b/arch/arm/mach-msm/memutils/memmove.S
+@@ -0,0 +1,209 @@
++/*
++ *  linux/arch/arm/lib/memmove.S
++ *
++ *  Author:	Nicolas Pitre
++ *  Created:	Sep 28, 2005
++ *  Copyright:	(C) MontaVista Software Inc.
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License version 2 as
++ *  published by the Free Software Foundation.
++ */
++
++#include <linux/linkage.h>
++#include <asm/assembler.h>
++
++		.text
++
++/*
++ * Prototype: void *memmove(void *dest, const void *src, size_t n);
++ *
++ * Note:
++ *
++ * If the memory regions don't overlap, we simply branch to memcpy which is
++ * normally a bit faster. Otherwise the copy is done going downwards.  This
++ * is a transposition of the code from copy_template.S but with the copy
++ * occurring in the opposite direction.
++ */
++
++ENTRY(memmove)
++
++		subs	ip, r0, r1
++		cmphi	r2, ip
++		bls	memcpy
++
++		stmfd	sp!, {r0, r4, lr}
++		add	r1, r1, r2
++		add	r0, r0, r2
++		subs	r2, r2, #4
++		blt	8f
++		ands	ip, r0, #3
++	PLD(	pld	[r1, #-4]		)
++		bne	9f
++		ands	ip, r1, #3
++		bne	10f
++
++1:		subs	r2, r2, #(28)
++		stmfd	sp!, {r5 - r8}
++		blt	5f
++
++	CALGN(	ands	ip, r0, #31		)
++	CALGN(	sbcnes	r4, ip, r2		)  @ C is always set here
++	CALGN(	bcs	2f			)
++	CALGN(	adr	r4, 6f			)
++	CALGN(	subs	r2, r2, ip		)  @ C is set here
++	CALGN(	rsb	ip, ip, #32		)
++	CALGN(	add	pc, r4, ip		)
++
++	PLD(	pld	[r1, #-4]		)
++	PLD(	pld	[r1, #-68]		)
++	PLD(	pld	[r1, #-132]		)
++	PLD(	pld	[r1, #-196]		)
++	PLD(	pld	[r1, #-260]		)
++	PLD(	pld	[r1, #-324]		)
++2:	PLD(	subs	r2, r2, #512		)
++	PLD(	pld	[r1, #-388]		)
++	PLD(	pld	[r1, #-452]		)
++	PLD(	blt	4f			)
++	PLD(	pld	[r1, #-516]		)
++
++3:	PLD(	pld	[r1, #-580]		)
++
++4:		ldmdb	r1!, {r3, r4, r5, r6, r7, r8, ip, lr}
++		subs	r2, r2, #32
++		stmdb	r0!, {r3, r4, r5, r6, r7, r8, ip, lr}
++		bge	3b
++	PLD(	cmn	r2, #512		)
++	PLD(	bge	4b			)
++
++5:		ands	ip, r2, #28
++		rsb	ip, ip, #32
++		addne	pc, pc, ip		@ C is always clear here
++		b	7f
++6:		W(nop)
++		W(ldr)	r3, [r1, #-4]!
++		W(ldr)	r4, [r1, #-4]!
++		W(ldr)	r5, [r1, #-4]!
++		W(ldr)	r6, [r1, #-4]!
++		W(ldr)	r7, [r1, #-4]!
++		W(ldr)	r8, [r1, #-4]!
++		W(ldr)	lr, [r1, #-4]!
++
++		add	pc, pc, ip
++		nop
++		W(nop)
++		W(str)	r3, [r0, #-4]!
++		W(str)	r4, [r0, #-4]!
++		W(str)	r5, [r0, #-4]!
++		W(str)	r6, [r0, #-4]!
++		W(str)	r7, [r0, #-4]!
++		W(str)	r8, [r0, #-4]!
++		W(str)	lr, [r0, #-4]!
++
++	CALGN(	bcs	2b			)
++
++7:		ldmfd	sp!, {r5 - r8}
++
++8:		movs	r2, r2, lsl #31
++		ldrneb	r3, [r1, #-1]!
++		ldrcsb	r4, [r1, #-1]!
++		ldrcsb	ip, [r1, #-1]
++		strneb	r3, [r0, #-1]!
++		strcsb	r4, [r0, #-1]!
++		strcsb	ip, [r0, #-1]
++		ldmfd	sp!, {r0, r4, pc}
++
++9:		cmp	ip, #2
++		ldrgtb	r3, [r1, #-1]!
++		ldrgeb	r4, [r1, #-1]!
++		ldrb	lr, [r1, #-1]!
++		strgtb	r3, [r0, #-1]!
++		strgeb	r4, [r0, #-1]!
++		subs	r2, r2, ip
++		strb	lr, [r0, #-1]!
++		blt	8b
++		ands	ip, r1, #3
++		beq	1b
++
++10:		bic	r1, r1, #3
++		cmp	ip, #2
++		ldr	r3, [r1, #0]
++		beq	17f
++		blt	18f
++
++
++		.macro	backward_copy_shift push pull
++
++		subs	r2, r2, #28
++		blt	14f
++
++	CALGN(	ands	ip, r0, #31		)
++	CALGN(	sbcnes	r4, ip, r2		)  @ C is always set here
++	CALGN(	subcc	r2, r2, ip		)
++	CALGN(	bcc	15f			)
++
++11:		stmfd	sp!, {r5 - r9}
++
++	PLD(	pld	[r1, #-4]		)
++	PLD(	pld	[r1, #-68]		)
++	PLD(	pld	[r1, #-132]		)
++	PLD(	pld	[r1, #-196]		)
++	PLD(	pld	[r1, #-260]		)
++	PLD(	pld	[r1, #-324]		)
++	PLD(	subs	r2, r2, #512		)
++	PLD(	pld	[r1, #-388]		)
++	PLD(	pld	[r1, #-452]		)
++	PLD(	blt	13f			)
++	PLD(	pld	[r1, #-516]		)
++12:	PLD(	pld	[r1, #-580]		)
++13:		ldmdb   r1!, {r7, r8, r9, ip}
++		mov     lr, r3, push #\push
++		subs    r2, r2, #32
++		ldmdb   r1!, {r3, r4, r5, r6}
++		orr     lr, lr, ip, pull #\pull
++		mov     ip, ip, push #\push
++		orr     ip, ip, r9, pull #\pull
++		mov     r9, r9, push #\push
++		orr     r9, r9, r8, pull #\pull
++		mov     r8, r8, push #\push
++		orr     r8, r8, r7, pull #\pull
++		mov     r7, r7, push #\push
++		orr     r7, r7, r6, pull #\pull
++		mov     r6, r6, push #\push
++		orr     r6, r6, r5, pull #\pull
++		mov     r5, r5, push #\push
++		orr     r5, r5, r4, pull #\pull
++		mov     r4, r4, push #\push
++		orr     r4, r4, r3, pull #\pull
++		stmdb   r0!, {r4 - r9, ip, lr}
++		bge	12b
++	PLD(	cmn	r2, #512		)
++	PLD(	bge	13b			)
++
++		ldmfd	sp!, {r5 - r9}
++
++14:		ands	ip, r2, #28
++		beq	16f
++
++15:		mov     lr, r3, push #\push
++		ldr	r3, [r1, #-4]!
++		subs	ip, ip, #4
++		orr	lr, lr, r3, pull #\pull
++		str	lr, [r0, #-4]!
++		bgt	15b
++	CALGN(	cmp	r2, #0			)
++	CALGN(	bge	11b			)
++
++16:		add	r1, r1, #(\pull / 8)
++		b	8b
++
++		.endm
++
++
++		backward_copy_shift	push=8	pull=24
++
++17:		backward_copy_shift	push=16	pull=16
++
++18:		backward_copy_shift	push=24	pull=8
++
++ENDPROC(memmove)
+-- 
+2.11.0
+

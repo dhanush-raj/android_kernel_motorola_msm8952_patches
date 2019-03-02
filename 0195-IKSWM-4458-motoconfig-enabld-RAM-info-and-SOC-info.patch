@@ -1,0 +1,27 @@
+From ea9eb062d60c3367ebb34fd0d7c6b66d643c8d5e Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Thu, 24 Sep 2015 20:02:03 -0700
+Subject: [PATCH 195/959] IKSWM-4458 motoconfig: enabld RAM info and SOC info
+
+Export ram info by /sys/ram interface and annotate to panic log
+Export soc info by /proc interface and annotate to panic log
+
+Change-Id: I58b3cc818a7edb877b4d734bc84e8dc82753403e
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index 75344e3dff8..bc60d895c34 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -31,3 +31,5 @@ CONFIG_PSTORE_CONSOLE=y
+ CONFIG_PSTORE_RAM=y
+ CONFIG_PSTORE_RAM_ANNOTATION_APPEND=y
+ CONFIG_BOOTINFO=y
++CONFIG_MMI_SOC_INFO=y
++CONFIG_MMI_RAM_INFO=y
+-- 
+2.11.0
+

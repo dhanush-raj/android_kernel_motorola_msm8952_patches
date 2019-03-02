@@ -1,0 +1,48 @@
+From 1082172cc7bbcad9cd2e9d24846340ebc3bc53cc Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Tue, 23 Feb 2016 14:47:25 -0800
+Subject: [PATCH 712/959] IKSWM-20147 ipc_router: reset on remote close case
+
+Set reset to true if the IPC is remote clsoed. Also
+wake up the threads that waiting on it.
+
+Change-Id: If101c476a812600906d07459e8210b23185941fd
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/825220
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/soc/qcom/ipc_router_smd_xprt.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/drivers/soc/qcom/ipc_router_smd_xprt.c b/drivers/soc/qcom/ipc_router_smd_xprt.c
+index 2092e17993d..821c54de872 100644
+--- a/drivers/soc/qcom/ipc_router_smd_xprt.c
++++ b/drivers/soc/qcom/ipc_router_smd_xprt.c
+@@ -249,6 +249,7 @@ static int msm_ipc_router_smd_remote_write(void *data,
+ static int msm_ipc_router_smd_remote_close(struct msm_ipc_router_xprt *xprt)
+ {
+ 	int rc;
++	unsigned long flags;
+ 	struct msm_ipc_router_smd_xprt *smd_xprtp =
+ 		container_of(xprt, struct msm_ipc_router_smd_xprt, xprt);
+ 
+@@ -257,6 +258,12 @@ static int msm_ipc_router_smd_remote_close(struct msm_ipc_router_xprt *xprt)
+ 		subsystem_put(smd_xprtp->pil);
+ 		smd_xprtp->pil = NULL;
+ 	}
++
++	spin_lock_irqsave(&smd_xprtp->ss_reset_lock, flags);
++	smd_xprtp->ss_reset = 1;
++	spin_unlock_irqrestore(&smd_xprtp->ss_reset_lock, flags);
++	wake_up(&smd_xprtp->write_avail_wait_q);
++
+ 	return rc;
+ }
+ 
+-- 
+2.11.0
+

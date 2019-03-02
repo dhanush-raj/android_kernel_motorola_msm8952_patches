@@ -1,0 +1,41 @@
+From ab92db0193534cdb0e7ac196814c37b0d8cd6fda Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Fri, 6 Mar 2015 16:42:58 -0600
+Subject: [PATCH 208/959] IKSWM-4458 kernel: support task's adj rbtree
+
+Add (or del) a task to (or from) task's adj rbtree
+when a task is created or exit.
+
+Change-Id: I16734d75262690c2970d4c3277f7111cd6026ffe
+---
+ kernel/exit.c | 1 +
+ kernel/fork.c | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/kernel/exit.c b/kernel/exit.c
+index 540bad43812..0098a214518 100644
+--- a/kernel/exit.c
++++ b/kernel/exit.c
+@@ -70,6 +70,7 @@ static void __unhash_process(struct task_struct *p, bool group_dead)
+ 		detach_pid(p, PIDTYPE_SID);
+ 
+ 		list_del_rcu(&p->tasks);
++		delete_from_adj_tree(p);
+ 		list_del_init(&p->sibling);
+ 		__this_cpu_dec(process_counts);
+ 	}
+diff --git a/kernel/fork.c b/kernel/fork.c
+index 1324a00b5e4..4ec1f0d0be1 100644
+--- a/kernel/fork.c
++++ b/kernel/fork.c
+@@ -1536,6 +1536,7 @@ static struct task_struct *copy_process(unsigned long clone_flags,
+ 			attach_pid(p, PIDTYPE_SID, task_session(current));
+ 			list_add_tail(&p->sibling, &p->real_parent->children);
+ 			list_add_tail_rcu(&p->tasks, &init_task.tasks);
++			add_2_adj_tree(p);
+ 			__this_cpu_inc(process_counts);
+ 		} else {
+ 			current->signal->nr_threads++;
+-- 
+2.11.0
+

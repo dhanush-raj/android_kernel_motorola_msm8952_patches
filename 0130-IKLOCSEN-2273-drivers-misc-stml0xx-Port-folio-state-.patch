@@ -1,0 +1,217 @@
+From 8d13a6e57f75f452f619e9b05d3c369ff541ad5a Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Wed, 27 May 2015 11:20:54 -0500
+Subject: [PATCH 130/959] IKLOCSEN-2273 drivers/misc: stml0xx: Port folio state
+ notification code
+
+Port the folio state notification code from the L4 sensor
+hub driver to the L0 driver. This is needed for notification
+of the folio state to the touch driver.
+
+Change-Id: I5f909f0d0020994f159ee59223bd987898a7284b
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/751774
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Konstantin Makariev <kmakariev@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Vladimir Karpovich <vkarpovich@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/Kconfig                     |  7 ++
+ drivers/misc/stml0xx/Makefile                    |  1 +
+ drivers/misc/stml0xx/stml0xx_core.c              |  4 +
+ drivers/misc/stml0xx/stml0xx_mmi_notifications.c | 98 ++++++++++++++++++++++++
+ drivers/misc/stml0xx/stml0xx_wake_irq.c          |  4 +
+ include/linux/stml0xx.h                          |  7 ++
+ 6 files changed, 121 insertions(+)
+ create mode 100644 drivers/misc/stml0xx/stml0xx_mmi_notifications.c
+
+diff --git a/drivers/misc/stml0xx/Kconfig b/drivers/misc/stml0xx/Kconfig
+index 5ec96202238..c9e78096b52 100644
+--- a/drivers/misc/stml0xx/Kconfig
++++ b/drivers/misc/stml0xx/Kconfig
+@@ -12,3 +12,10 @@ config SENSORS_STML0XX
+ 	help
+ 	  Say yes here if you wish to include the STM
+ 	  STML0XX Sensor processor driver.
++
++config MMI_HALL_NOTIFICATIONS
++	bool "Enable hall effect sensor notifier"
++	default n
++	depends on SENSORS_STML0XX
++	help
++	  Support for hall effect sensor notifications.
+diff --git a/drivers/misc/stml0xx/Makefile b/drivers/misc/stml0xx/Makefile
+index a206152fc1d..ccfa1d4e3eb 100644
+--- a/drivers/misc/stml0xx/Makefile
++++ b/drivers/misc/stml0xx/Makefile
+@@ -7,4 +7,5 @@ stml0xx-objs := stml0xx_core.o \
+ 		stml0xx_wake_irq.o \
+ 		stml0xx_spi.o \
+ 		stml0xx_spi_crc.o
++obj-$(CONFIG_MMI_HALL_NOTIFICATIONS) += stml0xx_mmi_notifications.o
+ obj-$(CONFIG_SENSORS_STML0XX) += stml0xx.o
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index be611a472d1..ddf266477d5 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -994,6 +994,10 @@ static int stml0xx_probe(struct spi_device *spi)
+ 
+ 	switch_stml0xx_mode(NORMALMODE);
+ 
++#ifdef CONFIG_MMI_HALL_NOTIFICATIONS
++	ps_stml0xx->hall_data = mmi_hall_init();
++#endif
++
+ 	mutex_unlock(&ps_stml0xx->lock);
+ 
+ 	dev_dbg(&spi->dev, "probed finished");
+diff --git a/drivers/misc/stml0xx/stml0xx_mmi_notifications.c b/drivers/misc/stml0xx/stml0xx_mmi_notifications.c
+new file mode 100644
+index 00000000000..5fd544c4abd
+--- /dev/null
++++ b/drivers/misc/stml0xx/stml0xx_mmi_notifications.c
+@@ -0,0 +1,98 @@
++/* Copyright (c) 2014, Motorola Mobility, Inc.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ */
++
++#include <linux/cdev.h>
++#include <linux/switch.h>
++#include <linux/wakelock.h>
++#include <linux/irq.h>
++
++#include <linux/stml0xx.h>
++
++struct mmi_hall_data *mmi_hall_init(void)
++{
++	struct mmi_hall_data *mdata = kzalloc(
++			sizeof(struct mmi_hall_data), GFP_KERNEL);
++	if (mdata) {
++		int i;
++		for (i = 0; i < MMI_HALL_MAX; i++)
++			BLOCKING_INIT_NOTIFIER_HEAD(&mdata->nhead[i]);
++		pr_debug("%s: data structure init-ed\n", __func__);
++	}
++	return mdata;
++}
++
++int mmi_hall_register_notifier(struct notifier_block *nb,
++		unsigned long stype, bool report)
++{
++	int error;
++	struct mmi_hall_data *mdata = stml0xx_misc_data->hall_data;
++
++	if (!mdata)
++		return -ENODEV;
++
++	mdata->enabled |= 1 << stype;
++	pr_debug("%s: hall sensor %lu notifier enabled\n", __func__, stype);
++
++	error = blocking_notifier_chain_register(&mdata->nhead[stype], nb);
++	if (!error && report) {
++		int state = !!(mdata->state & (1 << stype));
++		/* send current folio state on register request */
++		blocking_notifier_call_chain(&mdata->nhead[stype],
++				stype, (void *)&state);
++		pr_debug("%s: reported state %d\n", __func__, state);
++	}
++	return error;
++}
++
++int mmi_hall_unregister_notifier(struct notifier_block *nb,
++		unsigned long stype)
++{
++	int error;
++	struct mmi_hall_data *mdata = stml0xx_misc_data->hall_data;
++
++	if (!mdata)
++		return -ENODEV;
++
++	error = blocking_notifier_chain_unregister(&mdata->nhead[stype], nb);
++	pr_debug("%s: hall sensor %lu notifier unregister\n", __func__, stype);
++
++	if (!mdata->nhead[stype].head) {
++		mdata->enabled &= ~(1 << stype);
++		pr_debug("%s: hall sensor %lu no clients\n", __func__, stype);
++	}
++
++	return error;
++}
++
++void mmi_hall_notify(unsigned long stype, int state)
++{
++	struct mmi_hall_data *mdata = stml0xx_misc_data->hall_data;
++	int stored;
++
++	if (!mdata) {
++		pr_debug("%s: notifier not initialized yet\n", __func__);
++		return;
++	}
++
++	stored = !!(mdata->state & (1 << stype));
++	mdata->state &= ~(1 << stype);
++	mdata->state |= state << stype;
++	pr_debug("%s: current state %d (0x%x)\n", __func__,
++				state, mdata->state);
++
++	if ((mdata->enabled & (1 << stype)) && stored != state) {
++		blocking_notifier_call_chain(&mdata->nhead[stype],
++				stype, (void *)&state);
++		pr_debug("%s: notification sent\n", __func__);
++	}
++}
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index 61eb4326a54..907114c667f 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -180,6 +180,10 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 		if ((pdata->cover_detect_polarity
+ 			& buf[WAKE_IRQ_IDX_COVER]) != 0)
+ 				state = 1;
++#ifdef CONFIG_MMI_HALL_NOTIFICATIONS
++		/* notify subscribers of cover state change */
++		mmi_hall_notify(MMI_HALL_FOLIO, state);
++#endif
+ 		input_report_switch(ps_stml0xx->input_dev, SW_LID, state);
+ 		input_sync(ps_stml0xx->input_dev);
+ 
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 376381e6936..4a358f4c7e4 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -29,6 +29,10 @@
+ #include <linux/switch.h>
+ #include <linux/wakelock.h>
+ 
++#ifdef CONFIG_MMI_HALL_NOTIFICATIONS
++#include <linux/mmi_hall_notifier.h>
++#endif
++
+ /* Log macros */
+ #define ENABLE_VERBOSE_LOGGING 0
+ 
+@@ -408,6 +412,9 @@ struct stml0xx_data {
+ 
+ 	bool is_suspended;
+ 	bool pending_wake_work;
++#ifdef CONFIG_MMI_HALL_NOTIFICATIONS
++	struct mmi_hall_data *hall_data;
++#endif
+ };
+ 
+ #ifndef ts_to_ns
+-- 
+2.11.0
+

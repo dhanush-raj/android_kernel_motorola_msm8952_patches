@@ -1,0 +1,42 @@
+From bead4932aa25730f87af557e004d164233c094e4 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Wed, 10 Apr 2013 08:59:39 -0500
+Subject: [PATCH 039/959] IKJB42MAIN-9397 misc: utags: align user interface to
+ BL
+
+utag module deviated from BL naming for customization
+checksum and device name UTAG interfaces.
+
+Change-Id: If02d9372491435b691cd7d6da8ebe6c0cd2acb32
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/531244
+SLT-Approved: Gerrit Code Review <gerrit-blurdev@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Hrycay <jason.hrycay@motorola.com>
+Reviewed-by: Check Patch <CHEKPACH@motorola.com>
+Reviewed-by: Klocwork kwcheck <klocwork-kwcheck@sourceforge.mot.com>
+Reviewed-by: Igor Kovalenko <cik009@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+(cherry picked from commit 68e692e70f75382db7ad7bf679ada3bea1ad8039)
+---
+ drivers/misc/utag/utags.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/misc/utag/utags.c b/drivers/misc/utag/utags.c
+index c6a632d4b01..61670acd480 100644
+--- a/drivers/misc/utag/utags.c
++++ b/drivers/misc/utag/utags.c
+@@ -57,8 +57,8 @@ static struct utag_node utag_tab[] = {
+ 	{UTAG_IMEI, "imei", NULL, NULL, NULL, NULL},
+ 	{UTAG_SKU, "sku", NULL, NULL, NULL, NULL},
+ 	{UTAG_DATE, "date", NULL, NULL, NULL, NULL},
+-	{UTAG_DEVICE, "device_name", NULL, NULL, NULL, NULL},
+-	{UTAG_CUST_MD5, "customization_checksum", NULL, NULL, NULL, NULL},
++	{UTAG_DEVICE, "device", NULL, NULL, NULL, NULL},
++	{UTAG_CUST_MD5, "cust_md5", NULL, NULL, NULL, NULL},
+ 	{UTAG_ICCID, "iccid", NULL, NULL, NULL, NULL},
+ 	{UTAG_END, "all", NULL, NULL, NULL, NULL},
+ 	{0, "", NULL, NULL, NULL, NULL},
+-- 
+2.11.0
+

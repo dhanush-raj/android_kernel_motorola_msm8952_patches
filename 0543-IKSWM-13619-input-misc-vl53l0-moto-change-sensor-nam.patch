@@ -1,0 +1,36 @@
+From ac320f6b09c7a5411947fe74f716de91ade0686e Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Wed, 9 Dec 2015 03:23:32 -0600
+Subject: [PATCH 543/959] IKSWM-13619 input: misc: vl53l0:moto change sensor
+ name
+
+change sensor name to a more common name so it can handle both
+laser sensor and second proximity sensor in affintiy 13m in sensor hal
+Change-Id: I92998b6697aa6850ab49eda30f223ac5cf441f73
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/805908
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/vl53L0/stmvl53l0_module.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/input/misc/vl53L0/stmvl53l0_module.c b/drivers/input/misc/vl53L0/stmvl53l0_module.c
+index df614def82d..09df197f7ec 100644
+--- a/drivers/input/misc/vl53L0/stmvl53l0_module.c
++++ b/drivers/input/misc/vl53L0/stmvl53l0_module.c
+@@ -1544,7 +1544,7 @@ int stmvl53l0_setup(struct stmvl53l0_data *data, uint8_t type)
+ 	/* dmax */
+ 	input_set_abs_params(
+ 		data->input_dev_ps, ABS_HAT3Y, 0, 0xffffffff, 0, 0);
+-	data->input_dev_ps->name = "STM VL53L0 proximity sensor";
++	data->input_dev_ps->name = "Rear proximity sensor";
+ 
+ 	rc = input_register_device(data->input_dev_ps);
+ 	if (rc) {
+-- 
+2.11.0
+

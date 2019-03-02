@@ -1,0 +1,36 @@
+From ec9fc9af680701d766efd01e5d2ea03e6797e55d Mon Sep 17 00:00:00 2001
+From: andream <andream@motorola.com>
+Date: Fri, 15 Apr 2016 15:58:18 -0500
+Subject: [PATCH 856/959] IKIMG-3838: Change of software thesholds for SAR
+
+Thesholds for the minimum distance for antenna cutback set to 60-65 mm to
+take into account variation or range due to accuracy, behavior and temperature
+
+Change-Id: I252493875fff9ef08510d8997d9b63ccfcc505e0
+Signed-off-by: Andrea Manavella <andream@motorola.com>
+Reviewed-on: http://gerrit.mot.com/845067
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index dbd8ccd901c..19fb5a0f2de 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -962,7 +962,7 @@
+ 		pinctrl-names = "laser_default", "laser_suspend";
+ 		pinctrl-0 = <&laser_active >;
+ 		pinctrl-1 = <&laser_suspend >;
+-		st,sensorthreshold = <40 60>;
++		st,sensorthreshold = <60 65>;
+ 		st,xtalkval = <19>;
+ 	};
+ 
+-- 
+2.11.0
+

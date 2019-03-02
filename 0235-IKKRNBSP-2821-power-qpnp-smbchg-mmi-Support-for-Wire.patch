@@ -1,0 +1,120 @@
+From 924fb0538d89a2034af52e527db95367b9151ae2 Mon Sep 17 00:00:00 2001
+From: Vidyadhar Gurram <rnh786@motorola.com>
+Date: Wed, 25 Mar 2015 11:55:25 -0500
+Subject: [PATCH 235/959] IKKRNBSP-2821: power: qpnp-smbchg-mmi: Support for
+ Wireless Charging.
+
+Hold the system from going to Suspend mode when phone placed on a
+Wireless Charger.
+
+Change-Id: I0d1ed40c8ba53c11b7e8329e67d7c882f448b1c2
+Signed-off-by: Vidyadhar Gurram <rnh786@motorola.com>
+Reviewed-on: http://gerrit.mot.com/728453
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 42 +++++++++++++++++++++++++++++++++++++
+ 1 file changed, 42 insertions(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 57398a35c34..dc3121bacb2 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -287,6 +287,7 @@ enum wake_reason {
+ 	PM_ESR_PULSE = BIT(2),
+ 	PM_HEARTBEAT = BIT(3),
+ 	PM_CHARGER = BIT(4),
++	PM_WIRELESS = BIT(5),
+ };
+ 
+ static void smbchg_rate_check(struct smbchg_chip *chip);
+@@ -4020,6 +4021,24 @@ static irqreturn_t power_ok_handler(int irq, void *_chip)
+ 	return IRQ_HANDLED;
+ }
+ 
++static int handle_dc_removal(struct smbchg_chip *chip)
++{
++	if (chip->dc_psy_type != -EINVAL)
++		power_supply_set_online(&chip->dc_psy, chip->dc_present);
++
++	smbchg_relax(chip, PM_WIRELESS);
++	return 0;
++}
++
++static int handle_dc_insertion(struct smbchg_chip *chip)
++{
++	if (chip->dc_psy_type != -EINVAL)
++		power_supply_set_online(&chip->dc_psy,
++						chip->dc_present);
++	smbchg_stay_awake(chip, PM_WIRELESS);
++	return 0;
++}
++
+ /**
+  * dcin_uv_handler() - called when the dc voltage crosses the uv threshold
+  * @chip: pointer to smbchg_chip
+@@ -4034,6 +4053,7 @@ static irqreturn_t dcin_uv_handler(int irq, void *_chip)
+ 	pr_smb(PR_STATUS, "chip->dc_present = %d dc_present = %d\n",
+ 			chip->dc_present, dc_present);
+ 
++#ifdef QCOM_BASE
+ 	if (chip->dc_present != dc_present) {
+ 		/* dc changed */
+ 		chip->dc_present = dc_present;
+@@ -4045,6 +4065,17 @@ static irqreturn_t dcin_uv_handler(int irq, void *_chip)
+ 	}
+ 
+ 	smbchg_wipower_check(chip);
++#endif
++	if (!chip->dc_present && dc_present) {
++		/* dc inserted */
++		chip->dc_present = dc_present;
++		handle_dc_insertion(chip);
++	} else if (chip->dc_present && !dc_present) {
++		/* dc removed */
++		chip->dc_present = dc_present;
++		handle_dc_removal(chip);
++	}
++
+ 	return IRQ_HANDLED;
+ }
+ 
+@@ -4583,6 +4614,7 @@ static inline int get_bpd(const char *name)
+ 	return -EINVAL;
+ }
+ 
++#define DC_CHGR_CFG			0xF1
+ #define CCMP_CFG			0xFA
+ #define CCMP_CFG_MASK			0xFF
+ #define CCMP_CFG_DIS_ALL_TEMP		0x20
+@@ -4642,6 +4674,7 @@ static inline int get_bpd(const char *name)
+ #define USBIN_ALLOW_9V			0x3
+ #define USBIN_ALLOW_5V_UNREG		0x4
+ #define USBIN_ALLOW_5V_9V_UNREG		0x5
++#define DCIN_ALLOW_5V_TO_9V		0x2
+ static int smbchg_hw_init(struct smbchg_chip *chip)
+ {
+ 	int rc, i;
+@@ -4966,6 +4999,15 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
+ 
+ 	/* DC path current settings */
+ 	if (chip->dc_psy_type != -EINVAL) {
++		rc = smbchg_sec_masked_write(chip,
++				     chip->dc_chgpth_base + DC_CHGR_CFG,
++				     0xFF, DCIN_ALLOW_5V_TO_9V);
++		if (rc < 0) {
++			dev_err(chip->dev,
++				"Couldn't set DCIN CHGR CONFIG rc = %d\n", rc);
++			return rc;
++		}
++
+ 		rc = smbchg_set_thermal_limited_dc_current_max(chip,
+ 						chip->dc_target_current_ma);
+ 		if (rc < 0) {
+-- 
+2.11.0
+

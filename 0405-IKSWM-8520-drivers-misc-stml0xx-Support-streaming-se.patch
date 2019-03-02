@@ -1,0 +1,895 @@
+From 706b484a5dd841ffc4b43e87d876a120770431f1 Mon Sep 17 00:00:00 2001
+From: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Date: Fri, 23 Oct 2015 16:42:44 -0500
+Subject: [PATCH 405/959] IKSWM-8520 drivers:misc:stml0xx: Support streaming
+ sensor queue
+
+- Support sensorhub's streaming sensor queue
+- Support uncalibrated gyro
+- Increase SPI msg size
+- Increase size of log buffer
+- Various clean ups
+
+Signed-off-by: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Change-Id: I822f6a5f2e13aab8d395a177cd491c13c496af63
+Reviewed-on: http://gerrit.mot.com/794240
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_flash.c    |  18 ++-
+ drivers/misc/stml0xx/stml0xx_ioctl.c    |  17 ++-
+ drivers/misc/stml0xx/stml0xx_irq.c      | 261 +++++++++++++++++++++++---------
+ drivers/misc/stml0xx/stml0xx_spi.c      |  22 +--
+ drivers/misc/stml0xx/stml0xx_wake_irq.c |  33 ++--
+ include/linux/stml0xx.h                 | 125 +++++++--------
+ include/uapi/linux/stml0xx.h            |  56 ++++---
+ 7 files changed, 321 insertions(+), 211 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_flash.c b/drivers/misc/stml0xx/stml0xx_flash.c
+index c6de406b70f..6b8ac144df0 100644
+--- a/drivers/misc/stml0xx/stml0xx_flash.c
++++ b/drivers/misc/stml0xx/stml0xx_flash.c
+@@ -392,12 +392,6 @@ ssize_t stml0xx_misc_write(struct file *file, const char __user *buff,
+ 	int bad_byte_cnt = 0;
+ 	int fillers = 0;
+ 
+-	if (count > STML0XX_MAXDATA_LENGTH || count == 0) {
+-		dev_err(&stml0xx_misc_data->spi->dev,
+-			"Invalid packet size %zu", count);
+-		return -EINVAL;
+-	}
+-
+ 	mutex_lock(&stml0xx_misc_data->lock);
+ 
+ 	if (stml0xx_bootloader_ver == 0) {
+@@ -409,6 +403,12 @@ ssize_t stml0xx_misc_write(struct file *file, const char __user *buff,
+ 
+ 	if (stml0xx_misc_data->mode == BOOTMODE) {
+ 		/* For boot mode */
++		if (count > STML0XX_MAX_FLASH_PACKET_LENGTH || count == 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Invalid packet size %zu", count);
++			return -EINVAL;
++		}
++
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Starting flash write, %zu bytes to address 0x%08x",
+ 			count, stml0xx_misc_data->current_addr);
+@@ -571,6 +571,12 @@ RETRY_READ:
+ 		stml0xx_misc_data->current_addr += count;
+ 	} else {
+ 		/* For normal mode */
++		if (count > SPI_TX_PAYLOAD_LEN || count == 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Invalid packet size %zu", count);
++			return -EINVAL;
++		}
++
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Normal mode write started");
+ 		if (copy_from_user(stml0xx_boot_cmdbuff, buff, count)) {
+diff --git a/drivers/misc/stml0xx/stml0xx_ioctl.c b/drivers/misc/stml0xx/stml0xx_ioctl.c
+index 5cced7cd75d..9e8722f55af 100644
+--- a/drivers/misc/stml0xx/stml0xx_ioctl.c
++++ b/drivers/misc/stml0xx/stml0xx_ioctl.c
+@@ -43,8 +43,6 @@
+ 
+ #include <linux/stml0xx.h>
+ 
+-#define MAX_LOCAL_BUF_SIZE  64
+-
+ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ {
+ 	void __user *argp = (void __user *)arg;
+@@ -54,7 +52,7 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 	unsigned int addr, duration, algo_idx;
+ 	unsigned short delay;
+ 	unsigned int data_size = 0;
+-	unsigned char buf[MAX_LOCAL_BUF_SIZE];
++	unsigned char buf[SPI_RX_PAYLOAD_LEN];
+ 	unsigned char len;
+ 	unsigned int handle;
+ 	struct timespec current_time;
+@@ -511,11 +509,12 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		data_size = (buf[2] << 8) | buf[3];
+ 
+ 		/* fail if the write size is too large */
+-		if (data_size > MAX_LOCAL_BUF_SIZE - 1) {
++		if (data_size > SPI_TX_PAYLOAD_LEN) {
+ 			err = -EFAULT;
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Write Reg, data_size > %d",
+-				MAX_LOCAL_BUF_SIZE - 1);
++				"Write Reg, data_size %d > %d",
++				data_size,
++				SPI_TX_PAYLOAD_LEN);
+ 			break;
+ 		}
+ 
+@@ -551,9 +550,11 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		addr = (buf[0] << 8) | buf[1];
+ 		data_size = (buf[2] << 8) | buf[3];
+ 
+-		if (data_size > MAX_LOCAL_BUF_SIZE) {
++		if (data_size > SPI_RX_PAYLOAD_LEN) {
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Read Reg error, size too large");
++				"Read Reg, data_size %d > %d",
++				data_size,
++				SPI_RX_PAYLOAD_LEN);
+ 			err = -EFAULT;
+ 			break;
+ 		}
+diff --git a/drivers/misc/stml0xx/stml0xx_irq.c b/drivers/misc/stml0xx/stml0xx_irq.c
+index 77fbe4ab6b6..1580ff67252 100644
+--- a/drivers/misc/stml0xx/stml0xx_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_irq.c
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright (C) 2010-2014 Motorola Mobility LLC
++ * Copyright (C) 2010-2015 Motorola Mobility LLC
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 as
+@@ -42,16 +42,22 @@
+ 
+ #include <linux/stml0xx.h>
+ 
++#define SH_LPTIM_TICKS_TO_NS(ticks)  ((7813335 * (uint64_t)ticks) >> 8)
++
++/* Timestamp of the last sample in the streaming sensor queue */
++static uint64_t last_ts_ns;
++
+ irqreturn_t stml0xx_isr(int irq, void *dev)
+ {
+-	static struct timespec ts;
+-	static struct stml0xx_work_struct *stm_ws;
++	struct timespec ts;
++	struct stml0xx_work_struct *stm_ws;
+ 	struct stml0xx_data *ps_stml0xx = dev;
+-	get_monotonic_boottime(&ts);
+ 
+ 	if (stml0xx_irq_disable)
+ 		return IRQ_HANDLED;
+ 
++	get_monotonic_boottime(&ts);
++
+ 	stm_ws = kmalloc(
+ 		sizeof(struct stml0xx_work_struct),
+ 		GFP_ATOMIC);
+@@ -64,10 +70,184 @@ irqreturn_t stml0xx_isr(int irq, void *dev)
+ 	INIT_WORK((struct work_struct *)stm_ws, stml0xx_irq_work_func);
+ 	stm_ws->ts_ns = ts_to_ns(ts);
+ 
++	if (last_ts_ns > stm_ws->ts_ns)
++		dev_dbg(&ps_stml0xx->spi->dev,
++			"warning: timestamp out of order");
++
+ 	queue_work(ps_stml0xx->irq_work_queue, (struct work_struct *)stm_ws);
+ 	return IRQ_HANDLED;
+ }
+ 
++/**
++ * stml0xx_process_stream_sensor_queue() - Process sensor data from the
++ *		streaming sensor data queue
++ * @buf:	SPI buffer containing the streaming sensor data queue
++ * @ts_ns:	Timestamp applied to the first sample in the queue
++ *
++ * Streaming sensor data queue structure (queue_buf[]):
++ *
++ *   This is a circular buffer, where insert_idx == remove_idx means empty,
++ *   and insert_idx ==(remove_idx + N-1) % N means full,
++ *   where N = STREAM_SENSOR_QUEUE_DEPTH
++ *   (so only N-1 of the N slots are ever filled).
++ *
++ *   Byte  0   - slot 0: sensor type
++ *   Bytes 1~2 - slot 0: number of ticks elapsed since previous sample
++ *   Bytes 3~8 - slot 0: 6-byte data
++ *   ...
++ *   Bytes [n*9]               - slot n: sensor type
++ *   Bytes [n*9 + 1]~[n*9 + 2] - slot n: number of ticks elapsed since
++ *                                       previous sample
++ *   Bytes [n*9 + 3]~[n*9 + 8] - slot n: 6-byte data
++ *
++ *   Bytes [N*9]               - Insert index (0,1,2,3..N-1)
++ *   Bytes [N*9 + 1]~[N*9 + 3] - Nothing (buffer to ensure insert and remove
++ *                                        indices are in separate words)
++ *   Bytes [N*9 + 4]           - Remove index (0,1,2,3..N-1)
++ *
++ *   where n = slot (0..N-1), N = STREAM_SENSOR_QUEUE_DEPTH
++*/
++void stml0xx_process_stream_sensor_queue(char *buf, uint64_t ts_ns)
++{
++	int i = 0;
++	int insert_idx = 0;
++	int remove_idx = 0;
++	int first_sample = 1;
++	unsigned char *sample_buf;
++	uint16_t delta_ticks = 0;
++	uint8_t sensor_type = 0;
++	uint8_t num_samples = 0;
++	struct stml0xx_data *ps_stml0xx = stml0xx_misc_data;
++	uint32_t irq_status = (buf[IRQ_IDX_STATUS_HI] << 16) |
++		(buf[IRQ_IDX_STATUS_MED] << 8) | buf[IRQ_IDX_STATUS_LO];
++	unsigned char *queue_buf = &buf[IRQ_IDX_STREAM_SENSOR_QUEUE];
++
++	insert_idx = queue_buf[STREAM_SENSOR_QUEUE_INSERT_IDX];
++	remove_idx = queue_buf[STREAM_SENSOR_QUEUE_REMOVE_IDX];
++
++	if (insert_idx >= remove_idx)
++		num_samples = insert_idx - remove_idx;
++	else
++		num_samples = insert_idx + STREAM_SENSOR_QUEUE_DEPTH
++				- remove_idx;
++
++	if (num_samples >= 2)
++		dev_dbg(&stml0xx_misc_data->spi->dev, "Samples in Queue: %d",
++			num_samples);
++
++#if ENABLE_VERBOSE_LOGGING
++	for (i = 0; i < STREAM_SENSOR_QUEUE_DEPTH *
++			STREAM_SENSOR_QUEUE_ENTRY_SIZE; i++) {
++		if (i % STREAM_SENSOR_QUEUE_ENTRY_SIZE == 0) {
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Queue buf[%d] - 0x%02x - slot [%d]",
++				i, queue_buf[i],
++				i / STREAM_SENSOR_QUEUE_ENTRY_SIZE);
++		} else {
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Queue buf[%d] - 0x%02x", i, queue_buf[i]);
++		}
++	}
++	dev_dbg(&stml0xx_misc_data->spi->dev,
++		"Insert [%d], Remove [%d]", insert_idx, remove_idx);
++#else
++	uninitialized_var(i);
++#endif /* ENABLE_VERBOSE_LOGGING */
++
++	while (remove_idx != insert_idx) {
++		sample_buf = queue_buf +
++			(STREAM_SENSOR_QUEUE_ENTRY_SIZE * remove_idx);
++		sensor_type = sample_buf[SENSOR_TYPE_IDX];
++		delta_ticks = SH_TO_H16(sample_buf + DELTA_TICKS_IDX);
++		if (first_sample)
++			first_sample = 0;
++		else
++			ts_ns += SH_LPTIM_TICKS_TO_NS(delta_ticks);
++
++		last_ts_ns = ts_ns;
++
++		switch (sensor_type) {
++		case STREAM_SENSOR_TYPE_ACCEL1:
++			stml0xx_as_data_buffer_write(ps_stml0xx,
++				DT_ACCEL, &sample_buf[SENSOR_X_IDX],
++				SENSOR_DATA_SIZE, 0, ts_ns);
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Sending acc(x,y,z)values:x=%d,y=%d,z=%d",
++				SH_TO_H16(sample_buf + SENSOR_X_IDX),
++				SH_TO_H16(sample_buf + SENSOR_Y_IDX),
++				SH_TO_H16(sample_buf + SENSOR_Z_IDX));
++			break;
++		case STREAM_SENSOR_TYPE_ACCEL2:
++			stml0xx_as_data_buffer_write(ps_stml0xx,
++				DT_ACCEL2, &sample_buf[SENSOR_X_IDX],
++				SENSOR_DATA_SIZE, 0, ts_ns);
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Sending acc2(x,y,z)values:x=%d,y=%d,z=%d",
++				SH_TO_H16(sample_buf + SENSOR_X_IDX),
++				SH_TO_H16(sample_buf + SENSOR_Y_IDX),
++				SH_TO_H16(sample_buf + SENSOR_Z_IDX));
++			break;
++		case STREAM_SENSOR_TYPE_UNCAL_GYRO:
++			if (irq_status & M_UNCALIB_GYRO) {
++				char uncal_gyro_buf[UNCALIB_GYRO_DATA_SIZE];
++
++				memcpy(uncal_gyro_buf,
++					sample_buf + SENSOR_X_IDX,
++					SENSOR_DATA_SIZE);
++				memcpy(uncal_gyro_buf + SENSOR_DATA_SIZE,
++					buf + IRQ_IDX_GYRO_CAL_X,
++					SENSOR_DATA_SIZE);
++				stml0xx_as_data_buffer_write(ps_stml0xx,
++					DT_UNCALIB_GYRO,
++					uncal_gyro_buf,
++					UNCALIB_GYRO_DATA_SIZE, 0, ts_ns);
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++				  "Sending Gyro uncalib(x,y,z)values:%d,%d,%d;%d,%d,%d",
++					SH_TO_H16(sample_buf + SENSOR_X_IDX),
++					SH_TO_H16(sample_buf + SENSOR_Y_IDX),
++					SH_TO_H16(sample_buf + SENSOR_Z_IDX),
++					SH_TO_H16(buf + IRQ_IDX_GYRO_CAL_X),
++					SH_TO_H16(buf + IRQ_IDX_GYRO_CAL_Y),
++					SH_TO_H16(buf + IRQ_IDX_GYRO_CAL_Z));
++			}
++			if  (irq_status & M_GYRO) {
++				int16_t gyro_x, gyro_y, gyro_z;
++
++				/* Apply bias to uncal gyro data */
++				gyro_x = SH_TO_H16(sample_buf + SENSOR_X_IDX)
++					- SH_TO_H16(buf + IRQ_IDX_GYRO_CAL_X);
++				gyro_y = SH_TO_H16(sample_buf + SENSOR_Y_IDX)
++					- SH_TO_H16(buf + IRQ_IDX_GYRO_CAL_Y);
++				gyro_z = SH_TO_H16(sample_buf + SENSOR_Z_IDX)
++					- SH_TO_H16(buf + IRQ_IDX_GYRO_CAL_Z);
++
++				/* Copy results back into buf */
++				sample_buf[SENSOR_X_IDX]   = gyro_x >> 8;
++				sample_buf[SENSOR_X_IDX+1] = gyro_x & 0x00ff;
++				sample_buf[SENSOR_Y_IDX]   = gyro_y >> 8;
++				sample_buf[SENSOR_Y_IDX+1] = gyro_y & 0x00ff;
++				sample_buf[SENSOR_Z_IDX]   = gyro_z >> 8;
++				sample_buf[SENSOR_Z_IDX+1] = gyro_z & 0x00ff;
++				stml0xx_as_data_buffer_write(ps_stml0xx,
++					DT_GYRO, &sample_buf[SENSOR_X_IDX],
++					SENSOR_DATA_SIZE, 0, ts_ns);
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++				   "Sending gyro(x,y,z)values:x=%d,y=%d,z=%d",
++					SH_TO_H16(sample_buf + SENSOR_X_IDX),
++					SH_TO_H16(sample_buf + SENSOR_Y_IDX),
++					SH_TO_H16(sample_buf + SENSOR_Z_IDX));
++			}
++			break;
++		default:
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Unknown sensor type [%d]", sensor_type);
++			break;
++		}
++
++		remove_idx = (remove_idx + 1) % STREAM_SENSOR_QUEUE_DEPTH;
++	}
++}
++
+ void stml0xx_irq_work_func(struct work_struct *work)
+ {
+ 	int err;
+@@ -101,73 +281,9 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 	irq_status = (buf[IRQ_IDX_STATUS_HI] << 16) |
+ 	    (buf[IRQ_IDX_STATUS_MED] << 8) | buf[IRQ_IDX_STATUS_LO];
+ 
+-	if (irq_status & M_ACCEL) {
+-		int head = 0;
+-		int tail = 0;
+-		int first_accel_sample = 0;
+-		uint64_t ts_ns = 0;
+-		unsigned char *data_buf = 0;
+-		unsigned char *accel_buf = 0;
+-		uint8_t delay_ms = 0;
+-
+-		data_buf = &buf[IRQ_IDX_ACCEL1];
+-
+-		ts_ns = stm_ws->ts_ns;
+-		head = data_buf[28];
+-		tail = data_buf[32];
+-		for (
+-			first_accel_sample = 1, accel_buf = data_buf + 7*tail;
+-			tail != head;
+-			tail = (tail + 1) % 4, accel_buf = data_buf + 7*tail) {
+-
+-			delay_ms = accel_buf[6];
+-			if (first_accel_sample)
+-				first_accel_sample = 0;
+-			else
+-				ts_ns += delay_ms * 1000000LL;
+-
+-			stml0xx_as_data_buffer_write(
+-				ps_stml0xx,
+-				DT_ACCEL,
+-				accel_buf,
+-				6,
+-				0,
+-				ts_ns);
+-
+-			dev_dbg(&stml0xx_misc_data->spi->dev,
+-				"Sending acc(x,y,z)values:x=%d,y=%d,z=%d",
+-				STM16_TO_HOST(ACCEL_RD_X, accel_buf),
+-				STM16_TO_HOST(ACCEL_RD_Y, accel_buf),
+-				STM16_TO_HOST(ACCEL_RD_Z, accel_buf));
+-		}
+-	}
+-	if (irq_status & M_ACCEL2) {
+-		stml0xx_as_data_buffer_write(ps_stml0xx,
+-			DT_ACCEL2,
+-			&buf[IRQ_IDX_ACCEL2],
+-			6,
+-			0,
+-			stm_ws->ts_ns);
+-
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending acc2(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(ACCEL_RD_X, &buf[IRQ_IDX_ACCEL2]),
+-			STM16_TO_HOST(ACCEL_RD_Y, &buf[IRQ_IDX_ACCEL2]),
+-			STM16_TO_HOST(ACCEL_RD_Z, &buf[IRQ_IDX_ACCEL2]));
+-	}
+-	if (irq_status & M_GYRO) {
+-		stml0xx_as_data_buffer_write(ps_stml0xx,
+-			DT_GYRO,
+-			&buf[IRQ_IDX_GYRO],
+-			6,
+-			0,
+-			stm_ws->ts_ns);
+-
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending gyro(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(ACCEL_RD_X, &buf[IRQ_IDX_ACCEL2]),
+-			STM16_TO_HOST(ACCEL_RD_Y, &buf[IRQ_IDX_ACCEL2]),
+-			STM16_TO_HOST(ACCEL_RD_Z, &buf[IRQ_IDX_ACCEL2]));
++	/* Check for streaming sensors */
++	if (irq_status & (M_ACCEL | M_ACCEL2 | M_GYRO | M_GYRO)) {
++		stml0xx_process_stream_sensor_queue(buf, stm_ws->ts_ns);
+ 	}
+ 	if (irq_status & M_ALS) {
+ 		stml0xx_as_data_buffer_write(
+@@ -179,8 +295,7 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending ALS %d", STM16_TO_HOST(ALS_VALUE,
+-					&buf[IRQ_IDX_ALS]));
++			"Sending ALS %d", SH_TO_H16(buf + IRQ_IDX_ALS));
+ 	}
+ 	if (irq_status & M_DISP_ROTATE) {
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_DISP_ROTATE,
+diff --git a/drivers/misc/stml0xx/stml0xx_spi.c b/drivers/misc/stml0xx/stml0xx_spi.c
+index d843722962d..2e0c0ce0a60 100644
+--- a/drivers/misc/stml0xx/stml0xx_spi.c
++++ b/drivers/misc/stml0xx/stml0xx_spi.c
+@@ -380,7 +380,7 @@ static int stml0xx_spi_send_write_reg_no_retries(unsigned char reg_type,
+ 	unsigned char cmd_buff[SPI_MSG_SIZE];
+ 
+ 	if (!reg_data || reg_size <= 0 ||
+-	    reg_size > STML0XX_MAX_REG_LEN) {
++	    reg_size > STML0XX_MAX_WRITE_REG_LEN) {
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Invalid buffer or buffer size");
+ 		ret = -EFAULT;
+@@ -404,18 +404,18 @@ static int stml0xx_spi_send_write_reg_no_retries(unsigned char reg_type,
+ 		cmd_buff[5] = data_size;
+ 
+ 		/* Copy data and update data parameters */
+-		memcpy(&cmd_buff[SPI_WRITE_REG_HDR_SIZE],
++		memcpy(&cmd_buff[SPI_TX_HDR_SIZE],
+ 		       reg_data + data_offset, data_size);
+ 		remaining_data_size -= data_size;
+ 		data_offset += data_size;
+ 
+ 		/* Swap all bytes */
+ 		stml0xx_spi_swap_bytes(cmd_buff,
+-				       SPI_MSG_SIZE - SPI_CRC_LEN);
++				       SPI_MSG_SIZE - SPI_CRC_SIZE);
+ 
+ 		/* Append 2-byte CRC (unswapped) */
+ 		stml0xx_spi_append_crc(cmd_buff,
+-				       SPI_MSG_SIZE - SPI_CRC_LEN);
++				       SPI_MSG_SIZE - SPI_CRC_SIZE);
+ 
+ 		/* Write write request to SPI */
+ 		ret =
+@@ -444,7 +444,7 @@ int stml0xx_spi_send_write_reg_reset(unsigned char reg_type,
+ 	int ret = -EIO;
+ 
+ 	if (!reg_data || reg_size <= 0 ||
+-	    reg_size > STML0XX_MAX_REG_LEN) {
++	    reg_size > STML0XX_MAX_WRITE_REG_LEN) {
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+ 			"Invalid buffer or buffer size");
+ 		ret = -EFAULT;
+@@ -479,7 +479,7 @@ static int stml0xx_spi_send_read_reg_no_retries(enum sh_spi_msg spi_msg_type,
+ 	unsigned char read_buff[SPI_MSG_SIZE];
+ 
+ 	if (!reg_data || reg_size <= 0 ||
+-	    reg_size > STML0XX_MAX_REG_LEN) {
++	    reg_size > SPI_RX_PAYLOAD_LEN) {
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Invalid buffer or buffer size");
+ 		ret = -EFAULT;
+@@ -507,11 +507,11 @@ static int stml0xx_spi_send_read_reg_no_retries(enum sh_spi_msg spi_msg_type,
+ 
+ 		/* Swap all bytes */
+ 		stml0xx_spi_swap_bytes(cmd_buff,
+-			SPI_MSG_SIZE - SPI_CRC_LEN);
++			SPI_MSG_SIZE - SPI_CRC_SIZE);
+ 
+ 		/* Append 2-byte CRC (unswapped) */
+ 		stml0xx_spi_append_crc(cmd_buff,
+-			SPI_MSG_SIZE - SPI_CRC_LEN);
++			SPI_MSG_SIZE - SPI_CRC_SIZE);
+ 
+ 		/* Write read request to SPI */
+ 		ret = stml0xx_spi_write_no_reset_no_retries(cmd_buff,
+@@ -530,7 +530,7 @@ static int stml0xx_spi_send_read_reg_no_retries(enum sh_spi_msg spi_msg_type,
+ 				read_buff[SPI_MSG_SIZE - 1];
+ 		calc_crc = stml0xx_spi_calculate_crc(read_buff,
+ 						     SPI_MSG_SIZE -
+-						     SPI_CRC_LEN);
++						     SPI_CRC_SIZE);
+ 		if (recv_crc != calc_crc) {
+ 			dev_dbg(&stml0xx_misc_data->spi->dev,
+ 				"CRC mismatch [0x%02x/0x%02x]. Discarding data.",
+@@ -541,7 +541,7 @@ static int stml0xx_spi_send_read_reg_no_retries(enum sh_spi_msg spi_msg_type,
+ 
+ 		/* Swap bytes before extracting data */
+ 		stml0xx_spi_swap_bytes(read_buff,
+-				       SPI_MSG_SIZE - SPI_CRC_LEN);
++				       SPI_MSG_SIZE - SPI_CRC_SIZE);
+ 
+ 		/* Extract payload */
+ 		memcpy(reg_data + data_offset, read_buff, data_size);
+@@ -567,7 +567,7 @@ int stml0xx_spi_send_read_reg_reset(unsigned char reg_type,
+ 	int ret = -EIO;
+ 
+ 	if (!reg_data || reg_size <= 0 ||
+-	    reg_size > STML0XX_MAX_REG_LEN) {
++	    reg_size > SPI_RX_PAYLOAD_LEN) {
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+ 			"Invalid buffer or buffer size");
+ 		ret = -EFAULT;
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index 3081e65af50..67829f7b6f8 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -64,14 +64,15 @@ enum headset_state_t Headset_State = SH_HEADSET_REMOVED;
+ 
+ irqreturn_t stml0xx_wake_isr(int irq, void *dev)
+ {
+-	static struct timespec ts;
+-	static struct stml0xx_delayed_work_struct *stm_ws;
++	struct timespec ts;
++	struct stml0xx_delayed_work_struct *stm_ws;
+ 	struct stml0xx_data *ps_stml0xx = dev;
+-	get_monotonic_boottime(&ts);
+ 
+ 	if (stml0xx_irq_disable)
+ 		return IRQ_HANDLED;
+ 
++	get_monotonic_boottime(&ts);
++
+ 	wake_lock_timeout(&ps_stml0xx->wake_sensor_wakelock, HZ);
+ 	stm_ws = kmalloc(
+ 		sizeof(struct stml0xx_delayed_work_struct),
+@@ -351,18 +352,17 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 		dev_info(&stml0xx_misc_data->spi->dev,
+ 			"Sending Stowed status %d, als %d, prox %d",
+ 			buf[WAKE_IRQ_IDX_STOWED],
+-			STM16_TO_HOST(ALS_VALUE,
+-				&buf[WAKE_IRQ_IDX_STOWED_ALS]),
++			SH_TO_H16(buf + WAKE_IRQ_IDX_STOWED_ALS),
+ 			buf[WAKE_IRQ_IDX_PROX]);
+ 	}
+-	if (irq_status & M_CAMERA_ACT) {
++	if (irq_status & M_CAMERA_GESTURE) {
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_CAMERA_ACT,
+ 						&buf[WAKE_IRQ_IDX_CAMERA],
+ 						2, 0, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending Camera: %d", STM16_TO_HOST(CAMERA_VALUE,
+-					&buf[WAKE_IRQ_IDX_CAMERA]));
++			"Sending Camera: %d",
++			SH_TO_H16(buf + WAKE_IRQ_IDX_CAMERA));
+ 
+ 		input_report_key(ps_stml0xx->input_dev, KEY_CAMERA, 1);
+ 		input_report_key(ps_stml0xx->input_dev, KEY_CAMERA, 0);
+@@ -374,9 +374,7 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 						0,
+ 						0, 0, stm_ws->ts_ns);
+ 
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending Chopchop: %d", STM16_TO_HOST(CHOP_VALUE,
+-				0));
++		dev_dbg(&stml0xx_misc_data->spi->dev, "Sending Chopchop");
+ 	}
+ 	if (irq_status & M_SIM) {
+ 		stml0xx_as_data_buffer_write(
+@@ -391,8 +389,8 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 		stml0xx_g_wake_sensor_state &= (~M_SIM);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending SIM Value=%d", STM16_TO_HOST(SIM_DATA,
+-					&buf[WAKE_IRQ_IDX_SIM]));
++			"Sending SIM Value=%d",
++			SH_TO_H16(buf + WAKE_IRQ_IDX_SIM));
+ 	}
+ 	if (irq_status & M_LIFT) {
+ 		stml0xx_as_data_buffer_write(
+@@ -405,9 +403,9 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Lift triggered. Dist=%d. ZRot=%d. GravDiff=%d.\n",
+-			STM32_TO_HOST(LIFT_DISTANCE, &buf[WAKE_IRQ_IDX_LIFT]),
+-			STM32_TO_HOST(LIFT_ROTATION, &buf[WAKE_IRQ_IDX_LIFT]),
+-			STM32_TO_HOST(LIFT_GRAV_DIFF, &buf[WAKE_IRQ_IDX_LIFT]));
++			SH_TO_H32(buf + WAKE_IRQ_IDX_LIFT + LIFT_DISTANCE),
++			SH_TO_H32(buf + WAKE_IRQ_IDX_LIFT + LIFT_ROTATION),
++			SH_TO_H32(buf + WAKE_IRQ_IDX_LIFT + LIFT_GRAV_DIFF));
+ 	}
+ 	if (irq2_status & M_MMOVEME) {
+ 		unsigned char status;
+@@ -456,8 +454,7 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 		dev_info(&stml0xx_misc_data->spi->dev,
+ 			"Sending algo stowed event %d, als %d, prox %d",
+ 			buf[WAKE_IRQ_IDX_MODALITY_STOWED + 3],
+-			STM16_TO_HOST(ALS_VALUE,
+-				&buf[WAKE_IRQ_IDX_STOWED_ALS]),
++			SH_TO_H16(buf + WAKE_IRQ_IDX_STOWED_ALS),
+ 			buf[WAKE_IRQ_IDX_PROX]);
+ 	}
+ 	if (irq2_status & M_ALGO_ACCUM_MODALITY) {
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 68d7addd446..bf13d706278 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright (C) 2010-2014 Motorola, Inc.
++ * Copyright (C) 2010-2015 Motorola, Inc.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 as
+@@ -45,17 +45,6 @@
+ #define SPI_SENSORHUB_TIMEOUT   5000
+ #define SPI_BARKER_1            0xF9
+ #define SPI_BARKER_2            0xAE
+-#define SPI_HEADER_SIZE         6
+-#define SPI_CRC_SIZE            2
+-#define SPI_WRITE_REG_HDR_SIZE      6
+-#define SPI_READ_REG_HDR_SIZE       6
+-#define SPI_CRC_LEN                 2
+-#define SPI_READ_SENSORS_HDR_SIZE   3
+-#define SPI_TX_PAYLOAD_LEN         88
+-#define SPI_MSG_SIZE	\
+-	(SPI_HEADER_SIZE+SPI_TX_PAYLOAD_LEN+SPI_CRC_SIZE)
+-#define SPI_RX_PAYLOAD_LEN	\
+-	(SPI_MSG_SIZE - SPI_CRC_SIZE)
+ 
+ enum sh_spi_msg {
+ 	SPI_MSG_TYPE_READ_REG = 1,
+@@ -82,35 +71,43 @@ enum vmm_ids {
+ #define STML0XX_MS_DATA_QUEUE_SIZE       0x08
+ #define STML0XX_MS_DATA_QUEUE_MASK       0x07
+ 
+-#define STML0XX_CLIENT_MASK		0xF0
+-
+-#define STML0XX_BUSY_STATUS_MASK	0x80
+-#define STML0XX_BUSY_SLEEP_USEC	10000
+-#define STML0XX_BUSY_RESUME_COUNT	14
+-#define STML0XX_BUSY_SUSPEND_COUNT	6
+-
+-#define STML0XX_MAX_REG_LEN         255
+-
+-#define LOG_MSG_SIZE			24
+-
+-#define STML0XX_RESET_DELAY		50
+-
+-#define I2C_RESPONSE_LENGTH		8
+-
+-#define STML0XX_MAXDATA_LENGTH		256
+-
+-/* stml0xx IRQ SPI buffer indexes */
+-#define IRQ_IDX_STATUS_LO         0
+-#define IRQ_IDX_STATUS_MED        1
+-#define IRQ_IDX_STATUS_HI         2
+-#define IRQ_IDX_ACCEL1            3
+-#define IRQ_IDX_ACCEL2           36
+-#define IRQ_IDX_GYRO             36
+-#define IRQ_IDX_ALS              42
+-#define IRQ_IDX_DISP_ROTATE      44
+-#define IRQ_IDX_DISP_BRIGHTNESS  45
+-
+-/* stml0xx WAKE IRQ SPI buffer indexes */
++#define STML0XX_CLIENT_MASK              0xF0
++
++#define STML0XX_BUSY_STATUS_MASK         0x80
++#define STML0XX_BUSY_SLEEP_USEC          10000
++#define STML0XX_BUSY_RESUME_COUNT        14
++#define STML0XX_BUSY_SUSPEND_COUNT       6
++
++#define STML0XX_RESET_DELAY              50
++
++#define LOG_MSG_SIZE                     40
++
++#define I2C_RESPONSE_LENGTH              8
++
++/* Streaming sensors queue constants */
++#define STREAM_SENSOR_TYPE_ACCEL1        1
++#define STREAM_SENSOR_TYPE_ACCEL2        2
++#define STREAM_SENSOR_TYPE_UNCAL_GYRO    3
++#define STREAM_SENSOR_QUEUE_DEPTH        10
++#define STREAM_SENSOR_QUEUE_ENTRY_SIZE   9
++#define STREAM_SENSOR_QUEUE_INSERT_IDX \
++	(STREAM_SENSOR_QUEUE_DEPTH * STREAM_SENSOR_QUEUE_ENTRY_SIZE)
++#define STREAM_SENSOR_QUEUE_REMOVE_IDX \
++	(STREAM_SENSOR_QUEUE_DEPTH * STREAM_SENSOR_QUEUE_ENTRY_SIZE + 4)
++
++/* stml0xx non-wake IRQ SPI buffer indexes */
++#define IRQ_IDX_STATUS_LO            0
++#define IRQ_IDX_STATUS_MED           1
++#define IRQ_IDX_STATUS_HI            2
++#define IRQ_IDX_STREAM_SENSOR_QUEUE  3
++#define IRQ_IDX_GYRO_CAL_X           98
++#define IRQ_IDX_GYRO_CAL_Y           100
++#define IRQ_IDX_GYRO_CAL_Z           102
++#define IRQ_IDX_ALS                  104
++#define IRQ_IDX_DISP_ROTATE          106
++#define IRQ_IDX_DISP_BRIGHTNESS      107
++
++/* stml0xx wake IRQ SPI buffer indexes */
+ #define WAKE_IRQ_IDX_STATUS_LO              0
+ #define WAKE_IRQ_IDX_STATUS_MED             1
+ #define WAKE_IRQ_IDX_STATUS_HI              2
+@@ -143,6 +140,16 @@ enum vmm_ids {
+ #define IRQ_NOWAKE_MED  1
+ #define IRQ_NOWAKE_HI   2
+ 
++/* stream sensor data offsets */
++#define SENSOR_TYPE_IDX    0
++#define DELTA_TICKS_IDX    1
++#define SENSOR_X_IDX  3
++#define SENSOR_Y_IDX  5
++#define SENSOR_Z_IDX  7
++
++#define SENSOR_DATA_SIZE       6
++#define UNCALIB_GYRO_DATA_SIZE 12
++
+ #define DOCK_STATE	0
+ #define PROX_DISTANCE	0
+ #define COVER_STATE	0
+@@ -155,33 +162,8 @@ enum vmm_ids {
+ #define ALGO_TYPE	7
+ #define COMPASS_STATUS	12
+ #define DISP_VALUE	0
+-#define ACCEL_RD_X	0
+-#define ACCEL_RD_Y	2
+-#define ACCEL_RD_Z	4
+-#define MAG_X		0
+-#define MAG_Y		2
+-#define MAG_Z		4
+-#define MAG_UNCALIB_X   6
+-#define MAG_UNCALIB_Y   8
+-#define MAG_UNCALIB_Z   10
+-#define ORIENT_X	6
+-#define ORIENT_Y	8
+-#define ORIENT_Z	10
+-#define GYRO_RD_X	0
+-#define GYRO_RD_Y	2
+-#define GYRO_RD_Z	4
+-#define GYRO_UNCALIB_X	6
+-#define GYRO_UNCALIB_Y	8
+-#define GYRO_UNCALIB_Z	10
+-#define ALS_VALUE	0
+ #define TEMP_VALUE	0
+ #define PRESSURE_VALUE	0
+-#define GRAV_X		0
+-#define GRAV_Y		2
+-#define GRAV_Z		4
+-#define CAMERA_VALUE	0
+-#define CHOP_VALUE	0
+-#define SIM_DATA	0
+ #define LIFT_DISTANCE	0
+ #define LIFT_ROTATION	4
+ #define LIFT_GRAV_DIFF	8
+@@ -191,12 +173,11 @@ enum vmm_ids {
+ #define STML0XX_LED_HALF_BRIGHTNESS 0x007F7F7F
+ #define STML0XX_LED_OFF 0x00000000
+ 
+-/* The following macros are intended to be called with the stm IRQ handlers */
+-/* only and refer to local variables in those functions. */
+-#define STM16_TO_HOST(x, buf) ((short) be16_to_cpu( \
+-		*((u16 *) (buf+(x)))))
+-#define STM32_TO_HOST(x, buf) ((short) be32_to_cpu( \
+-		*((u32 *) (buf+(x)))))
++/* The following macros are intended to be called with the sensorhub IRQ
++   handlers only and refer to local variables in those functions. */
++#define SH_TO_H16(buf) (int16_t)(*(buf) << 8 | *((buf)+1))
++#define SH_TO_H32(buf) (int32_t)(*(buf) << 24 | *((buf)+1) << 16 \
++				| *((buf)+2) << 8 | *((buf)+3))
+ 
+ #define STML0XX_HALL_SOUTH 1
+ #define STML0XX_HALL_NORTH 2
+diff --git a/include/uapi/linux/stml0xx.h b/include/uapi/linux/stml0xx.h
+index 63270995f61..8955aba7e49 100644
+--- a/include/uapi/linux/stml0xx.h
++++ b/include/uapi/linux/stml0xx.h
+@@ -134,63 +134,73 @@
+ #define STML0XX_IOCTL_SET_FLUSH \
+ 		_IOW(STML0XX_IOCTL_BASE, 56, int)
+ 
+-
+-#define FW_VERSION_SIZE 12
+-#define FW_VERSION_STR_MAX_LEN 256u
+-#define STML0XX_CONTROL_REG_SIZE 200
+-#define STML0XX_STATUS_REG_SIZE 8
+-#define STML0XX_TOUCH_REG_SIZE  8
+-#define STML0XX_POWER_REG_SIZE  3
+-#define STML0XX_MAG_CAL_SIZE 26
+-#define MOTOSH_GYRO_CAL_SIZE 198 /* 33 entries - 6 bytes each */
+-#define STML0XX_AS_DATA_BUFF_SIZE 20
+-#define STML0XX_MS_DATA_BUFF_SIZE 20
+-#define STML0XX_ALGO_SIZE	2
+-#define STML0XX_PASSTHROUGH_SIZE 16
++/* SPI contants */
++#define SPI_MSG_SIZE        128
++#define SPI_TX_HDR_SIZE     6
++#define SPI_CRC_SIZE        2
++#define SPI_TX_PAYLOAD_LEN  (SPI_MSG_SIZE - SPI_TX_HDR_SIZE - SPI_CRC_SIZE)
++#define SPI_RX_PAYLOAD_LEN  (SPI_MSG_SIZE - SPI_CRC_SIZE)
++
++#define FW_VERSION_SIZE                  12
++#define FW_VERSION_STR_MAX_LEN           256u
++#define STML0XX_CONTROL_REG_SIZE         200
++#define STML0XX_STATUS_REG_SIZE          8
++#define STML0XX_TOUCH_REG_SIZE           8
++#define STML0XX_POWER_REG_SIZE           3
++#define STML0XX_MAG_CAL_SIZE             26
++#define MOTOSH_GYRO_CAL_SIZE             198 /* 33 entries - 6 bytes each */
++#define STML0XX_AS_DATA_BUFF_SIZE        20
++#define STML0XX_MS_DATA_BUFF_SIZE        20
++#define STML0XX_ALGO_SIZE                2
++#define STML0XX_PASSTHROUGH_SIZE         16
++#define STML0XX_MAX_WRITE_REG_LEN        255
++#define STML0XX_MAX_READ_REG_LEN         SPI_RX_PAYLOAD_LEN
++#define STML0XX_MAX_FLASH_PACKET_LENGTH  256
+ 
+ #define STML0XX_CAMERA_DATA 0x01
+ 
+ /* Mask values */
+ 
+-/* Non wakable sensors */
++/* Non-wakeable sensors */
+ #define M_ACCEL                 0x000001
+ #define M_GYRO                  0x000002
+ #define M_PRESSURE              0x000004
+ #define M_ECOMPASS              0x000008
+ #define M_TEMPERATURE           0x000010
+ #define M_ALS                   0x000020
+-
++#define M_STEP_DETECTOR         0x000040
++#define M_STEP_COUNTER          0x000080
+ #define M_LIN_ACCEL             0x000100
+-#define M_QUATERNION            0x000200
++#define M_QUAT_6AXIS            0x000200
+ #define M_GRAVITY               0x000400
+ #define M_DISP_ROTATE           0x000800
+ #define M_DISP_BRIGHTNESS       0x001000
++#define M_ALGO_IR_GESTURE       0x002000
++#define M_ALGO_IR_RAW           0x004000
+ #define M_UNCALIB_GYRO          0x008000
+-
+ #define M_UNCALIB_MAG           0x010000
+ #define M_ACCEL2                0x020000
++#define M_QUAT_9AXIS            0x040000
+ 
+ /* wake sensor status */
+ #define M_DOCK                  0x000001
+ #define M_PROXIMITY             0x000002
+-#define M_TOUCH                 0x000004
++#define M_DISPLAY_TOUCH         0x000004
+ #define M_COVER                 0x000008
++#define M_DISPLAY_PEEK          0x000010
+ #define M_HEADSET               0x000020
+ #define M_INIT_COMPLETE         0x000040
+ #define M_HUB_RESET             0x000080
+-
+-
+ #define M_FLATUP                0x000100
+ #define M_FLATDOWN              0x000200
+ #define M_STOWED                0x000400
+-#define M_CAMERA_ACT            0x000800
++#define M_CAMERA_GESTURE        0x000800
+ #define M_NFC                   0x001000
+ #define M_SIM                   0x002000
+ #define M_LIFT                  0x004000
+ #define M_LOG_MSG               0x008000
+-
+ #define M_CHOPCHOP              0x010000
+-/*#define M_UNUSED              0x020000*/
++#define M_UPDATE_GYRO_CAL       0x020000
+ /*#define M_UNUSED              0x040000*/
+ /*#define M_UNUSED              0x080000*/
+ /*#define M_UNUSED              0x100000*/
+-- 
+2.11.0
+

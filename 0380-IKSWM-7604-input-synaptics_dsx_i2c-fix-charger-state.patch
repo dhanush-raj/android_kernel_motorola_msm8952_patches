@@ -1,0 +1,56 @@
+From 3154f037da76c13b8c8081990ef1313ea89640df Mon Sep 17 00:00:00 2001
+From: Alexander Filonenko <alexf@motorola.com>
+Date: Thu, 16 Jul 2015 17:37:53 -0500
+Subject: [PATCH 380/959] IKSWM-7604 input: synaptics_dsx_i2c: fix charger
+ state machine
+
+Prepare patch on charger state change but do not apply unless in active state.
+Disable touch interrupts properly if touch input device is not registered.
+
+Change-Id: Ib591316a6d76af0a0da5ae1279b18239bc24df6c
+Signed-off-by: Alexander Filonenko <alexf@motorola.com>
+---
+ drivers/input/touchscreen/synaptics_dsx_i2c.c | 12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.c b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+index 19f91843b63..707a2684466 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.c
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+@@ -2492,7 +2492,7 @@ static void synaptics_dsx_sensor_state(struct synaptics_rmi4_data *rmi4_data,
+ 		if (rmi4_data->input_registered)
+ 			synaptics_rmi4_irq_enable(rmi4_data, true);
+ 		else {
+-			synaptics_rmi4_irq_enable(rmi4_data, true);
++			synaptics_rmi4_irq_enable(rmi4_data, false);
+ 			pr_err("Active state without input device\n");
+ 		}
+ 
+@@ -5872,6 +5872,7 @@ static void ps_external_power_changed(struct power_supply *psy)
+ 	struct synaptics_rmi4_data *rmi4_data = container_of(psy,
+ 				struct synaptics_rmi4_data, psy);
+ 	struct device *dev = &rmi4_data->i2c_client->dev;
++	int state;
+ 
+ 	if (!usb_psy || !usb_psy->get_property)
+ 		return;
+@@ -5890,9 +5891,14 @@ static void ps_external_power_changed(struct power_supply *psy)
+ 			list_del(&ps_active.link);
+ 			patch_ptr->cfg_num--;
+ 		}
+-		synaptics_dsx_patch_func(rmi4_data,
++
++		state = synaptics_dsx_get_state_safe(rmi4_data);
++		dev_info(dev, "power supply presence %d in state %d\n",
++			pval.intval, state);
++
++		if (state == STATE_ACTIVE)
++			synaptics_dsx_patch_func(rmi4_data,
+ 				SYNAPTICS_RMI4_F01, &ps_patch[index]);
+-		dev_info(dev, "power supply presence %d\n", pval.intval);
+ 	}
+ 	ps_usb_present = pval.intval == 1;
+ }
+-- 
+2.11.0
+

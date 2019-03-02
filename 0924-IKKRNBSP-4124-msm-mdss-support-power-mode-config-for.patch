@@ -1,0 +1,57 @@
+From b73208b9c11870d50cee7c7a1f06d45bb22563bb Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Mon, 25 Jul 2016 15:14:45 -0700
+Subject: [PATCH 924/959] IKKRNBSP-4124: msm: mdss: support power mode config
+ for panel parameters
+
+Support DSI transferring power mode (LP or HS) configuration by device tree
+for panel parameters.
+
+Port of 060d0db on 8953.
+
+Change-Id: If852c5cee26fa4879d9b246d83d8d573841c5ff9
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+(cherry picked from commit 93e6297842cceead4a3e841b59e110e6e3a9409e)
+Reviewed-on: https://gerrit.mot.com/898852
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index 6f1cf622ebe..c93f8450efe 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -1244,6 +1244,7 @@ static int mdss_panel_parse_param_prop(struct device_node *np,
+ 	struct dsi_panel_cmds *cmds;
+ 	char *prop;
+ 	const char *data;
++	char link[64];
+ 
+ 	pinfo->hbm_restore = false;
+ 
+@@ -1278,8 +1279,15 @@ static int mdss_panel_parse_param_prop(struct device_node *np,
+ 			prop = param->val_map[j].prop;
+ 			if (!prop || !of_get_property(np, prop, NULL))
+ 				continue;
++			if (strlcpy(link, prop, sizeof(link)) >= sizeof(link) ||
++				strlcat(link, "-state", sizeof(link))
++				>= sizeof(link)) {
++				pr_err("%s: too long property name: %s\n",
++					__func__, prop);
++				continue;
++			}
+ 			rc = mdss_dsi_parse_dcs_cmds(np,
+-					&cmds[j], prop, NULL);
++					&cmds[j], prop, link);
+ 			if (rc) {
+ 				pr_err("%s: failed to read prop %s\n",
+ 					__func__, prop);
+-- 
+2.11.0
+

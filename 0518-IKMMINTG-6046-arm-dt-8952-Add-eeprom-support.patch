@@ -1,0 +1,73 @@
+From c7b1a4c5c052b7746609d069e16e6ded0ff5d946 Mon Sep 17 00:00:00 2001
+From: Sumit Jamadar <xkbr38@motorola.com>
+Date: Tue, 1 Dec 2015 17:17:23 -0600
+Subject: [PATCH 518/959] IKMMINTG-6046: arm/dt: 8952: Add eeprom support
+
+Add devtree entry to probe eeprom for
+8952 platform.
+
+Change-Id: I1173d4531106ce206798a6ff16a50ffe5bb3ae2a
+Signed-off-by: Sumit Jamadar <xkbr38@motorola.com>
+Reviewed-on: http://gerrit.mot.com/800941
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Satya Prasad Kottisa <fvgm76@motorola.com>
+Reviewed-by: Elena Satraitis <w04888@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ .../boot/dts/qcom/msm8952-camera-sensor-moto.dtsi  | 30 ++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi b/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
+index 576e2a3c25e..5b35e06dd48 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
+@@ -23,6 +23,35 @@
+ };
+ 
+ &cci {
++	/* OV16860 EEPROM */
++	eeprom0: qcom,eeprom@0 {
++		cell-index = <0>;
++		reg = <0x0>;
++		qcom,eeprom-name = "omnivision_ov16860";
++		compatible = "qcom,eeprom";
++		qcom,slave-addr = <0xA0>;
++		qcom,cci-master = <0>;
++		qcom,i2c-freq-mode = <1>;
++		qcom,num-blocks = <1>;
++		qcom,page0 = <0 0x0000 2 0x00 1 0>;
++		qcom,poll0 = <0 0x0000 2 0x01 1 0>;
++		qcom,mem0 = <8192 0x0000 2 0 1 0>;
++
++		cam_vio-supply = <&pm8950_l10>;
++		qcom,cam-vreg-name = "cam_vio";
++		qcom,cam-vreg-min-voltage = <1800000> ;
++		qcom,cam-vreg-max-voltage = <1800000>;
++		qcom,cam-vreg-op-mode = <1800000>;
++		qcom,gpio-no-mux = <0>;
++
++		qcom,cam-power-seq-type = "sensor_vreg";
++		qcom,cam-power-seq-val = "cam_vio";
++		qcom,cam-power-seq-cfg-val = <1>;
++		qcom,cam-power-seq-delay = <3>;
++
++		status = "ok";
++	};
++
+ 	actuator0: qcom,actuator@0 {
+ 		cell-index = <0>;
+ 		reg = <0x0>;
+@@ -43,6 +72,7 @@
+ 		qcom,mount-angle = <90>;
+ 		qcom,led-flash-src = <&led_flash0>;
+ 		qcom,actuator-src = <&actuator0>;
++		qcom,eeprom-src = <&eeprom0>;
+ 		cam_vdig-supply = <&pm8950_s4>;
+ 		cam_vio-supply = <&pm8950_l10>;
+ 		qcom,cam-vreg-name = "cam_vdig", "cam_vio";
+-- 
+2.11.0
+

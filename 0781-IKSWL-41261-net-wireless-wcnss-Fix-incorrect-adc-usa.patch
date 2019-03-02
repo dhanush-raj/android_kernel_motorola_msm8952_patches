@@ -1,0 +1,42 @@
+From fac2eeaffa536080f46726be0f3a4017b2c19a3f Mon Sep 17 00:00:00 2001
+From: zonghua liu <a17671@motorola.com>
+Date: Thu, 2 Apr 2015 11:59:56 -0500
+Subject: [PATCH 781/959] IKSWL-41261:net:wireless:wcnss:Fix incorrect adc
+ usage
+
+The current adc_tm driver will configure the adc register
+with mini of high threshold and max of the low threshold,
+setting high threshold as 0 will cause request
+managing problem
+
+Change-Id: Icfe56759fd1bbb678d3580bb4fd960f0bd3469ec
+Signed-off-by: zonghua liu <a17671@motorola.com>
+Reviewed-on: http://gerrit.mot.com/731412
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/832116
+Reviewed-by: Mingyong Lu <lumy1@motorola.com>
+---
+ drivers/net/wireless/wcnss/wcnss_wlan.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/wireless/wcnss/wcnss_wlan.c b/drivers/net/wireless/wcnss/wcnss_wlan.c
+index ffb372e860c..13bbea9319f 100644
+--- a/drivers/net/wireless/wcnss/wcnss_wlan.c
++++ b/drivers/net/wireless/wcnss/wcnss_wlan.c
+@@ -1880,7 +1880,7 @@ static void wcnss_notify_vbat(enum qpnp_tm_state state, void *ctx)
+ 			ADC_TM_LOW_THR_ENABLE;
+ 		penv->vbat_monitor_params.low_thr = WCNSS_VBATT_THRESHOLD -
+ 		WCNSS_VBATT_GUARD;
+-		penv->vbat_monitor_params.high_thr = 0;
++		penv->vbat_monitor_params.high_thr = WCNSS_VBATT_THRESHOLD*2;
+ 		pr_debug("wcnss: high voltage notification triggered\n");
+ 	} else {
+ 		pr_debug("wcnss: unknown voltage notification state: %d\n",
+-- 
+2.11.0
+

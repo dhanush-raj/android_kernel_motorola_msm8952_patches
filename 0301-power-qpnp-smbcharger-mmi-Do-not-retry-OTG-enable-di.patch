@@ -1,0 +1,65 @@
+From bd1448b72c39ace59c7a131644149ff94b1e8072 Mon Sep 17 00:00:00 2001
+From: Anirudh Ghayal <aghayal@codeaurora.org>
+Date: Tue, 30 Jun 2015 21:06:37 +0530
+Subject: [PATCH 301/959] power: qpnp-smbcharger-mmi: Do not retry OTG
+ enable/disable in a OC event
+
+SCHG_LITE supports a hardware hiccup mode where the charger
+hardware retries enabling OTG 3 times during an OC (over-current) event.
+
+Enable the hiccup mode for SCHG_LITE and do not retry OTG enable/disable
+in software. If the OC event still occurs then it indicates a true
+shot-circuit and the user is expected to re-insert the OTG cable for
+OTG to be re-enabled.
+
+CRs-Fixed: 860762
+Change-Id: I51f51492193bc08edf87efde46f58c9db902ed71
+Signed-off-by: Anirudh Ghayal <aghayal@codeaurora.org>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 994dd027189..e80ef665140 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -4836,10 +4836,7 @@ static irqreturn_t otg_oc_handler(int irq, void *_chip)
+ 	pr_smb(PR_INTERRUPT, "triggered\n");
+ 
+ 	if (chip->schg_version == QPNP_SCHG_LITE) {
+-		pr_smb(PR_STATUS, "Clear OTG-OC by enable/disable OTG\n");
+-		rc = otg_oc_reset(chip);
+-		if (rc)
+-			pr_err("Failed to reset OTG OC state rc=%d\n", rc);
++		pr_warn("OTG OC triggered - OTG disabled\n");
+ 		return IRQ_HANDLED;
+ 	}
+ 
+@@ -5080,6 +5077,8 @@ static inline int get_bpd(const char *name)
+ 	return -EINVAL;
+ }
+ 
++#define OTG_OC_CFG			0xF1
++#define HICCUP_ENABLED_BIT		BIT(6)
+ #define HVDCP_ADAPTER_SEL_MASK		SMB_MASK(5, 4)
+ #define HVDCP_ADAPTER_SEL_9V_BIT	BIT(4)
+ #define HVDCP_AUTH_ALG_EN_BIT		BIT(6)
+@@ -5569,6 +5568,15 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
+ 	if (chip->force_aicl_rerun)
+ 		rc = smbchg_aicl_config(chip);
+ 
++	if (chip->schg_version == QPNP_SCHG_LITE) {
++		/* enable OTG hiccup mode */
++		rc = smbchg_sec_masked_write(chip, chip->otg_base + OTG_OC_CFG,
++					HICCUP_ENABLED_BIT, HICCUP_ENABLED_BIT);
++		if (rc < 0)
++			dev_err(chip->dev, "Couldn't set OTG OC config rc = %d\n",
++				rc);
++	}
++
+ 	return rc;
+ }
+ 
+-- 
+2.11.0
+

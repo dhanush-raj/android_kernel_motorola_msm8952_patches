@@ -1,0 +1,39 @@
+From cbc06551f443789d73df0c9ef0c1994363b902e4 Mon Sep 17 00:00:00 2001
+From: Yongbin Chen <chenyb1@motorola.com>
+Date: Wed, 23 Mar 2016 00:05:52 -0600
+Subject: [PATCH 823/959] Revert "Mot-CRs-fixed:IKVPREL1L-11715 cpufreq: fix
+ sleeping in atomic... Cause CTS test failed!! IKSWM-26455
+
+kernel Panic occurred and die in below function
+(show_all_time_in_state+0x168/0x208)
+
+This reverts commit 41e85255d26066f7a626c7a669cc91fa78900b47.
+Change-Id: Icd853a1215958c5a9682e1c4bd68e54136fa3424
+Signed-off-by: chenyb1 <chenyb1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/836375
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Xuehui Ye <yexh1@motorola.com>
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/cpufreq/cpufreq_stats.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/cpufreq/cpufreq_stats.c b/drivers/cpufreq/cpufreq_stats.c
+index 9f93f1e16a4..d4587eeb476 100644
+--- a/drivers/cpufreq/cpufreq_stats.c
++++ b/drivers/cpufreq/cpufreq_stats.c
+@@ -528,7 +528,7 @@ static void add_all_freq_table(unsigned int freq)
+ 	unsigned int size;
+ 	size = sizeof(unsigned int) * (all_freq_table->table_size + 1);
+ 	all_freq_table->freq_table = krealloc(all_freq_table->freq_table,
+-			size, GFP_ATOMIC);
++			size, GFP_KERNEL);
+ 	if (IS_ERR(all_freq_table->freq_table)) {
+ 		pr_warn("Could not reallocate memory for freq_table\n");
+ 		all_freq_table->freq_table = NULL;
+-- 
+2.11.0
+

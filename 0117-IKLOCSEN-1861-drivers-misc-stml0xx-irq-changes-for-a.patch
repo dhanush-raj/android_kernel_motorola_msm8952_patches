@@ -1,0 +1,144 @@
+From afea5eb781886e6727d08ea3c55ae28a514de894 Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Mon, 12 Jan 2015 10:17:06 -0600
+Subject: [PATCH 117/959] IKLOCSEN-1861 drivers: misc: stml0xx: irq changes for
+ accel batching
+
+This change is needed to interface with new accel batching support on
+the sensorhub. It reads out a 3-sample buffer in the work function
+and applies timestamp deltas to recover the batched data, so that
+even if the work function gets delayed by 3 sample periods, we do
+not lose any accel data.
+
+Change-Id: I8803285d93b9c2e26327b90fff414245f5eac950
+Signed-off-by: Philip G. Lee <pglee@motorola.com>
+Reviewed-on: http://gerrit.mot.com/696045
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_irq.c      | 53 ++++++++++++++++++++++++---------
+ drivers/misc/stml0xx/stml0xx_wake_irq.c |  2 +-
+ include/linux/stml0xx.h                 | 11 +++----
+ 3 files changed, 46 insertions(+), 20 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_irq.c b/drivers/misc/stml0xx/stml0xx_irq.c
+index 4c5129bbe69..2a1dea9c96d 100644
+--- a/drivers/misc/stml0xx/stml0xx_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_irq.c
+@@ -88,7 +88,7 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 
+ 	err = stml0xx_spi_read_msg_data(SPI_MSG_TYPE_READ_IRQ_DATA,
+ 					buf,
+-					sizeof(buf),
++					SPI_RX_PAYLOAD_LEN,
+ 					RESET_ALLOWED);
+ 
+ 	if (err < 0) {
+@@ -101,19 +101,44 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 	    (buf[IRQ_IDX_STATUS_MED] << 8) | buf[IRQ_IDX_STATUS_LO];
+ 
+ 	if (irq_status & M_ACCEL) {
+-		stml0xx_as_data_buffer_write(
+-			ps_stml0xx,
+-			DT_ACCEL,
+-			&buf[IRQ_IDX_ACCEL1],
+-			6,
+-			0,
+-			stm_ws->ts_ns);
+-
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending acc(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(ACCEL_RD_X, &buf[IRQ_IDX_ACCEL1]),
+-			STM16_TO_HOST(ACCEL_RD_Y, &buf[IRQ_IDX_ACCEL1]),
+-			STM16_TO_HOST(ACCEL_RD_Z, &buf[IRQ_IDX_ACCEL1]));
++		int head = 0;
++		int tail = 0;
++		int first_accel_sample = 0;
++		uint64_t ts_ns = 0;
++		unsigned char *data_buf = 0;
++		unsigned char *accel_buf = 0;
++		uint8_t delay_ms = 0;
++
++		data_buf = &buf[IRQ_IDX_ACCEL1];
++
++		ts_ns = stm_ws->ts_ns;
++		head = data_buf[28];
++		tail = data_buf[32];
++		for (
++			first_accel_sample = 1, accel_buf = data_buf + 7*tail;
++			tail != head;
++			tail = (tail + 1) % 4, accel_buf = data_buf + 7*tail) {
++
++			delay_ms = accel_buf[6];
++			if (first_accel_sample)
++				first_accel_sample = 0;
++			else
++				ts_ns += delay_ms * 1000000LL;
++
++			stml0xx_as_data_buffer_write(
++				ps_stml0xx,
++				DT_ACCEL,
++				accel_buf,
++				6,
++				0,
++				ts_ns);
++
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Sending acc(x,y,z)values:x=%d,y=%d,z=%d",
++				STM16_TO_HOST(ACCEL_RD_X, accel_buf),
++				STM16_TO_HOST(ACCEL_RD_Y, accel_buf),
++				STM16_TO_HOST(ACCEL_RD_Z, accel_buf));
++		}
+ 	}
+ 	if (irq_status & M_ACCEL2) {
+ 		stml0xx_as_data_buffer_write(ps_stml0xx,
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index 6fe735dc03d..d3a9fb9b8c1 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -107,7 +107,7 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 
+ 	err = stml0xx_spi_read_msg_data(SPI_MSG_TYPE_READ_WAKE_IRQ_DATA,
+ 					buf,
+-					sizeof(buf),
++					SPI_RX_PAYLOAD_LEN,
+ 					RESET_ALLOWED);
+ 
+ 	if (err < 0) {
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 4d065efc11f..4f545846fce 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -49,7 +49,8 @@
+ #define SPI_TX_PAYLOAD_LEN         88
+ #define SPI_MSG_SIZE	\
+ 	(SPI_HEADER_SIZE+SPI_TX_PAYLOAD_LEN+SPI_CRC_SIZE)
+-#define SPI_RX_PAYLOAD_LEN         SPI_MSG_SIZE
++#define SPI_RX_PAYLOAD_LEN	\
++	(SPI_MSG_SIZE - SPI_CRC_SIZE)
+ 
+ /** The following define the IOCTL command values via the ioctl macros */
+ #define STML0XX_IOCTL_BASE		77
+@@ -492,10 +493,10 @@ struct stm_response {
+ #define IRQ_IDX_STATUS_MED        1
+ #define IRQ_IDX_STATUS_HI         2
+ #define IRQ_IDX_ACCEL1            3
+-#define IRQ_IDX_ACCEL2            9
+-#define IRQ_IDX_ALS              15
+-#define IRQ_IDX_DISP_ROTATE      17
+-#define IRQ_IDX_DISP_BRIGHTNESS  18
++#define IRQ_IDX_ACCEL2           36
++#define IRQ_IDX_ALS              42
++#define IRQ_IDX_DISP_ROTATE      44
++#define IRQ_IDX_DISP_BRIGHTNESS  45
+ 
+ /* stml0xx WAKE IRQ SPI buffer indexes */
+ #define WAKE_IRQ_IDX_STATUS_LO              0
+-- 
+2.11.0
+

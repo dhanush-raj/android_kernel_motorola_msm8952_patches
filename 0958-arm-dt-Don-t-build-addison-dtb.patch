@@ -1,0 +1,26 @@
+From 2f138bb33aae8b5678b3dfdb37f1e51a70f44ad8 Mon Sep 17 00:00:00 2001
+From: Ashwin Ramesh <ashwinr64@gmail.com>
+Date: Wed, 15 Jun 2016 13:32:24 +0530
+Subject: [PATCH 958/959] arm/dt: Don't build addison dtb
+
+---
+ arch/arm/boot/dts/qcom/Makefile | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/Makefile b/arch/arm/boot/dts/qcom/Makefile
+index 3fd256c2b77..a50faa4fab1 100644
+--- a/arch/arm/boot/dts/qcom/Makefile
++++ b/arch/arm/boot/dts/qcom/Makefile
+@@ -171,8 +171,7 @@ endif # CONFIG_MMI_DEVICE_DTBS
+ dtb-$(CONFIG_ARCH_MSM8916) += msm8952-athene-p0.dtb \
+ 	msm8952-athene_16mp-p1.dtb \
+ 	msm8952-athene_13mp-p1.dtb \
+-	msm8952-athene_power-p1.dtb \
+-	msm8952-addison-p0.dtb
++	msm8952-athene_power-p1.dtb
+ 
+ dtb-$(CONFIG_ARCH_MSM8226) += msm8226-sim.dtb \
+ 	msm8226-fluid.dtb \
+-- 
+2.11.0
+

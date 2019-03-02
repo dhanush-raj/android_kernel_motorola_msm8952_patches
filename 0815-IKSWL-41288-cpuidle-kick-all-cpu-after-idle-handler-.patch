@@ -1,0 +1,41 @@
+From a9ed836063e1d1810abf66da58276860f25cac2b Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Wed, 14 Oct 2015 11:34:37 -0700
+Subject: [PATCH 815/959] IKSWL-41288 cpuidle: kick all cpu after idle handler
+ installed
+
+Propagate from IKSWM-7306.
+
+Kick all the cpus out of idle and recalculate a new suitable
+C-state.
+
+Change-Id: I88e355e364dc2c5f0935bbcc507e5e7bfee4f144
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/792799
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Signed-off-by: chenyb1 <chenyb1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/834085
+Reviewed-by: Lian-Wei Wang <lian-wei.wang@motorola.com>
+---
+ drivers/cpuidle/cpuidle.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/cpuidle/cpuidle.c b/drivers/cpuidle/cpuidle.c
+index 941737717b3..4325e6ed258 100644
+--- a/drivers/cpuidle/cpuidle.c
++++ b/drivers/cpuidle/cpuidle.c
+@@ -161,6 +161,7 @@ void cpuidle_install_idle_handler(void)
+ 		/* Make sure all changes finished before we switch to new idle */
+ 		smp_wmb();
+ 		initialized = 1;
++		kick_all_cpus_sync();
+ 	}
+ }
+ 
+-- 
+2.11.0
+

@@ -1,0 +1,43 @@
+From c811e69cf1d2488c51a47509d839e20df6906e47 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Tue, 12 Apr 2016 15:13:17 -0700
+Subject: [PATCH 851/959] IKSWM-30939: mmc: try to claim host first in
+ pm_notify
+
+ (1) Return EBUSY if it fails to claim the host
+ (2) Calling mmc_stop_bkops only if the BLKOPS_EN is set.
+
+Change-Id: I5663540052afefd50c4d44d3286aba4baefd57b0
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/843322
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/mmc/core/core.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/mmc/core/core.c b/drivers/mmc/core/core.c
+index b41951ab0c6..489f70780db 100644
+--- a/drivers/mmc/core/core.c
++++ b/drivers/mmc/core/core.c
+@@ -4316,8 +4316,12 @@ int mmc_pm_notify(struct notifier_block *notify_block,
+ 	switch (mode) {
+ 	case PM_HIBERNATION_PREPARE:
+ 	case PM_SUSPEND_PREPARE:
+-		if (host->card && mmc_card_mmc(host->card)) {
+-			mmc_claim_host(host);
++		if (host->card && mmc_card_mmc(host->card) &&
++			mmc_card_get_bkops_en_manual(host->card)) {
++
++			if (!mmc_try_claim_host(host)) {
++				return -EBUSY;
++			}
+ 			err = mmc_stop_bkops(host->card);
+ 			mmc_release_host(host);
+ 			if (err) {
+-- 
+2.11.0
+

@@ -1,0 +1,84 @@
+From 82ebc79a0dcb1ca1b1c5b1b7b076b1055e5cffbb Mon Sep 17 00:00:00 2001
+From: Jagatkumar Shah <jagat@motorola.com>
+Date: Thu, 30 Oct 2014 15:43:29 -0500
+Subject: [PATCH 088/959] IKLOCSEN-1765 drivers: misc: stml0xx: flush CTS test
+ case failure
+
+Flush was not implemented properly and so it was not creating event
+for each sensor listener. So, we re-design flush event such a way
+that it will trigger flush event for each listener
+
+Change-Id: I8a21df428005f235205f9383875e0df4424bca78
+Signed-off-by: Jagatkumar Shah <jagat@motorola.com>
+Reviewed-on: http://gerrit.mot.com/684397
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Philip Lee <pglee@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_ioctl.c | 15 +++++++++++++++
+ include/linux/stml0xx.h              |  6 +++++-
+ 2 files changed, 20 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_ioctl.c b/drivers/misc/stml0xx/stml0xx_ioctl.c
+index d56099187d5..a718bbc1b28 100644
+--- a/drivers/misc/stml0xx/stml0xx_ioctl.c
++++ b/drivers/misc/stml0xx/stml0xx_ioctl.c
+@@ -57,6 +57,7 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 	unsigned char buf[MAX_LOCAL_BUF_SIZE];
+ 	unsigned char len;
+ 	unsigned long current_posix_time;
++	unsigned int handle;
+ 	struct timespec current_time;
+ 
+ 	if (!stml0xx_misc_data)
+@@ -653,6 +654,20 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 			lowpower_mode = buf[0];
+ 		}
+ 		break;
++	case STML0XX_IOCTL_SET_FLUSH:
++		dev_dbg(&stml0xx_misc_data->spi->dev, "STML0XX_IOCTL_SET_FLUSH");
++		if (ps_stml0xx->mode == BOOTMODE)
++			break;
++		if (copy_from_user(&handle, argp, sizeof(unsigned int))) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Copy flush handle returned error\n");
++			err = -EFAULT;
++			break;
++		}
++		handle = cpu_to_be32(handle);
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_FLUSH,
++				(char *)&handle, 4, 0);
++		break;
+ 	}
+ 
+ 	stml0xx_sleep(ps_stml0xx);
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index d03718e6783..34d5469611d 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -151,6 +151,9 @@
+ 		_IOW(STML0XX_IOCTL_BASE, 54, char)
+ #define STML0XX_IOCTL_SET_ACC2_DELAY	\
+ 		_IOW(STML0XX_IOCTL_BASE, 55,  unsigned short)
++#define STML0XX_IOCTL_SET_FLUSH \
++		_IOW(STML0XX_IOCTL_BASE, 56, int)
++
+ 
+ #define FW_VERSION_SIZE 12
+ #define STML0XX_CONTROL_REG_SIZE 200
+@@ -280,7 +283,8 @@ enum STML0XX_data_types {
+ 	DT_GENERIC_INT,
+ 	DT_UNCALIB_GYRO,
+ 	DT_UNCALIB_MAG,
+-	DT_ACCEL2
++	DT_ACCEL2,
++	DT_FLUSH
+ };
+ 
+ enum {
+-- 
+2.11.0
+

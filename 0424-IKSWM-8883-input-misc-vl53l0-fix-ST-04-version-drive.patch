@@ -1,0 +1,78 @@
+From 5ce8a983f0f06de1384bc87c6880c11e4d36681b Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Sat, 24 Oct 2015 11:56:59 -0500
+Subject: [PATCH 424/959] IKSWM-8883: input: misc: vl53l0:fix ST 04 version
+ driver code issue
+
+1.Remove unused function to pass compile Compilation
+2.Temporary fix for parameter name error
+
+Change-Id: I97b8f4cb7ed26089f1b78083430c0299a892b04e
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/794298
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Oleg Klementiev <oleg@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/vl53L0/src/vl53l0_api.c      | 21 ---------------------
+ drivers/input/misc/vl53L0/src/vl53l0_port_i2c.c |  2 +-
+ 2 files changed, 1 insertion(+), 22 deletions(-)
+
+diff --git a/drivers/input/misc/vl53L0/src/vl53l0_api.c b/drivers/input/misc/vl53L0/src/vl53l0_api.c
+index 75a2e4fa68c..ae188a3a56b 100644
+--- a/drivers/input/misc/vl53L0/src/vl53l0_api.c
++++ b/drivers/input/misc/vl53L0/src/vl53l0_api.c
+@@ -121,8 +121,6 @@
+ 			(uint16_t)((((uint16_t)msb) << 8) + (uint16_t)lsb)
+ 
+ /* Internal functions declaration */
+-static VL53L0_Error VL53L0_set_vcsel_pulse_period(VL53L0_DEV Dev,
+-				uint8_t VCSELPulsePeriod);
+ static VL53L0_Error VL53L0_get_vcsel_pulse_period(VL53L0_DEV Dev,
+ 				uint8_t *pVCSELPulsePeriod, uint8_t RangeIndex);
+ static uint8_t VL53L0_encode_vcsel_period(uint8_t vcsel_period_pclks);
+@@ -2765,25 +2763,6 @@ static uint32_t VL53L0_calc_macro_period_ps(VL53L0_DEV Dev,
+ static uint16_t VL53L0_encode_timeout(uint32_t timeout_mclks);
+ static uint32_t VL53L0_decode_timeout(uint16_t encoded_timeout);
+ 
+-
+-static
+-VL53L0_Error VL53L0_set_vcsel_pulse_period(VL53L0_DEV Dev,
+-		uint8_t VCSELPulsePeriod)
+-{
+-	VL53L0_Error Status = VL53L0_ERROR_NONE;
+-	uint8_t vcsel_period_reg;
+-
+-	LOG_FUNCTION_START("");
+-
+-	vcsel_period_reg = VL53L0_encode_vcsel_period((uint8_t)
+-		VCSELPulsePeriod);
+-	Status = VL53L0_WrByte(Dev, VL53L0_REG_RNGA_CONFIG_VCSEL_PERIOD,
+-		vcsel_period_reg);
+-
+-	LOG_FUNCTION_END(Status);
+-	return Status;
+-}
+-
+ static VL53L0_Error VL53L0_get_vcsel_pulse_period(VL53L0_DEV Dev, uint8_t
+ 	*pVCSELPulsePeriod, uint8_t RangeIndex)
+ {
+diff --git a/drivers/input/misc/vl53L0/src/vl53l0_port_i2c.c b/drivers/input/misc/vl53L0/src/vl53l0_port_i2c.c
+index ec1ddaa2623..6cefc39e984 100644
+--- a/drivers/input/misc/vl53L0/src/vl53l0_port_i2c.c
++++ b/drivers/input/misc/vl53L0/src/vl53l0_port_i2c.c
+@@ -32,7 +32,7 @@ int VL53L0_I2CWrite(VL53L0_DEV dev, uint8_t *buff, uint8_t len)
+ #ifdef CAMERA_CCI
+ 		uint16_t index;
+ 		struct cci_data *cci_client_obj =
+-			(struct cci_data *)dev->client_obj;
++			(struct cci_data *)dev->client_object;
+ 		struct msm_camera_i2c_client *client = cci_client_obj->client;
+ 
+ 		index = buff[0];
+-- 
+2.11.0
+

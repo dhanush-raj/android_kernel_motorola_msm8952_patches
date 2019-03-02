@@ -1,0 +1,121 @@
+From ed502674384941bafe7bfbf5ffdf94c823cbbaa4 Mon Sep 17 00:00:00 2001
+From: Alexander Filonenko <alexf@motorola.com>
+Date: Mon, 7 Mar 2016 10:12:56 -0600
+Subject: [PATCH 809/959] IKSWM-26085 arm/dt: 8952: athene: charger noise on
+ BOE
+
+Put touch in FNM mode if USB cable is attached for Athene/BOE
+to mitigate charger noise impact. Also removing optional FPS
+touch config modifier from common Synaptics node.
+
+Change-Id: I45497d3e36ded37b43924a8144172499205f202c
+Signed-off-by: Alexander Filonenko <alexf@motorola.com>
+Reviewed-on: http://gerrit.mot.com/834263
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Konstantin Makariev <kmakariev@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-athene.dtsi      | 58 +++++++++++++++++++++++--
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi |  8 +---
+ 2 files changed, 56 insertions(+), 10 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene.dtsi b/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+index 55113c9facd..4875dae394b 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+@@ -51,10 +51,62 @@
+ };
+ 
+ &i2c_3 { /* BLSP1 QUP3 */
+-	synaptics@20 {
++	/delete-node/ synaptics@20;
++
++	synaptics_lgd@20 {
++		status = "/chosen", "mmi,panel_name", "mipi_mot_cmd_lgd_1080p_546";
++		compatible = "synaptics,synaptics_dsx_i2c";
++		reg = <0x20>;
++		interrupt-parent = <&msm_gpio>;
++		interrupts = <65 0>;
++		gpios = <&msm_gpio 65 0>, /* IRQ */
++			<&msm_gpio 64 0>; /* RESET */
++		synaptics,gpio-config;
+ 		synaptics,use-in-progress-event-blank;
+-		default_suspended: touchstate_aod_suspended {
+-			patch-data = "F12@20:1=2;F1@0=1&7";
++		/* pins used by touchscreen */
++		pinctrl-names = "default", "active";
++		pinctrl-0 = <&touch_reset_active &touch_int_default>;
++		pinctrl-1 = <&touch_reset_active &touch_int_active>;
++		config_modifier-names = "aod", "fps";
++		config_modifier-aod {
++			aod-suspended {
++				patch-data = "F12@20:1=2;S"; /* Set LPWG bit; Power->sleep */
++			};
++		};
++		config_modifier-fps {
++			enable-notification;
++			fps-active {
++				touch-clip-area = <450 1875 610 1919 1>;
++			};
++		};
++	};
++
++	synaptics_boe@20 {
++		status = "/chosen", "mmi,panel_name", "mipi_mot_cmd_boe_1080p_546";
++		compatible = "synaptics,synaptics_dsx_i2c";
++		reg = <0x20>;
++		interrupt-parent = <&msm_gpio>;
++		interrupts = <65 0>;
++		gpios = <&msm_gpio 65 0>, /* IRQ */
++			<&msm_gpio 64 0>; /* RESET */
++		synaptics,gpio-config;
++		synaptics,use-in-progress-event-blank;
++		synaptics,charger-detection; /* mitigate charger noise on BOE */
++		/* pins used by touchscreen */
++		pinctrl-names = "default", "active";
++		pinctrl-0 = <&touch_reset_active &touch_int_default>;
++		pinctrl-1 = <&touch_reset_active &touch_int_active>;
++		config_modifier-names = "aod", "fps";
++		config_modifier-aod {
++			aod-suspended {
++				patch-data = "F12@20:1=2;S"; /* Set LPWG bit; Power->sleep */
++			};
++		};
++		config_modifier-fps {
++			enable-notification;
++			fps-active {
++				touch-clip-area = <450 1875 610 1919 1>;
++			};
+ 		};
+ 	};
+ };
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 1c5337931f3..36925b556b1 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -932,18 +932,12 @@
+ 		pinctrl-names = "default", "active";
+ 		pinctrl-0 = <&touch_reset_active &touch_int_default>;
+ 		pinctrl-1 = <&touch_reset_active &touch_int_active>;
+-		config_modifier-names = "aod", "fps";
++		config_modifier-names = "aod";
+ 		config_modifier-aod {
+ 			aod-suspended {
+ 				patch-data = "S"; /* Power->sleep */
+ 			};
+ 		};
+-		config_modifier-fps {
+-			enable-notification;
+-			fps-active {
+-				touch-clip-area = <450 1875 610 1919 1>;
+-			};
+-		};
+ 	};
+ };
+ 
+-- 
+2.11.0
+

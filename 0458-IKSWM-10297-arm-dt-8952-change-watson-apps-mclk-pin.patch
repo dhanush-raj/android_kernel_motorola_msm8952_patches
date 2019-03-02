@@ -1,0 +1,43 @@
+From 1a56f03c09b591ba02909d3ba3b02acc37e18dbd Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Wed, 4 Nov 2015 17:59:55 -0600
+Subject: [PATCH 458/959] IKSWM-10297 arm/dt: 8952: change watson apps mclk pin
+
+P1.1 HW came out with GPIO 25 for Watson clock pin
+without informing ahead.
+
+This is to configure GPIO 25 for MCLK to feed 12.288MHz
+
+Change-Id: Icf8350892ebe4ad1a86a7f206153275921c9f327
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/797530
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jonathan Eklund <jeklund@motorola.com>
+Reviewed-by: Dmitry Ornatsky <ornatsky@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index a2eb0f11d39..2caca8ae964 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -216,9 +216,9 @@
+ 	};
+ 
+ 	cs35l34_clk {
+-		qcom,pins = <&gp 66>;
++		qcom,pins = <&gp 25>;
+ 		qcom,num-grp-pins = <1>;
+-		qcom,pin-func = <1>;
++		qcom,pin-func = <3>;
+ 		label = "cs35l34_clk";
+ 		cs35l34_clk_on: cs35l34_on {
+ 			drive-strength = <8>;
+-- 
+2.11.0
+

@@ -1,0 +1,38 @@
+From e48b35754735d3b62d6b0d809203b6172a313a61 Mon Sep 17 00:00:00 2001
+From: Ravi Chebolu <arc095@motorola.com>
+Date: Wed, 20 Jan 2016 16:50:06 -0600
+Subject: [PATCH 629/959] IKSWM-17526 arm/dts: 8952: Disable idle power
+ collapse for factory
+
+To maintain stable suspend current in factory testing, disable
+CPU idle power collapse by setting high pm-qos constraints when
+factory cable is connected.
+
+Change-Id: Ibbddd5a3311fdb4e32689b4abcc71de5984a379b
+Signed-off-by: Ravi Chebolu <arc095@motorola.com>
+Reviewed-on: http://gerrit.mot.com/814837
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index ad91a38141b..0d5e9f81504 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -1010,3 +1010,8 @@
+ 	/* Force VDD_APC supply (S5-S6) in PWM mode */
+ 	qcom,mode = "pwm";
+ };
++
++&android_usb {
++	/* Disable CPU idle power collapse for factory */
++	mmi,pm-qos-latency-factory = <2 2 2>;
++};
+-- 
+2.11.0
+

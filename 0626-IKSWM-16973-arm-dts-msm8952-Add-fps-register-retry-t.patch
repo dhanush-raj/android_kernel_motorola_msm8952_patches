@@ -1,0 +1,67 @@
+From b05f75d2dc1bd400b71d52a86e0eacd3c13f7061 Mon Sep 17 00:00:00 2001
+From: lixh10 <lixh10@lenovo.com>
+Date: Wed, 20 Jan 2016 13:51:51 +0800
+Subject: [PATCH 626/959] IKSWM-16973: arm/dts: msm8952: Add fps register retry
+ times limit
+
+    Add fps register retry times limit in case current device doesn't contain fps device
+    and touch driver will stop regist after 15 times.
+
+Change-Id: I145ca0954169f98964642d121fa11c34a6ce00af
+Signed-off-by: lixh10 <lixh10@lenovo.com>
+Reviewed-on: http://gerrit.mot.com/813899
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Konstantin Makariev <kmakariev@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/touchscreen/synaptics_dsx_i2c.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.c b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+index 9a9f0fdab2e..01db5edde5f 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.c
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+@@ -73,6 +73,7 @@
+ #define EXP_FN_DET_INTERVAL 1000 /* ms */
+ #define POLLING_PERIOD 1 /* ms */
+ #define SYN_I2C_RETRY_TIMES 10
++#define SYN_FPS_REGISTERED_RETRY_TIMES 15
+ #define MAX_ABS_MT_TOUCH_MAJOR 15
+ #define SYN_MAX_BUTTONS 4
+ 
+@@ -5749,6 +5750,7 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
+ {
+ 	struct synaptics_rmi4_exp_fn *exp_fhandler, *next_list_entry;
+ 	struct synaptics_rmi4_data *rmi4_data;
++	static unsigned char fps_registered_retry;
+ 	int state, error;
+ 
+ 	mutex_lock(&exp_fn_ctrl_mutex);
+@@ -5763,16 +5765,19 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
+ 		return;
+ 	}
+ 
+-	if (!rmi4_data->is_fps_registered) {
++	if (!rmi4_data->is_fps_registered &&
++		fps_registered_retry < SYN_FPS_REGISTERED_RETRY_TIMES) {
+ 		error = FPS_register_notifier(
+ 				&rmi4_data->fps_notif, 0xBEEF, false);
+ 		if (error) {
++			fps_registered_retry++;
+ 			if (exp_fn_ctrl.det_workqueue)
+ 				queue_delayed_work(
+ 					exp_fn_ctrl.det_workqueue,
+ 					&exp_fn_ctrl.det_work,
+ 					msecs_to_jiffies(EXP_FN_DET_INTERVAL));
+-			pr_err("Failed to register fps_notifier\n");
++			pr_err("Failed to register fps_notifier retry %d\n",
++				fps_registered_retry);
+ 		} else
+ 			rmi4_data->is_fps_registered = true;
+ 	}
+-- 
+2.11.0
+

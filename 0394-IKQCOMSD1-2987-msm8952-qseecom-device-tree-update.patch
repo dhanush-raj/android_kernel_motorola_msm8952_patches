@@ -1,0 +1,35 @@
+From 8311d60a62c99f46efaadeb37aa47e90ba67ce9e Mon Sep 17 00:00:00 2001
+From: Mark Reed <mreed1@motorola.com>
+Date: Tue, 20 Oct 2015 12:56:57 -0500
+Subject: [PATCH 394/959] IKQCOMSD1-2987 msm8952: qseecom: device tree update.
+
+required to successfully init the qseecom device.
+
+Change-Id: I2ddd4c90502adbe5f30b12d9daed7b79c3b27bb7
+Signed-off-by: Mark Reed <mreed1@mot.com>
+Reviewed-on: http://gerrit.mot.com/792735
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Reviewed-by: Xiao-Feng Lei <a23075@motorola.com>
+Reviewed-by: Andrew Wheeler <awheeler@motorola.com>
+Submit-Approved: Andrew Wheeler <awheeler@motorola.com>
+Tested-by: Andrew Wheeler <awheeler@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 909eaa01f58..a8b912d9d4c 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -738,7 +738,6 @@
+ 
+ &qcom_seecom {
+ 	reg = <0x84f00000 0x1400000>;
+-	/delete-property/ qcom,appsbl-qseecom-support;
+ };
+ 
+ &pm8950_vadc {
+-- 
+2.11.0
+

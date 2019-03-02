@@ -1,0 +1,67 @@
+From a5d6c78280ea705d435bcd1ec69a403c52fbd3b5 Mon Sep 17 00:00:00 2001
+From: Jason Knopsnyder <jasonk@motorola.com>
+Date: Fri, 2 Oct 2015 11:16:08 -0500
+Subject: [PATCH 332/959] IKKRNBSP-3428: arm/dt: msm8952: Temp sensor cleanup
+
+- Rename case_therm to msm_therm
+- Rename pa_therm1 to chg_therm
+- Add batt_therm to the thermal sensor information
+
+Change-Id: I2fbc97a5796e84e71619ade9c4f9a9f31d55c0cc
+Signed-off-by: Jason Knopsnyder <jasonk@motorola.com>
+Reviewed-on: http://gerrit.mot.com/787992
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 29 +++++++++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 7cc92fd9386..e81e1d642ba 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -550,6 +550,25 @@
+ 		qcom,gpio-tbl-label = "CCI_I2C_DATA0",
+ 				"CCI_I2C_CLK0";
+ 	};
++
++	qcom,sensor-information {
++		sensor_information12: qcom,sensor-information-12 {
++			qcom,sensor-type = "adc";
++			qcom,sensor-name = "chg_therm";
++		};
++
++		sensor_information15: qcom,sensor-information-15 {
++			qcom,sensor-type = "adc";
++			qcom,sensor-name = "msm_therm";
++		};
++
++		sensor_information17: qcom,sensor-information@17 {
++			qcom,sensor-type = "adc";
++			qcom,sensor-name = "battery";
++			qcom,alias-name  = "batt_therm";
++			qcom,scaling-factor = <1000>;
++		};
++	};
+ };
+ 
+ &sdhc_1 {
+@@ -701,3 +720,13 @@
+ 	reg = <0x84f00000 0x1400000>;
+ 	/delete-property/ qcom,appsbl-qseecom-support;
+ };
++
++&pm8950_vadc {
++	chan@11 {
++		label = "chg_therm";
++	};
++
++	chan@13 {
++		label = "msm_therm";
++	};
++};
+-- 
+2.11.0
+

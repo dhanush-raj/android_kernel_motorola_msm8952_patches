@@ -1,0 +1,42 @@
+From bb67f24024b52de10c4a7a990e1fecc3d4901e54 Mon Sep 17 00:00:00 2001
+From: Zac Crosby <zac@motorola.com>
+Date: Wed, 9 Mar 2016 10:28:26 +0800
+Subject: [PATCH 767/959] IKSWM-24426 msm: mdss: Remove partial update region
+ delays
+
+QCOM has a millisecond delay after each partial region change.  Since there
+is no need for it and it could lead to a dropped frame, remove it.
+
+Change-Id: I62db69c1eb11010083f5a78fd1a49307c5802f3e
+(cherry picked from commit d1f6833fbbddbe4f6684310e881b4751066e92f9)
+Signed-off-by: Weilong Wu <wuwl10@lenovo.com>
+Reviewed-on: http://gerrit.mot.com/830987
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index cf1c4aba8a5..14843143f0b 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -621,8 +621,8 @@ static char paset[] = {0x2b, 0x00, 0x00, 0x05, 0x00};	/* DTYPE_DCS_LWRITE */
+ 
+ /* pack into one frame before sent */
+ static struct dsi_cmd_desc set_col_page_addr_cmd[] = {
+-	{{DTYPE_DCS_LWRITE, 0, 0, 0, 1, sizeof(caset)}, caset},	/* packed */
+-	{{DTYPE_DCS_LWRITE, 1, 0, 0, 1, sizeof(paset)}, paset},
++	{{DTYPE_DCS_LWRITE, 0, 0, 0, 0, sizeof(caset)}, caset},	/* packed */
++	{{DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(paset)}, paset},
+ };
+ 
+ static void mdss_dsi_send_col_page_addr(struct mdss_dsi_ctrl_pdata *ctrl,
+-- 
+2.11.0
+

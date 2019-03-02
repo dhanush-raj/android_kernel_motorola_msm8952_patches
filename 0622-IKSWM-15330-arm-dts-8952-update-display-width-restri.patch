@@ -1,0 +1,59 @@
+From 8c03488e7174978cb82c9ee81c30c4db7db0116a Mon Sep 17 00:00:00 2001
+From: "houdz1@motorola.com" <houdz1@motorola.com>
+Date: Mon, 18 Jan 2016 09:36:45 +0800
+Subject: [PATCH 622/959] IKSWM-15330 arm/dts: 8952: update display width
+ restriction to 320
+
+1.From R69006 Spec_Rev101 (P271),there are following description:
+" Insert waiting time with the relation between DSI Data Transfer Rate."
+- But we do not add waiting time for Qcom dsi controller .
+- So we must set the minimum region width to 320, which doesn't need
+  to insert waiting time.(Transfer Rate = 830Mbps).
+2. FAE(display driver IC) recommends make the setting as below:
+-width must be aligned to 16
+-height must be aligned to 2
+
+Change-Id: I3bab7bb6047f93883a6512ab429e612cd4470f04
+Signed-off-by: houdz1@motorola.com <houdz1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/813198
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Fred Fettinger <fettinge@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi | 2 +-
+ arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+index c15b361a825..57874cc6e6e 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+@@ -105,7 +105,7 @@ qcom,mdss-dsi-panel-status-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-panel-status-value = <0x1c>;
+ qcom,mdss-dsi-panel-on-check-value = <0x1c>;
+ qcom,partial-update-enabled;
+-qcom,panel-roi-alignment = <8 2 8 2 0 0>;
++qcom,panel-roi-alignment = <16 2 16 2 320 0>;
+ 
+ qcom,panel-supply-entries {
+ 	#address-cells = <1>;
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+index cbc1c47ee81..904eb16acf0 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -102,7 +102,7 @@ qcom,mdss-dsi-panel-status-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-panel-status-value = <0x1c>;
+ qcom,mdss-dsi-panel-on-check-value = <0x1c>;
+ qcom,partial-update-enabled;
+-qcom,panel-roi-alignment = <8 2 8 2 0 0>;
++qcom,panel-roi-alignment = <16 2 16 2 320 0>;
+ 
+ qcom,panel-supply-entries {
+ 	#address-cells = <1>;
+-- 
+2.11.0
+

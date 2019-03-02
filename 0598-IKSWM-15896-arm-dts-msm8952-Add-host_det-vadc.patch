@@ -1,0 +1,147 @@
+From 7a18ec3bfdac58664ea6b20caef9fda6e6a47805 Mon Sep 17 00:00:00 2001
+From: yexh1 <yexh1@motorola.com>
+Date: Fri, 8 Jan 2016 16:00:27 +0800
+Subject: [PATCH 598/959] IKSWM-15896: arm/dts: msm8952: Add host_det vadc
+
+Disable the USB ID gpio input pin's pull up dynamic with module
+param host_mode_disable. Otherwise, the ID pin will have bias
+when ID pin is pulled to GND.
+
+Change-Id: I63bbf91d5d640e077785bbf90e392fb0f78d8f33
+Signed-off-by: yexh1 <yexh1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/811662
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Hujun Liao <liaohj@motorola.com>
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/pinctrl/pinctrl-msm-tlmm.c | 16 +++++++++++
+ drivers/usb/phy/phy-msm-usb.c      | 56 ++++++++++++++++++++++++++++++++++++--
+ include/linux/usb/msm_hsusb.h      |  1 +
+ 3 files changed, 70 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/pinctrl/pinctrl-msm-tlmm.c b/drivers/pinctrl/pinctrl-msm-tlmm.c
+index 63f8fb3a6f9..0b833918664 100644
+--- a/drivers/pinctrl/pinctrl-msm-tlmm.c
++++ b/drivers/pinctrl/pinctrl-msm-tlmm.c
+@@ -735,6 +735,22 @@ int tlmm_set_config(unsigned config)
+ 	return 0;
+ }
+ 
++int tlmm_set_config_pullup(unsigned gpio, unsigned enable)
++{
++	int res;
++	unsigned cfg;
++	tlmm_get_config(gpio, &cfg);
++	cfg &= ~(TLMM_GP_PULL_MASK<<15);
++
++	if (enable) {
++		res = tlmm_set_config(cfg | (TLMM_PULL_UP<<15));
++	} else {
++		res = tlmm_set_config(cfg | (TLMM_NO_PULL<<15));
++	}
++
++	return res;
++}
++
+ static int msm_tlmm_gp_dir_in(struct gpio_chip *gc, unsigned offset)
+ {
+ 	unsigned int val;
+diff --git a/drivers/usb/phy/phy-msm-usb.c b/drivers/usb/phy/phy-msm-usb.c
+index e0c06096a80..bb7ab7da55a 100644
+--- a/drivers/usb/phy/phy-msm-usb.c
++++ b/drivers/usb/phy/phy-msm-usb.c
+@@ -104,9 +104,6 @@ MODULE_PARM_DESC(floated_charger_enable,
+ 	"Whether to enable floated charger");
+ 
+ static bool host_mode_disable;
+-module_param(host_mode_disable , bool, S_IRUGO | S_IWUSR);
+-MODULE_PARM_DESC(host_mode_disable,
+-	"Whether to disable Host Mode");
+ 
+ /* by default debugging is enabled */
+ static unsigned int enable_dbg_log = 1;
+@@ -4459,6 +4456,55 @@ out:
+ 	}
+ }
+ 
++int tlmm_set_config_pullup(unsigned gpio, unsigned enable);
++static int msm_otg_enable_ext_id(struct msm_otg *motg, int enable)
++{
++	int res;
++	unsigned gpio;
++
++	if (!motg->ext_id_irq)
++		return -ENODEV;
++	gpio = motg->pdata->usb_id_gpio_hw;
++	if (enable) {
++		res = tlmm_set_config_pullup(gpio, 1);
++		enable_irq(motg->ext_id_irq);
++	} else {
++		disable_irq(motg->ext_id_irq);
++		res = tlmm_set_config_pullup(gpio, 0);
++	}
++	return res;
++}
++
++static int set_host_mode_disable(const char *val, const struct kernel_param *kp)
++{
++	int res;
++	int rv = param_set_bool(val, kp);
++	struct msm_otg *motg = the_msm_otg;
++
++	if (!motg || !motg->ext_id_irq)
++		return 0;
++
++	if (host_mode_disable)
++		res = msm_otg_enable_ext_id(motg, 0);
++	else
++		res = msm_otg_enable_ext_id(motg, 1);
++
++	if (res) {
++		pr_err("%s:host_mode_disable:%d fail \n", __func__, host_mode_disable);
++	}
++
++	return rv;
++}
++
++static struct kernel_param_ops host_mode_disable_param_ops = {
++	.set = set_host_mode_disable,
++	.get = param_get_bool,
++};
++
++module_param_cb(host_mode_disable, &host_mode_disable_param_ops,
++			&host_mode_disable, S_IRUGO | S_IWUSR);
++MODULE_PARM_DESC(host_mode_disable, "Whether to disable Host Mode");
++
+ static void msm_id_status_w(struct work_struct *w)
+ {
+ 	struct msm_otg *motg = container_of(w, struct msm_otg,
+@@ -5682,6 +5728,10 @@ struct msm_otg_platform_data *msm_otg_dt_to_pdata(struct platform_device *pdev)
+ 	if (pdata->usb_id_gpio < 0)
+ 		pr_debug("usb_id_gpio is not available\n");
+ 
++	of_property_read_u32(node, "qcom,usbid-gpio-hw", &pdata->usb_id_gpio_hw);
++	if (pdata->usb_id_gpio_hw < 0)
++		pr_debug("usb_id_gpio_hw is not available\n");
++
+ 	pdata->l1_supported = of_property_read_bool(node,
+ 				"qcom,hsusb-l1-supported");
+ 	pdata->enable_ahb2ahb_bypass = of_property_read_bool(node,
+diff --git a/include/linux/usb/msm_hsusb.h b/include/linux/usb/msm_hsusb.h
+index 66a4e2723f8..84b2513ac68 100644
+--- a/include/linux/usb/msm_hsusb.h
++++ b/include/linux/usb/msm_hsusb.h
+@@ -316,6 +316,7 @@ struct msm_otg_platform_data {
+ 	bool enable_ahb2ahb_bypass;
+ 	bool disable_retention_with_vdd_min;
+ 	int usb_id_gpio;
++	int usb_id_gpio_hw;
+ 	int hub_reset_gpio;
+ 	int switch_sel_gpio;
+ 	bool phy_dvdd_always_on;
+-- 
+2.11.0
+

@@ -1,0 +1,385 @@
+From 58101a8d03ab4383408a625983548532af68889c Mon Sep 17 00:00:00 2001
+From: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Date: Mon, 18 Aug 2014 10:41:15 -0500
+Subject: [PATCH 067/959] IKLOCSEN-1618 misc:stml0xx: expose secondary accel
+
+- Expose secondary accel for data collection and debugging
+- Clean up unused IR & step detection code
+
+Change-Id: I53d5d43b964a1f340bd1b1d0fbed95d15d8b26fa
+Signed-off-by: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Reviewed-on: http://gerrit.mot.com/663705
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c  |  6 +---
+ drivers/misc/stml0xx/stml0xx_ioctl.c | 29 ++++++++--------
+ drivers/misc/stml0xx/stml0xx_irq.c   | 49 +++++++++------------------
+ drivers/misc/stml0xx/stml0xx_reset.c |  5 +++
+ include/linux/stml0xx.h              | 64 +++++++-----------------------------
+ 5 files changed, 46 insertions(+), 107 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 76922600546..f439bc525f6 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -61,12 +61,10 @@ unsigned short stml0xx_spi_retry_delay = 10;
+ 
+ /* Remember the sensor state */
+ unsigned short stml0xx_g_acc_delay;
++unsigned short stml0xx_g_acc2_delay;
+ unsigned short stml0xx_g_mag_delay;
+ unsigned short stml0xx_g_gyro_delay;
+ unsigned short stml0xx_g_baro_delay;
+-unsigned short stml0xx_g_step_counter_delay;
+-unsigned short stml0xx_g_ir_gesture_delay;
+-unsigned short stml0xx_g_ir_raw_delay;
+ unsigned long stml0xx_g_nonwake_sensor_state;
+ unsigned short stml0xx_g_wake_sensor_state;
+ unsigned short stml0xx_g_algo_state;
+@@ -75,8 +73,6 @@ unsigned char stml0xx_g_zmotion_dur;
+ unsigned char stml0xx_g_control_reg[STML0XX_CONTROL_REG_SIZE];
+ unsigned char stml0xx_g_mag_cal[STML0XX_MAG_CAL_SIZE];
+ unsigned short stml0xx_g_control_reg_restore;
+-unsigned char stml0xx_g_ir_config_reg[STML0XX_IR_CONFIG_REG_SIZE];
+-bool stml0xx_g_ir_config_reg_restore;
+ bool stml0xx_g_booted;
+ 
+ /* Store error message */
+diff --git a/drivers/misc/stml0xx/stml0xx_ioctl.c b/drivers/misc/stml0xx/stml0xx_ioctl.c
+index 1c4202a39d3..27b302797fd 100644
+--- a/drivers/misc/stml0xx/stml0xx_ioctl.c
++++ b/drivers/misc/stml0xx/stml0xx_ioctl.c
+@@ -158,7 +158,19 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		stml0xx_g_acc_delay = delay;
+ 		err = stml0xx_spi_send_write_reg(ACCEL_UPDATE_RATE, buf, 1);
+ 		break;
+-
++	case STML0XX_IOCTL_SET_ACC2_DELAY:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_ACC2_DELAY");
++		if (copy_from_user(&delay, argp, sizeof(delay))) {
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Copy acc2 delay returned error");
++			err = -EFAULT;
++			break;
++		}
++		buf[0] = delay;
++		stml0xx_g_acc2_delay = delay;
++		err = stml0xx_spi_send_write_reg(ACCEL2_UPDATE_RATE, buf, 1);
++		break;
+ 	case STML0XX_IOCTL_SET_MAG_DELAY:
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"STML0XX_IOCTL_SET_MAG_DELAY");
+@@ -187,21 +199,6 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		stml0xx_g_gyro_delay = delay;
+ 		err = stml0xx_spi_send_write_reg(GYRO_UPDATE_RATE, buf, 1);
+ 		break;
+-	case STML0XX_IOCTL_SET_STEP_COUNTER_DELAY:
+-		delay = 0;
+-		if (copy_from_user(&delay, argp, sizeof(delay))) {
+-			dev_dbg(&stml0xx_misc_data->spi->dev,
+-				"Copy step counter delay returned error");
+-			err = -EFAULT;
+-			break;
+-		}
+-		buf[0] = (delay >> 8);
+-		buf[1] = delay;
+-		stml0xx_g_step_counter_delay = delay;
+-		err =
+-		    stml0xx_spi_send_write_reg(STEP_COUNTER_UPDATE_RATE, buf,
+-					       2);
+-		break;
+ 	case STML0XX_IOCTL_SET_PRES_DELAY:
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"STML0XX_IOCTL_SET_PRES_DELAY");
+diff --git a/drivers/misc/stml0xx/stml0xx_irq.c b/drivers/misc/stml0xx/stml0xx_irq.c
+index 5dfff662dc8..1f3e2bcd757 100644
+--- a/drivers/misc/stml0xx/stml0xx_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_irq.c
+@@ -101,6 +101,22 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 			STM16_TO_HOST(ACCEL_RD_X), STM16_TO_HOST(ACCEL_RD_Y),
+ 			STM16_TO_HOST(ACCEL_RD_Z));
+ 	}
++	if (irq_status & M_ACCEL2) {
++		/* read 2nd accelerometer values from STML0XX */
++		err = stml0xx_spi_send_read_reg(ACCEL2_X, buf, 6);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading 2nd Accel from stml0xx failed");
++			goto EXIT;
++		}
++
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_ACCEL2, buf, 6, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending acc2(x,y,z)values:x=%d,y=%d,z=%d",
++			STM16_TO_HOST(ACCEL_RD_X), STM16_TO_HOST(ACCEL_RD_Y),
++			STM16_TO_HOST(ACCEL_RD_Z));
++	}
+ 	if (irq_status & M_LIN_ACCEL) {
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+ 			"Invalid M_LIN_ACCEL bit set. irq_status = 0x%06x",
+@@ -199,39 +215,6 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 			STM16_TO_HOST(MAG_UNCALIB_Y),
+ 			STM16_TO_HOST(MAG_UNCALIB_Z));
+ 	}
+-	if (irq_status & M_STEP_COUNTER) {
+-		err = stml0xx_spi_send_read_reg(STEP_COUNTER, buf, 8);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading step counter failed");
+-			goto EXIT;
+-		}
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_STEP_COUNTER,
+-					     buf, 8, 0);
+-
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending step counter %X %X %X %X",
+-			STM16_TO_HOST(STEP64_DATA), STM16_TO_HOST(STEP32_DATA),
+-			STM16_TO_HOST(STEP16_DATA), STM16_TO_HOST(STEP8_DATA));
+-	}
+-	if (irq_status & M_STEP_DETECTOR) {
+-		unsigned short detected_steps = 0;
+-		err = stml0xx_spi_send_read_reg(STEP_DETECTOR, buf, 1);
+-		if (err < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Reading step detector failed");
+-			goto EXIT;
+-		}
+-		detected_steps = buf[STEP_DETECT];
+-		while (detected_steps-- != 0) {
+-			stml0xx_as_data_buffer_write(ps_stml0xx,
+-						     DT_STEP_DETECTOR, buf, 1,
+-						     0);
+-
+-			dev_dbg(&stml0xx_misc_data->spi->dev,
+-				"Sending step detector");
+-		}
+-	}
+ 	if (irq_status & M_ALS) {
+ 		err = stml0xx_spi_send_read_reg(ALS_LUX, buf, 2);
+ 		if (err < 0) {
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index 5626526db2f..7ee1bdfe5bc 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -82,6 +82,11 @@ int stml0xx_reset_and_init(void)
+ 	if (err < 0)
+ 		ret_err = err;
+ 
++	buf[0] = stml0xx_g_acc2_delay;
++	err = stml0xx_spi_send_write_reg(ACCEL2_UPDATE_RATE, buf, 1);
++	if (err < 0)
++		ret_err = err;
++
+ 	stml0xx_spi_retry_delay = 10;
+ 
+ 	buf[0] = stml0xx_g_nonwake_sensor_state & 0xFF;
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 1b01ab09708..189e4f3e3b3 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -19,12 +19,14 @@
+ #ifndef __STML0XX_H__
+ #define __STML0XX_H__
+ 
++#ifdef __KERNEL__
+ #include <linux/cdev.h>
+ #include <linux/irq.h>
+ #include <linux/leds.h>
+ #include <linux/module.h>
+ #include <linux/switch.h>
+ #include <linux/wakelock.h>
++#endif
+ 
+ /* Log macros */
+ #define ENABLE_VERBOSE_LOGGING 1
+@@ -142,20 +144,13 @@
+ 		_IOR(STML0XX_IOCTL_BASE, 46, char*)
+ #define STML0XX_IOCTL_READ_REG \
+ 		_IOR(STML0XX_IOCTL_BASE, 47, char*)
+-#define STML0XX_IOCTL_SET_STEP_COUNTER_DELAY	\
+-		_IOW(STML0XX_IOCTL_BASE, 48,  unsigned short)
+-#define STML0XX_IOCTL_GET_IR_CONFIG \
+-		_IOWR(STML0XX_IOCTL_BASE, 49, char*)
+-#define STML0XX_IOCTL_SET_IR_CONFIG \
+-		_IOW(STML0XX_IOCTL_BASE, 50, char*)
+-#define STML0XX_IOCTL_SET_IR_GESTURE_DELAY	\
+-		_IOW(STML0XX_IOCTL_BASE, 51,  unsigned short)
+-#define STML0XX_IOCTL_SET_IR_RAW_DELAY	\
+-		_IOW(STML0XX_IOCTL_BASE, 52,  unsigned short)
++/* 48-52 unused */
+ #define STML0XX_IOCTL_GET_BOOTED \
+ 		_IOR(STML0XX_IOCTL_BASE, 53, unsigned char)
+ #define STML0XX_IOCTL_SET_LOWPOWER_MODE \
+ 		_IOW(STML0XX_IOCTL_BASE, 54, char)
++#define STML0XX_IOCTL_SET_ACC2_DELAY	\
++		_IOW(STML0XX_IOCTL_BASE, 55,  unsigned short)
+ 
+ #define FW_VERSION_SIZE 12
+ #define STML0XX_CONTROL_REG_SIZE 200
+@@ -176,20 +171,16 @@
+ #define M_ECOMPASS		0x000008
+ #define M_TEMPERATURE	0x000010
+ #define M_ALS			0x000020
+-#define M_STEP_DETECTOR	0x000040
+-#define M_STEP_COUNTER	0x000080
+ 
+ #define M_LIN_ACCEL		0x000100
+ #define M_QUATERNION	0x000200
+ #define M_GRAVITY		0x000400
+ #define M_DISP_ROTATE		0x000800
+ #define M_DISP_BRIGHTNESS	0x001000
+-#define M_IR_GESTURE        0x002000
+-#define M_IR_RAW            0x004000
+ 
+ #define M_UNCALIB_GYRO		0x008000
+ #define M_UNCALIB_MAG		0x010000
+-#define M_IR_OBJECT		0x020000
++#define M_ACCEL2		0x020000
+ 
+ /* wake sensor status */
+ #define M_DOCK			0x000001
+@@ -206,8 +197,6 @@
+ #define M_SIM			0x002000
+ #define M_LOG_MSG		0x008000
+ 
+-#define M_IR_WAKE_GESTURE	0x200000
+-
+ /* algo config mask */
+ #define M_MMOVEME               0x0001
+ #define M_NOMMOVE               0x0002
+@@ -273,16 +262,12 @@ enum STML0XX_data_types {
+ 	DT_NFC,
+ 	DT_ALGO_EVT,
+ 	DT_ACCUM_MVMT,
+-	DT_IR_GESTURE,
+-	DT_IR_RAW,
+-	DT_IR_OBJECT,
+ 	DT_SIM,
+ 	DT_RESET,
+ 	DT_GENERIC_INT,
+-	DT_STEP_COUNTER,
+-	DT_STEP_DETECTOR,
+ 	DT_UNCALIB_GYRO,
+ 	DT_UNCALIB_MAG,
++	DT_ACCEL2
+ };
+ 
+ enum {
+@@ -337,6 +322,8 @@ struct stm_response {
+ 
+ #define LED_NOTIF_CONTROL               0X11
+ 
++#define ACCEL2_UPDATE_RATE		0x13
++
+ #define ACCEL_UPDATE_RATE               0x16
+ #define MAG_UPDATE_RATE                 0x17
+ #define PRESSURE_UPDATE_RATE            0x18
+@@ -345,14 +332,6 @@ struct stm_response {
+ #define NONWAKESENSOR_CONFIG            0x1A
+ #define WAKESENSOR_CONFIG               0x1B
+ 
+-#define IR_STATUS                       0x11
+-#define IR_GESTURE_RATE                 0x12
+-#define IR_RAW_RATE                     0x13
+-#define IR_GESTURE                      0x1C
+-#define IR_RAW                          0x1D
+-#define IR_CONFIG                       0x1E
+-#define IR_STATE                        0x1F
+-
+ #define MOTION_DUR                      0x20
+ #define ZRMOTION_DUR                    0x22
+ 
+@@ -369,7 +348,6 @@ struct stm_response {
+ 
+ #define LUX_TABLE_VALUES                0x34
+ #define BRIGHTNESS_TABLE_VALUES         0x35
+-#define STEP_COUNTER_UPDATE_RATE        0x36
+ 
+ #define INTERRUPT_MASK                  0x37
+ #define WAKESENSOR_STATUS               0x39
+@@ -378,7 +356,7 @@ struct stm_response {
+ #define ACCEL_X                         0x3B
+ #define LIN_ACCEL_X                     0x3C
+ #define GRAVITY_X                       0x3D
+-#define STEP_COUNTER			0X3E
++#define ACCEL2_X			0x3E
+ 
+ #define DOCK_DATA                       0x3F
+ 
+@@ -390,8 +368,6 @@ struct stm_response {
+ #define UNCALIB_GYRO_X			0x45
+ #define UNCALIB_MAG_X			0x46
+ 
+-#define STEP_DETECTOR			0X47
+-
+ #define MAG_CAL                         0x48
+ #define MAG_HX                          0x49
+ 
+@@ -457,11 +433,6 @@ struct stm_response {
+ 
+ #define STML0XX_MAXDATA_LENGTH		256
+ 
+-#define STML0XX_IR_GESTURE_CNT      8
+-#define STML0XX_IR_SZ_GESTURE       4
+-#define STML0XX_IR_SZ_RAW           20
+-#define STML0XX_IR_CONFIG_REG_SIZE  200
+-
+ /* stml0xx_readbuff offsets. */
+ #define IRQ_WAKE_LO  0
+ #define IRQ_WAKE_MED 1
+@@ -507,15 +478,7 @@ struct stm_response {
+ #define GRAV_Y		2
+ #define GRAV_Z		4
+ #define CAMERA_VALUE	0
+-#define IR_GESTURE_EVENT    0
+-#define IR_GESTURE_ID       1
+-#define IR_STATE_STATE  0
+-#define STEP8_DATA	0
+-#define STEP16_DATA	2
+-#define STEP32_DATA	4
+-#define STEP64_DATA	6
+ #define SIM_DATA	0
+-#define STEP_DETECT	0
+ 
+ #define STML0XX_LED_MAX_DELAY 0xFFFF
+ #define STML0XX_LED_MAX_BRIGHTNESS 0x00FFFFFF
+@@ -636,7 +599,6 @@ void stml0xx_irq_work_func(struct work_struct *work);
+ 
+ irqreturn_t stml0xx_wake_isr(int irq, void *dev);
+ void stml0xx_irq_wake_work_func(struct work_struct *work);
+-int stml0xx_process_ir_gesture(struct stml0xx_data *ps_stml0xx);
+ 
+ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+ 
+@@ -700,12 +662,10 @@ int stml0xx_blink_set(struct led_classdev *led_cdev,
+ extern struct stml0xx_data *stml0xx_misc_data;
+ 
+ extern unsigned short stml0xx_g_acc_delay;
++extern unsigned short stml0xx_g_acc2_delay;
+ extern unsigned short stml0xx_g_mag_delay;
+ extern unsigned short stml0xx_g_gyro_delay;
+ extern unsigned short stml0xx_g_baro_delay;
+-extern unsigned short stml0xx_g_ir_gesture_delay;
+-extern unsigned short stml0xx_g_ir_raw_delay;
+-extern unsigned short stml0xx_g_step_counter_delay;
+ extern unsigned long stml0xx_g_nonwake_sensor_state;
+ extern unsigned short stml0xx_g_algo_state;
+ extern unsigned char stml0xx_g_motion_dur;
+@@ -713,8 +673,6 @@ extern unsigned char stml0xx_g_zmotion_dur;
+ extern unsigned char stml0xx_g_control_reg[STML0XX_CONTROL_REG_SIZE];
+ extern unsigned char stml0xx_g_mag_cal[STML0XX_MAG_CAL_SIZE];
+ extern unsigned short stml0xx_g_control_reg_restore;
+-extern unsigned char stml0xx_g_ir_config_reg[STML0XX_IR_CONFIG_REG_SIZE];
+-extern bool stml0xx_g_ir_config_reg_restore;
+ extern bool stml0xx_g_booted;
+ 
+ extern unsigned char *stml0xx_cmdbuff;
+-- 
+2.11.0
+

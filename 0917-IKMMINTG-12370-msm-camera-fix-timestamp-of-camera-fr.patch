@@ -1,0 +1,41 @@
+From 7f0d6be2b161611e8e11d9b50232799f46851d4e Mon Sep 17 00:00:00 2001
+From: Nikit Sharma <nikitsharma92@gmail.com>
+Date: Sat, 17 Mar 2018 21:27:48 +0530
+Subject: [PATCH 917/959] IKMMINTG-12370 msm: camera: fix timestamp of camera
+ frames
+
+get_monotonic_boottime() is providing incorrect timestamps compared to
+ktime_get_ts() to the userspace that uses clock_gettime(CLOCK_MONOTONIC)
+resulting in frozen or out of sync audio/video.
+
+Propagated from IKSWM-14374
+
+Change-Id: I49a1750d2122f4b1618ee6b3423f47c1955880c6
+Signed-off-by: Dan Vacura <w36195@motorola.com>
+Reviewed-on: https://gerrit.mot.com/893036
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Vitor Queiroz Albuquerque <vitoralb@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/media/platform/msm/camera_v2/isp/msm_isp_util.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/media/platform/msm/camera_v2/isp/msm_isp_util.c b/drivers/media/platform/msm/camera_v2/isp/msm_isp_util.c
+index b55e418724e..83d752d8301 100644
+--- a/drivers/media/platform/msm/camera_v2/isp/msm_isp_util.c
++++ b/drivers/media/platform/msm/camera_v2/isp/msm_isp_util.c
+@@ -198,7 +198,7 @@ void msm_isp_get_timestamp(struct msm_isp_timestamp *time_stamp,
+ 		time_stamp->buf_time.tv_sec    = time_stamp->vt_time.tv_sec;
+ 		time_stamp->buf_time.tv_usec   = time_stamp->vt_time.tv_usec;
+ 	} else	{
+-		get_monotonic_boottime(&ts);
++		ktime_get_ts(&ts);
+ 		time_stamp->buf_time.tv_sec    = ts.tv_sec;
+ 		time_stamp->buf_time.tv_usec   = ts.tv_nsec/1000;
+ 	}
+-- 
+2.11.0
+

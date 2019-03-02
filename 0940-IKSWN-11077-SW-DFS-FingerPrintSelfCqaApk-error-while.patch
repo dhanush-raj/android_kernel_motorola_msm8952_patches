@@ -1,0 +1,83 @@
+From 2b6ef7237612ad131450b8f4ef74ef168d75dd05 Mon Sep 17 00:00:00 2001
+From: Mark Reed <mreed1@motorola.com>
+Date: Wed, 13 Jul 2016 14:38:56 -0500
+Subject: [PATCH 940/959] IKSWN-11077: [SW DFS] FingerPrintSelfCqaApk error
+ while running DFS test
+
+IKFPS-1187 - drivers: fpc: adding interface to check irq line.
+
+Fingerprint sensor self-test is unable to test irq line.
+This will allow software to check the connection is good.
+
+Change-Id: I6f3cd39d372aa890eec8835a1c84dae0c6173d75
+Signed-off-by: Mark Reed <mreed@motorola.com>
+Reviewed-on: http://gerrit.mot.com/876531
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+(cherry picked from commit fc1234d9745ad357e8cb867a05ebfa58bed464a3)
+Reviewed-on: https://gerrit.mot.com/916419
+Reviewed-by: Andrew Wheeler <awheeler@motorola.com>
+SLTApproved: Vignesh Mahadevan <vignesh@motorola.com>
+---
+ drivers/input/misc/fpc1020_tee.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/drivers/input/misc/fpc1020_tee.c b/drivers/input/misc/fpc1020_tee.c
+index 82fb8090683..8be1a17bef6 100644
+--- a/drivers/input/misc/fpc1020_tee.c
++++ b/drivers/input/misc/fpc1020_tee.c
+@@ -147,6 +147,7 @@ struct fpc1020_data {
+ 	int irq_num;
+ 	bool clocks_enabled;
+ 	bool clocks_suspended;
++	unsigned int irq_cnt;
+ };
+ 
+ static int vreg_setup(struct fpc1020_data *fpc1020, const char *name,
+@@ -297,6 +298,16 @@ static ssize_t irq_get(struct device *device,
+ }
+ static DEVICE_ATTR(irq, S_IRUSR | S_IRGRP, irq_get, NULL);
+ 
++static ssize_t irq_cnt_get(struct device *device,
++		       struct device_attribute *attribute,
++		       char *buffer)
++{
++	struct fpc1020_data *fpc1020 = dev_get_drvdata(device);
++	return scnprintf(buffer, PAGE_SIZE, "%u\n", fpc1020->irq_cnt);
++}
++static DEVICE_ATTR(irq_cnt, S_IRUSR, irq_cnt_get, NULL);
++
++
+ static ssize_t nav_set(struct device *dev,
+ 		struct device_attribute *attr, const char *buf, size_t count)
+ {
+@@ -331,6 +342,7 @@ static struct attribute *attributes[] = {
+ 	&dev_attr_dev_enable.attr,
+ 	&dev_attr_clk_enable.attr,
+ 	&dev_attr_irq.attr,
++	&dev_attr_irq_cnt.attr,
+ 	&dev_attr_nav.attr,
+ 	NULL
+ };
+@@ -345,6 +357,7 @@ static irqreturn_t fpc1020_irq_handler(int irq, void *handle)
+ 
+ 	wake_lock_timeout(&fpc1020->wlock, msecs_to_jiffies(1000));
+ 	dev_dbg(fpc1020->dev, "%s\n", __func__);
++	fpc1020->irq_cnt++;
+ 	sysfs_notify(&fpc1020->dev->kobj, NULL, dev_attr_irq.attr.name);
+ 	return IRQ_HANDLED;
+ }
+@@ -436,6 +449,7 @@ static int fpc1020_probe(struct spi_device *spi)
+ 
+ 	wake_lock_init(&fpc1020->wlock, WAKE_LOCK_SUSPEND, "fpc1020");
+ 
++	fpc1020->irq_cnt = 0;
+ 	fpc1020->clocks_enabled = false;
+ 	fpc1020->clocks_suspended = false;
+ 	irqf = IRQF_TRIGGER_RISING | IRQF_ONESHOT;
+-- 
+2.11.0
+

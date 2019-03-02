@@ -1,0 +1,66 @@
+From 8b27d96f1ec68d50d43e850e2e5ec9f300b97c43 Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Wed, 6 May 2015 09:26:59 -0500
+Subject: [PATCH 251/959] IKSWL-13605: power: qpnp_smbcharger_mmi: Disable
+ power-ok irq
+
+power-ok irq serves no useful purpose and only storms repeatedly
+when connected to a weak charger that ambulances. Hence disable it.
+
+Change-Id: If59b1d31d771d707cc8e48bb77814f12a3cd3184
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/744971
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Vidyadhar Gurram <rnh786@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 762d644af6d..ca2b95bdf25 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -211,7 +211,9 @@ struct smbchg_chip {
+ 	int				recharge_irq;
+ 	int				fastchg_irq;
+ 	int				safety_timeout_irq;
++#ifdef QCOM_BASE
+ 	int				power_ok_irq;
++#endif
+ 	int				dcin_uv_irq;
+ 	int				usbin_uv_irq;
+ 	int				usbin_ov_irq;
+@@ -4190,6 +4192,7 @@ static irqreturn_t safety_timeout_handler(int irq, void *_chip)
+ 	return IRQ_HANDLED;
+ }
+ 
++#ifdef QCOM_BASE
+ /**
+  * power_ok_handler() - called when the switcher turns on or turns off
+  * @chip: pointer to smbchg_chip
+@@ -4204,6 +4207,7 @@ static irqreturn_t power_ok_handler(int irq, void *_chip)
+ 	pr_smb(PR_INTERRUPT, "triggered: 0x%02x\n", reg);
+ 	return IRQ_HANDLED;
+ }
++#endif
+ 
+ static int handle_dc_removal(struct smbchg_chip *chip)
+ {
+@@ -5869,8 +5873,10 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
+ 			enable_irq_wake(chip->dcin_uv_irq);
+ 			break;
+ 		case SMBCHG_MISC_SUBTYPE:
++#ifdef QCOM_BASE
+ 			REQUEST_IRQ(chip, spmi_resource, chip->power_ok_irq,
+ 				"power-ok", power_ok_handler, flags, rc);
++#endif
+ 			REQUEST_IRQ(chip, spmi_resource, chip->chg_hot_irq,
+ 				"temp-shutdown", chg_hot_handler, flags, rc);
+ 			REQUEST_IRQ(chip, spmi_resource,
+-- 
+2.11.0
+

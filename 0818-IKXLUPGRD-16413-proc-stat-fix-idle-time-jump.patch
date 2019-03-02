@@ -1,0 +1,101 @@
+From 8141839f38cf05612ded096275117c9dfb811cd2 Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Fri, 5 Dec 2014 15:52:56 -0800
+Subject: [PATCH 818/959] IKXLUPGRD-16413 proc: stat: fix idle time jump
+
+We saw the idle time report from /proc/stat is weird jump just
+after cpu hotplug.
+
+  User 150 + Nice 0 + Sys 141 + Idle -44061 + IOW -1492 + IRQ 0 + SIRQ 4 = -45258
+
+There are two reasons to cause this issue.
+
+1. All the ts history data are cleaned by below patch.
+    4b0c0f2 tick: Cleanup NOHZ per cpu data on cpu down
+
+We don't need to clean all the ts data to fix the cpu hotplug race,
+but just clean the inidle and tick_stopped, and keep all the other
+ts data to record the history idle/iowait time data.
+
+2. The idle/iowait time is read from different place by below patch.
+    7386cdb "nohz: Fix idle ticks in cpu summary line of /proc/stat"
+
+The idle/iowait time is read from get_cpu_idle/iowait_time_us when
+cpu is online, but is read from cpustat when cpu is offline. So we
+may compare the data with different base and get wrong result.
+
+Since the off time is no longer counted as idle time, it is safe to
+revert it now.
+
+Change-Id: Ib378dae5f54aa06bcd310056780dd171bf1709ef
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/695765
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Yi-Wei Zhao <gbjc64@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Signed-off-by: chenyb1 <chenyb1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/834088
+SME-Granted: SME Approvals Granted
+Reviewed-by: Lian-Wei Wang <lian-wei.wang@motorola.com>
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+---
+ fs/proc/stat.c           | 14 ++++----------
+ kernel/time/tick-sched.c |  5 ++++-
+ 2 files changed, 8 insertions(+), 11 deletions(-)
+
+diff --git a/fs/proc/stat.c b/fs/proc/stat.c
+index 1f46b4d2aed..4e8f6850161 100644
+--- a/fs/proc/stat.c
++++ b/fs/proc/stat.c
+@@ -45,13 +45,10 @@ static cputime64_t get_iowait_time(int cpu)
+ 
+ static u64 get_idle_time(int cpu)
+ {
+-	u64 idle, idle_time = -1ULL;
+-
+-	if (cpu_online(cpu))
+-		idle_time = get_cpu_idle_time_us(cpu, NULL);
++	u64 idle, idle_time = get_cpu_idle_time_us(cpu, NULL);
+ 
+ 	if (idle_time == -1ULL)
+-		/* !NO_HZ or cpu offline so we can rely on cpustat.idle */
++		/* !NO_HZ so we can rely on cpustat.idle */
+ 		idle = kcpustat_cpu(cpu).cpustat[CPUTIME_IDLE];
+ 	else
+ 		idle = usecs_to_cputime64(idle_time);
+@@ -61,13 +58,10 @@ static u64 get_idle_time(int cpu)
+ 
+ static u64 get_iowait_time(int cpu)
+ {
+-	u64 iowait, iowait_time = -1ULL;
+-
+-	if (cpu_online(cpu))
+-		iowait_time = get_cpu_iowait_time_us(cpu, NULL);
++	u64 iowait, iowait_time = get_cpu_iowait_time_us(cpu, NULL);
+ 
+ 	if (iowait_time == -1ULL)
+-		/* !NO_HZ or cpu offline so we can rely on cpustat.iowait */
++		/* !NO_HZ so we can rely on cpustat.iowait */
+ 		iowait = kcpustat_cpu(cpu).cpustat[CPUTIME_IOWAIT];
+ 	else
+ 		iowait = usecs_to_cputime64(iowait_time);
+diff --git a/kernel/time/tick-sched.c b/kernel/time/tick-sched.c
+index a5a25634b98..575432dbfa3 100644
+--- a/kernel/time/tick-sched.c
++++ b/kernel/time/tick-sched.c
+@@ -1234,7 +1234,10 @@ void tick_cancel_sched_timer(int cpu)
+ 		hrtimer_cancel(&ts->sched_timer);
+ # endif
+ 
+-	memset(ts, 0, sizeof(*ts));
++	ts->nohz_mode = NOHZ_MODE_INACTIVE;
++	ts->inidle = 0;
++	ts->tick_stopped = 0;
++	ts->idle_active = 0;
+ }
+ #endif
+ 
+-- 
+2.11.0
+

@@ -1,0 +1,38 @@
+From 9ef77e8aaf1345a9d9a69121afc8dfa7bac5c1f1 Mon Sep 17 00:00:00 2001
+From: Daniel Lucas <dflucas@motorola.com>
+Date: Thu, 28 Apr 2016 17:24:14 -0300
+Subject: [PATCH 880/959] IKSWM-36436 arm/dt: 8952: Add carrier sales channel
+ ID to affinity
+
+Adding a new carrier "retpe" as requested.
+In order to support business strategy, we need to create a new carrier
+to manage BOTA approval proccess for Peru apart from "retla".
+
+Change-Id: Id115bf529c783867c8ff26ea56d70f0d9b4b564c
+Signed-off-by: Daniel Lucas <dflucas@motorola.com>
+Reviewed-on: http://gerrit.mot.com/853002
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi b/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
+index 9e8228bd84e..2c702933f80 100644
+--- a/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
++++ b/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
+@@ -52,7 +52,7 @@
+ 		"attmx",	/* 35 */
+ 		"womcl",	/* 36 */
+ 		"avaco",	/* 37 */
+-		"undefined",	/* 38 */
++		"retpe",	/* 38 */
+ 		"undefined",	/* 39 */
+ 		"undefined",	/* 40 */
+ 		"undefined",	/* 41 */
+-- 
+2.11.0
+

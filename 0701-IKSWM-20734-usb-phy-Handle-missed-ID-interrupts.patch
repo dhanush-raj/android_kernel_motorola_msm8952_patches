@@ -1,0 +1,60 @@
+From bdcf9e871ea74e12bd03e0134b71d89671efea64 Mon Sep 17 00:00:00 2001
+From: Xuehui Ye <yexh1@motorola.com>
+Date: Thu, 18 Feb 2016 14:21:39 +0800
+Subject: [PATCH 701/959] IKSWM-20734: usb: phy: Handle missed ID interrupts.
+
+Re-check for id status 1 second after the host mode is enabled.
+This will handle any missed id interrupts that can potentially
+get the phone stuck in host mode.
+
+Change-Id: I64373a6d021c1785e56b63676e1ec579dbae6c05
+Signed-off-by: Xuehui Ye <yexh1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/823151
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Hujun Liao <liaohj@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/usb/phy/phy-msm-usb.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/usb/phy/phy-msm-usb.c b/drivers/usb/phy/phy-msm-usb.c
+index 3bf425a629e..fea4169e93e 100644
+--- a/drivers/usb/phy/phy-msm-usb.c
++++ b/drivers/usb/phy/phy-msm-usb.c
+@@ -2323,6 +2323,7 @@ out:
+ 	return NOTIFY_OK;
+ }
+ 
++#define MSM_ID_CHECK_DELAY 1000
+ static void msm_hsusb_vbus_power(struct msm_otg *motg, bool on)
+ {
+ 	int ret;
+@@ -4547,6 +4548,8 @@ static void msm_id_status_w(struct work_struct *w)
+ 			set_bit(A_BUS_REQ, &motg->inputs);
+ 			work = 1;
+ 		}
++		queue_delayed_work(motg->otg_wq, &motg->id_status_work,
++				msecs_to_jiffies(MSM_ID_CHECK_DELAY));
+ 	}
+ 
+ 	if (work && (motg->phy.state != OTG_STATE_UNDEFINED)) {
+@@ -4575,10 +4578,12 @@ static irqreturn_t msm_id_irq(int irq, void *data)
+ 		return IRQ_HANDLED;
+ 	}
+ 
+-	if (!aca_id_turned_on)
++	if (!aca_id_turned_on) {
++		cancel_delayed_work(&motg->id_status_work);
+ 		/*schedule delayed work for 5msec for ID line state to settle*/
+ 		queue_delayed_work(motg->otg_wq, &motg->id_status_work,
+ 				msecs_to_jiffies(MSM_ID_STATUS_DELAY));
++	}
+ 
+ 	return IRQ_HANDLED;
+ }
+-- 
+2.11.0
+

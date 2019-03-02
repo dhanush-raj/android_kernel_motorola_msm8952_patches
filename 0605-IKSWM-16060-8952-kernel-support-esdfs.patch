@@ -1,0 +1,30 @@
+From a508badf0ae73ea6bbbe3fa4a5d9f419e080a6fc Mon Sep 17 00:00:00 2001
+From: jixj <jixj@motorola.com>
+Date: Fri, 8 Jan 2016 10:58:37 +0800
+Subject: [PATCH 605/959] IKSWM-16060: 8952: kernel support esdfs
+
+Change-Id: I99c31a8a4bc2a2eeed3e87c02a8d39a6acd0a511
+Signed-off-by: jixj <jixj@motorola.com>
+Reviewed-on: http://gerrit.mot.com/811613
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jiang-Li Yuan <jlyuan@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index b923e6f10b3..de57cc5e772 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -58,3 +58,4 @@ CONFIG_SENSORS_FPC_1020=y
+ CONFIG_MMC_FFU=y
+ CONFIG_SUSPEND_DEBUG=y
+ CONFIG_ALSA_TO_H2W=y
++CONFIG_ESD_FS=y
+-- 
+2.11.0
+

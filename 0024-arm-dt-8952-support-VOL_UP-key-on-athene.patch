@@ -1,0 +1,52 @@
+From 31898064b891e2d15ff86b89b6ddab268b4c7594 Mon Sep 17 00:00:00 2001
+From: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Date: Tue, 18 Aug 2015 13:27:55 -0500
+Subject: [PATCH 024/959] arm/dt: 8952: support VOL_UP key on athene
+
+On MSM GPIO 85.:
+
+Change-Id: I6f1e06db7ffb2627ac888683ab6ba25c6f4405b7
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 0e8e3db9b72..2f07f426b89 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -20,6 +20,31 @@
+ 	};
+ };
+ 
++&tlmm_pinmux {
++	tlmm_gpio_key {
++			qcom,pins = <&gp 85>;
++	};
++};
++
++&soc {
++	gpio_keys {
++		compatible = "gpio-keys";
++		input-name = "gpio-keys";
++		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
++		pinctrl-0 = <&gpio_key_active>;
++		pinctrl-1 = <&gpio_key_suspend>;
++
++		vol_up {
++			label = "volume_up";
++			gpios = <&msm_gpio 85 0x1>;
++			linux,input-type = <1>;
++			linux,code = <115>;
++			gpio-key,wakeup;
++			debounce-interval = <15>;
++		};
++	};
++};
++
+ &sdhc_1 {
+ 	vdd-supply = <&pm8950_l8>;
+ 	qcom,vdd-voltage-level = <2900000 2900000>;
+-- 
+2.11.0
+

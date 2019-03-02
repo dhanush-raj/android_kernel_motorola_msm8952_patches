@@ -1,0 +1,43 @@
+From 63c550d944f9a5c0eb740b160361ae9e2caa70e7 Mon Sep 17 00:00:00 2001
+From: Xiaofei Ma <xiaofei@motorola.com>
+Date: Thu, 28 Jan 2016 16:55:10 -0600
+Subject: [PATCH 668/959] IKSWM-16542: arm/dts: config CDC digital codec clock
+
+The dts node of msm-mclk-freq impacts internal CDC
+digital codec clock. 8952 does not support 12.2MHz
+on gpio 69.
+The external PA is connected to QUIN I2S and Qualcomm
+confirmed the main clock is not configured by the
+dts node (msm-mclk-freq). It should be set in machine
+driver.
+
+Change-Id: Iddefeb11762c495e41abec1012b46a7308efe659
+Signed-off-by: Xiaofei Ma <xiaofei@motorola.com>
+Reviewed-on: http://gerrit.mot.com/817063
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Reviewed-by: Rajasekhar Ram Goparaju <chb764@motorola.com>
+Reviewed-by: Seungyoon Lee <yoon@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index f18bf61f348..a92fffbb3c5 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -615,7 +615,7 @@
+ 			"csr_gp_io_lpaif_pri_pcm_pri_mode_muxsel",
+ 			"csr_gp_io_mux_quin_ctl";
+ 		qcom,msm-ext-pa = "quinary";
+-		qcom,msm-mclk-freq = <12288000>;
++		qcom,msm-mclk-freq = <9600000>;
+ 		qcom,msm-mbhc-hphl-swh = <0>;
+ 		qcom,msm-mbhc-gnd-swh = <0>;
+ 		qcom,msm-hs-micbias-type = "external";
+-- 
+2.11.0
+

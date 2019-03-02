@@ -1,0 +1,204 @@
+From 7c91029012cd44587a8b836d241d092aa2b1aebd Mon Sep 17 00:00:00 2001
+From: chrispat <chrispat@motorola.com>
+Date: Tue, 24 Mar 2015 10:33:38 -0400
+Subject: [PATCH 120/959] IKFX-1749:drivers:misc:stml0xx: Extend WAKE_SENSORS
+ array to 24 bits -- L0
+
+Extended the wake_sensor array from 2 to 3 bytes (24 bits).
+Unused flags are listed as M_UNUSED (commented out).
+
+Signed-off-by: chrispat <chrispat@motorola.com>
+Change-Id: Ie1d95e25bae3e2fdd03cca4753e18df936ebe625
+Reviewed-on: http://gerrit.mot.com/731651
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Vladimir Karpovich <vkarpovich@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c     |  2 +-
+ drivers/misc/stml0xx/stml0xx_ioctl.c    | 14 +++++-----
+ drivers/misc/stml0xx/stml0xx_reset.c    |  5 ++--
+ drivers/misc/stml0xx/stml0xx_wake_irq.c |  7 ++---
+ include/linux/stml0xx.h                 | 48 ++++++++++++++++++++-------------
+ 5 files changed, 45 insertions(+), 31 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 3a386b05133..c0b58a480a5 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -65,7 +65,7 @@ unsigned short stml0xx_g_mag_delay;
+ unsigned short stml0xx_g_gyro_delay;
+ unsigned short stml0xx_g_baro_delay;
+ unsigned long stml0xx_g_nonwake_sensor_state;
+-unsigned short stml0xx_g_wake_sensor_state;
++unsigned long stml0xx_g_wake_sensor_state;
+ unsigned short stml0xx_g_algo_state;
+ unsigned char stml0xx_g_motion_dur;
+ unsigned char stml0xx_g_zmotion_dur;
+diff --git a/drivers/misc/stml0xx/stml0xx_ioctl.c b/drivers/misc/stml0xx/stml0xx_ioctl.c
+index 2b631cb0cfa..4586a3ce578 100644
+--- a/drivers/misc/stml0xx/stml0xx_ioctl.c
++++ b/drivers/misc/stml0xx/stml0xx_ioctl.c
+@@ -281,25 +281,26 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 	case STML0XX_IOCTL_SET_WAKESENSORS:
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"STML0XX_IOCTL_SET_WAKESENSORS");
+-		if (copy_from_user(buf, argp, 2 * sizeof(unsigned char))) {
++		if (copy_from_user(buf, argp, 3 * sizeof(unsigned char))) {
+ 			dev_dbg(&stml0xx_misc_data->spi->dev,
+ 				"Copy set sensors returned error");
+ 			err = -EFAULT;
+ 			break;
+ 		}
+-		stml0xx_g_wake_sensor_state = (buf[1] << 8) | buf[0];
++		stml0xx_g_wake_sensor_state = (buf[2] << 16)
++			|(buf[1] << 8) | buf[0];
+ 		if (stml0xx_g_booted)
+ 			err = stml0xx_spi_send_write_reg(WAKESENSOR_CONFIG,
+-							 buf, 2);
++							 buf, 3);
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sensor enable = 0x%02X", stml0xx_g_wake_sensor_state);
++			"Sensor enable = 0x%06lX", stml0xx_g_wake_sensor_state);
+ 		break;
+ 	case STML0XX_IOCTL_GET_WAKESENSORS:
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"STML0XX_IOCTL_GET_WAKESENSORS");
+ 		if (stml0xx_g_booted) {
+ 			err = stml0xx_spi_send_read_reg(WAKESENSOR_CONFIG,
+-							 buf, 2);
++							 buf, 3);
+ 			if (err < 0) {
+ 				dev_err(&stml0xx_misc_data->spi->dev,
+ 					"Reading get sensors failed");
+@@ -308,8 +309,9 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		} else {
+ 			buf[0] = stml0xx_g_wake_sensor_state & 0xFF;
+ 			buf[1] = (stml0xx_g_wake_sensor_state >> 8) & 0xFF;
++			buf[2] = (stml0xx_g_wake_sensor_state >> 16) & 0xFF;
+ 		}
+-		if (copy_to_user(argp, buf, 2 * sizeof(unsigned char)))
++		if (copy_to_user(argp, buf, 3 * sizeof(unsigned char)))
+ 			err = -EFAULT;
+ 		break;
+ 	case STML0XX_IOCTL_SET_ALGOS:
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index a904e0d8576..3d057f633dd 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -123,9 +123,10 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 		ret_err = err;
+ 
+ 	buf[0] = stml0xx_g_wake_sensor_state & 0xFF;
+-	buf[1] = stml0xx_g_wake_sensor_state >> 8;
++	buf[1] = (stml0xx_g_wake_sensor_state >> 8) & 0xFF;
++	buf[2] = (stml0xx_g_wake_sensor_state >> 16) & 0xFF;
+ 	err = stml0xx_spi_send_write_reg_reset(WAKESENSOR_CONFIG, buf,
+-			2, RESET_NOT_ALLOWED);
++			3, RESET_NOT_ALLOWED);
+ 	if (err < 0)
+ 		ret_err = err;
+ 
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index 67a1552a3cc..fbad8b2c8e6 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -91,7 +91,7 @@ irqreturn_t stml0xx_wake_isr(int irq, void *dev)
+ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ {
+ 	int err;
+-	unsigned short irq_status;
++	unsigned long irq_status;
+ 	u32 irq2_status;
+ 	struct stml0xx_work_struct *stm_ws = (struct stml0xx_work_struct *)work;
+ 	struct stml0xx_data *ps_stml0xx = stml0xx_misc_data;
+@@ -127,8 +127,9 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 	}
+ 
+ 	/* read interrupt mask register */
+-	irq_status = (buf[WAKE_IRQ_IDX_STATUS_MED] << 8)
+-	    | buf[WAKE_IRQ_IDX_STATUS_LO];
++	irq_status = (buf[WAKE_IRQ_IDX_STATUS_HI] << 16) |
++	    (buf[WAKE_IRQ_IDX_STATUS_MED] << 8) |
++	    buf[WAKE_IRQ_IDX_STATUS_LO];
+ 
+ 	/* read algorithm interrupt status register */
+ 	irq2_status = (buf[WAKE_IRQ_IDX_ALGO_STATUS_HI] << 16) |
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 6c25edc0cc2..79ace513038 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -205,6 +205,15 @@
+ #define M_LIFT			0x004000
+ #define M_LOG_MSG		0x008000
+ 
++/*#define M_UNUSED		0x010000*/
++/*#define M_UNUSED		0x020000*/
++/*#define M_UNUSED		0x040000*/
++/*#define M_UNUSED		0x080000*/
++/*#define M_UNUSED		0x100000*/
++/*#define M_UNUSED		0x200000*/
++/*#define M_UNUSED		0x400000*/
++/*#define M_UNUSED		0x800000*/
++
+ /* algo config mask */
+ #define M_MMOVEME               0x0001
+ #define M_NOMMOVE               0x0002
+@@ -501,24 +510,25 @@ struct stm_response {
+ /* stml0xx WAKE IRQ SPI buffer indexes */
+ #define WAKE_IRQ_IDX_STATUS_LO              0
+ #define WAKE_IRQ_IDX_STATUS_MED             1
+-#define WAKE_IRQ_IDX_ALGO_STATUS_LO         2
+-#define WAKE_IRQ_IDX_ALGO_STATUS_MED        3
+-#define WAKE_IRQ_IDX_ALGO_STATUS_HI         4
+-#define WAKE_IRQ_IDX_PROX                   5
+-#define WAKE_IRQ_IDX_COVER                  6
+-#define WAKE_IRQ_IDX_HEADSET                7
+-#define WAKE_IRQ_IDX_FLAT                   8
+-#define WAKE_IRQ_IDX_STOWED                 9
+-#define WAKE_IRQ_IDX_CAMERA                10
+-#define WAKE_IRQ_IDX_LIFT                  12
+-#define WAKE_IRQ_IDX_SIM                   24
+-#define WAKE_IRQ_IDX_MOTION                26
+-#define WAKE_IRQ_IDX_MODALITY              28
+-#define WAKE_IRQ_IDX_MODALITY_ORIENT       35
+-#define WAKE_IRQ_IDX_MODALITY_STOWED       42
+-#define WAKE_IRQ_IDX_MODALITY_ACCUM        49
+-#define WAKE_IRQ_IDX_MODALITY_ACCUM_MVMT   51
+-#define WAKE_IRQ_IDX_LOG_MSG               55
++#define WAKE_IRQ_IDX_STATUS_HI              2
++#define WAKE_IRQ_IDX_ALGO_STATUS_LO         3
++#define WAKE_IRQ_IDX_ALGO_STATUS_MED        4
++#define WAKE_IRQ_IDX_ALGO_STATUS_HI         5
++#define WAKE_IRQ_IDX_PROX                   6
++#define WAKE_IRQ_IDX_COVER                  7
++#define WAKE_IRQ_IDX_HEADSET                8
++#define WAKE_IRQ_IDX_FLAT                   9
++#define WAKE_IRQ_IDX_STOWED                10
++#define WAKE_IRQ_IDX_CAMERA                11
++#define WAKE_IRQ_IDX_LIFT                  13
++#define WAKE_IRQ_IDX_SIM                   25
++#define WAKE_IRQ_IDX_MOTION                27
++#define WAKE_IRQ_IDX_MODALITY              29
++#define WAKE_IRQ_IDX_MODALITY_ORIENT       36
++#define WAKE_IRQ_IDX_MODALITY_STOWED       43
++#define WAKE_IRQ_IDX_MODALITY_ACCUM        50
++#define WAKE_IRQ_IDX_MODALITY_ACCUM_MVMT   52
++#define WAKE_IRQ_IDX_LOG_MSG               56
+ 
+ /* stml0xx_readbuff offsets. */
+ #define IRQ_WAKE_LO  0
+@@ -822,7 +832,7 @@ extern long stml0xx_time_delta;
+ 
+ extern unsigned int stml0xx_irq_disable;
+ 
+-extern unsigned short stml0xx_g_wake_sensor_state;
++extern unsigned long stml0xx_g_wake_sensor_state;
+ 
+ extern unsigned char stat_string[];
+ 
+-- 
+2.11.0
+

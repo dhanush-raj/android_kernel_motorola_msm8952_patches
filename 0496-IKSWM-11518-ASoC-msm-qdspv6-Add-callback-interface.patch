@@ -1,0 +1,113 @@
+From 6b912712263259f60c41a49a68e7b237130cd9af Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Wed, 18 Nov 2015 21:44:45 -0600
+Subject: [PATCH 496/959] IKSWM-11518 ASoC: msm: qdspv6: Add callback interface
+
+Add APR packet send and callback interface to allow
+external AFE module to send APR messages and handle its
+callback from outside of q6afe.c
+
+Change-Id: I4ef05f90638967692f45c45eea2b8953c0b53d6a
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/801314
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ include/sound/q6afe-v2.h      |  6 ++++++
+ sound/soc/msm/qdsp6v2/q6afe.c | 34 ++++++++++++++++++++++++++++++++++
+ 2 files changed, 40 insertions(+)
+
+diff --git a/include/sound/q6afe-v2.h b/include/sound/q6afe-v2.h
+index fe7608f38d8..89e8b73712c 100644
+--- a/include/sound/q6afe-v2.h
++++ b/include/sound/q6afe-v2.h
+@@ -238,4 +238,10 @@ int afe_port_group_set_param(u16 *port_id, int channel_count);
+ int afe_port_group_enable(u16 enable);
+ int afe_unmap_rtac_block(uint32_t *mem_map_handle);
+ int afe_map_rtac_block(struct rtac_cal_block_data *cal_block);
++
++#ifdef CONFIG_SND_SOC_OPALUM
++int ospl2xx_afe_set_callback(int32_t (*ospl2xx_callback_func)
++				(struct apr_client_data *data));
++int ospl2xx_afe_apr_send_pkt(void *data, int index);
++#endif
+ #endif /* __Q6AFE_V2_H__ */
+diff --git a/sound/soc/msm/qdsp6v2/q6afe.c b/sound/soc/msm/qdsp6v2/q6afe.c
+index 29c1cb632e4..967c7b626ea 100644
+--- a/sound/soc/msm/qdsp6v2/q6afe.c
++++ b/sound/soc/msm/qdsp6v2/q6afe.c
+@@ -27,6 +27,7 @@
+ #include "msm-pcm-routing-v2.h"
+ #include <sound/audio_cal_utils.h>
+ #include <sound/adsp_err.h>
++#include <sound/ospl2xx.h>
+ 
+ #define WAKELOCK_TIMEOUT	5000
+ enum {
+@@ -112,6 +113,17 @@ static unsigned long afe_configured_cmd;
+ 
+ static struct afe_ctl this_afe;
+ 
++#ifdef CONFIG_SND_SOC_OPALUM
++int32_t (*ospl2xx_callback)(struct apr_client_data *data);
++
++int ospl2xx_afe_set_callback(
++	int32_t (*ospl2xx_callback_func)(struct apr_client_data *data))
++{
++	ospl2xx_callback = ospl2xx_callback_func;
++	return 0;
++}
++#endif
++
+ #define TIMEOUT_MS 1000
+ #define Q6AFE_MAX_VOLUME 0x3FFF
+ 
+@@ -197,6 +209,15 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
+ 	if (data->opcode == AFE_PORT_CMDRSP_GET_PARAM_V2) {
+ 		u8 *payload = data->payload;
+ 
++#ifdef CONFIG_SND_SOC_OPALUM
++		int32_t *payload32 = data->payload;
++
++		if (payload32[1] == AFE_CUSTOM_OPALUM_RX_MODULE ||
++		    payload32[1] == AFE_CUSTOM_OPALUM_TX_MODULE) {
++			if (ospl2xx_callback != NULL)
++				ospl2xx_callback(data);
++		} else {
++#endif
+ 		if (rtac_make_afe_callback(data->payload, data->payload_size))
+ 			return 0;
+ 
+@@ -217,6 +238,9 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
+ 			cali_state[this_afe.calib_data.res_cfg.th_vi_ca_state]);
+ 		} else
+ 			atomic_set(&this_afe.state, -1);
++#ifdef CONFIG_SND_SOC_OPALUM
++		}
++#endif
+ 		wake_up(&this_afe.wait[data->token]);
+ 	} else if (data->payload_size) {
+ 		uint32_t *payload;
+@@ -501,6 +525,16 @@ static int afe_apr_send_pkt(void *data, wait_queue_head_t *wait)
+ 	return ret;
+ }
+ 
++#ifdef CONFIG_SND_SOC_OPALUM
++int ospl2xx_afe_apr_send_pkt(void *data, int index)
++{
++	int ret = 0;
++
++	ret = afe_apr_send_pkt(data, &this_afe.wait[index]);
++	return ret;
++}
++#endif
++
+ static int afe_send_cal_block(u16 port_id, struct cal_block_data *cal_block)
+ {
+ 	int						result = 0;
+-- 
+2.11.0
+

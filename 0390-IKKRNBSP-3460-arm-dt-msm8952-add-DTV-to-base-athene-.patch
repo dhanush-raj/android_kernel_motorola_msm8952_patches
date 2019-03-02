@@ -1,0 +1,100 @@
+From 7f2d4c8dc56fdec4a211452afd681caafd7f8998 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Mon, 19 Oct 2015 16:35:52 -0500
+Subject: [PATCH 390/959] IKKRNBSP-3460 arm/dt: msm8952: add DTV to base athene
+ configuration
+
+Add DTV FCI node to all boards. Let the driver fail on non
+DTV hardware.
+
+Change-Id: I992889d812f93da82cff6cb60374f9574b5eb233
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/792722
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhongxiu Hu <w18335@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/Makefile               |  3 +--
+ arch/arm/boot/dts/qcom/msm8952-athene-p0.dts  |  2 +-
+ arch/arm/boot/dts/qcom/msm8952-athene-p0d.dts | 26 --------------------------
+ arch/arm/boot/dts/qcom/msm8952-athene.dtsi    |  1 +
+ 4 files changed, 3 insertions(+), 29 deletions(-)
+ delete mode 100644 arch/arm/boot/dts/qcom/msm8952-athene-p0d.dts
+
+diff --git a/arch/arm/boot/dts/qcom/Makefile b/arch/arm/boot/dts/qcom/Makefile
+index 41787e2cd77..5055da44ace 100644
+--- a/arch/arm/boot/dts/qcom/Makefile
++++ b/arch/arm/boot/dts/qcom/Makefile
+@@ -168,8 +168,7 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
+ 	msm8929-cdp-jdi.dtb
+ endif # CONFIG_MMI_DEVICE_DTBS
+ 
+-dtb-$(CONFIG_ARCH_MSM8916) += msm8952-athene-p0.dtb \
+-	msm8952-athene-p0d.dtb
++dtb-$(CONFIG_ARCH_MSM8916) += msm8952-athene-p0.dtb
+ 
+ dtb-$(CONFIG_ARCH_MSM8226) += msm8226-sim.dtb \
+ 	msm8226-fluid.dtb \
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+index 20e6e422ce4..769cbc26875 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
++++ b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+@@ -17,7 +17,7 @@
+ #include "dsi-panel-mot-tdi-546-1080p-cmd.dtsi"
+ 
+ / {
+-	qcom,board-id = <0x41 0x8000>;
++	qcom,board-id = <0x41 0x8000>, <0x41 0x800d>;
+ };
+ 
+ &mdss_dsi0 {
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene-p0d.dts b/arch/arm/boot/dts/qcom/msm8952-athene-p0d.dts
+deleted file mode 100644
+index 5a019c5a88f..00000000000
+--- a/arch/arm/boot/dts/qcom/msm8952-athene-p0d.dts
++++ /dev/null
+@@ -1,26 +0,0 @@
+-/* Copyright (c) 2015, Motorola Mobility Inc. All rights reserved.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License version 2 and
+- * only version 2 as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- */
+-
+-
+-/dts-v1/;
+-
+-#include "msm8952-athene.dtsi"
+-#include "msm8952-moto-dtv.dtsi"
+-#include "dsi-panel-mot-tdi-546-1080p-cmd.dtsi"
+-
+-/ {
+-	qcom,board-id = <0x41 0x800d>;
+-};
+-
+-&mdss_dsi0 {
+-	qcom,dsi-pref-prim-pan = <&mot_tdi_546_1080p_cmd_v0>;
+-};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene.dtsi b/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+index 0c57550e3af..0db6d9a955c 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+@@ -12,6 +12,7 @@
+ 
+ 
+ #include "msm8952-moto-common.dtsi"
++#include "msm8952-moto-dtv.dtsi"
+ #include "dsi-panel-mot-lgd-546-1080p-cmd.dtsi"
+ 
+ / {
+-- 
+2.11.0
+

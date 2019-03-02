@@ -1,0 +1,75 @@
+From 0dd7452e70293874070b2727d33318dfd6160925 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Wed, 4 Mar 2015 09:42:48 -0600
+Subject: [PATCH 227/959] IKKRNBSP-3050: power: qpnp-smbcharger-mmi: Safety
+ Timer Config
+
+Setup the Safety timer configuration such that if the
+timer values are zero the values will be Maxed and
+Disabled.
+
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+
+Change-Id: I85a31d29837c6094a77a1cd86f4e5c050e0f9611
+Reviewed-on: http://gerrit.mot.com/721406
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 20 ++++++++++++++++----
+ 1 file changed, 16 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 0b5953481f8..87637f0f749 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -2536,7 +2536,7 @@ static int smbchg_safety_timer_enable(struct smbchg_chip *chip, bool enable)
+ 	int rc;
+ 	u8 reg;
+ 
+-	if (enable == chip->safety_timer_en)
++	if (!chip->safety_timer_en)
+ 		return 0;
+ 
+ 	if (enable)
+@@ -4612,13 +4612,20 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
+ 
+ 		for (i = 0; i < ARRAY_SIZE(chg_time); i++) {
+ 			if (chip->safety_time <= chg_time[i]) {
+-				reg |= i << SAFETY_TIME_MINUTES_SHIFT;
++				if (chip->safety_time == 0)
++					reg |= (ARRAY_SIZE(chg_time) - 1)
++						<< SAFETY_TIME_MINUTES_SHIFT;
++				else
++					reg |= i << SAFETY_TIME_MINUTES_SHIFT;
+ 				break;
+ 			}
+ 		}
+ 		for (i = 0; i < ARRAY_SIZE(prechg_time); i++) {
+ 			if (chip->prechg_safety_time <= prechg_time[i]) {
+-				reg |= i;
++				if (chip->prechg_safety_time == 0)
++					reg |= ARRAY_SIZE(prechg_time) - 1;
++				else
++					reg |= i;
+ 				break;
+ 			}
+ 		}
+@@ -4634,7 +4641,12 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
+ 				rc);
+ 			return rc;
+ 		}
+-		chip->safety_timer_en = true;
++
++		if ((chip->safety_time == 0) &&
++		    (chip->prechg_safety_time == 0))
++			chip->safety_timer_en = false;
++		else
++			chip->safety_timer_en = true;
+ 	} else {
+ 		rc = smbchg_read(chip, &reg, chip->chgr_base + SFT_CFG, 1);
+ 		if (rc < 0)
+-- 
+2.11.0
+

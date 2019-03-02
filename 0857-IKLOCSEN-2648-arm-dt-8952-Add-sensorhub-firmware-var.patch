@@ -1,0 +1,37 @@
+From f147a5e74aa1acab996958b813c77cac8ca4ce0b Mon Sep 17 00:00:00 2001
+From: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Date: Fri, 15 Apr 2016 15:16:48 -0500
+Subject: [PATCH 857/959] IKLOCSEN-2648 arm/dt: 8952: Add sensorhub firmware
+ variant
+
+This allows the sensorhub firmware updater to include multiple
+firmware types in a single package
+
+Change-Id: I3fcdf2dd03f801abafb94783d8e197bf18e5533b
+Signed-off-by: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Reviewed-on: http://gerrit.mot.com/845054
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Eric Hefner <ehefner@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 19fb5a0f2de..0ba0e03b9cb 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -536,6 +536,7 @@
+ 			status = "ok";
+ 			reg = <0>;
+ 			spi-max-frequency = <8000000>;
++			stml0xx_fw_version = "stml05x";
+ 			gpios = <&msm_gpio 9 0>,       /* IRQ */
+ 				<&msm_gpio 87 0>,      /* RESET */
+ 				<&msm_gpio 8 0>,       /* BSLEN */
+-- 
+2.11.0
+

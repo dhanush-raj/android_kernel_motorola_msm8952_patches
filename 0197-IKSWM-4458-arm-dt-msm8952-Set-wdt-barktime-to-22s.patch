@@ -1,0 +1,31 @@
+From 8704aaefef836afdf974b402b514f5376ba1b94a Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Thu, 24 Sep 2015 20:40:50 -0700
+Subject: [PATCH 197/959] IKSWM-4458 arm/dt: msm8952: Set wdt barktime to 22s
+
+Enlarge the hardware watchdog barktime to 22 seconds for Moto products.
+
+Change-Id: If703409ca4ac60d4d5a87069bf0742bde5439a1e
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index ac6360bff91..4354595929c 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -245,6 +245,10 @@
+ 		linux,contiguous-region = <&ramoops_mem>;
+ 	};
+ 
++        qcom,wdt@b017000 {
++                qcom,bark-time = <22000>;
++        };
++
+ 	spi_4: spi@7af5000 { /* BLSP2 QUP1 */
+ 		compatible = "qcom,spi-qup-v2";
+ 		#address-cells = <1>;
+-- 
+2.11.0
+

@@ -1,0 +1,163 @@
+From 44eedbb96eed38f25773d64186d0dd3f853e09ab Mon Sep 17 00:00:00 2001
+From: Yuanyuan Zhong <zyy@motorola.com>
+Date: Wed, 17 Jun 2015 16:32:00 -0500
+Subject: [PATCH 787/959] IKSWL-41259: mm: let kswapd test movable zone
+ watermark with ALLOC_CMA
+
+Currently kswapd always test watermark using 0 as alloc_flags.
+For a movable zone with many CMA pages, non-CMA free pages is
+easy to drop below watermark. If an alloation is allowed to use
+movable zone, it can use CMA area. So for kswapd, add ALLOC_CMA
+to the flags when testing watermark for movable zone.
+
+Change-Id: Id38e50b01ef9972cf1d43722e6a1073144854cec
+Signed-off-by: Yuanyuan Zhong <zyy@motorola.com>
+Reviewed-on: http://gerrit.mot.com/759209
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Hong-Mei Li <a21834@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/832092
+---
+ mm/compaction.c | 21 ++++++++++++++++-----
+ mm/vmscan.c     | 17 ++++++++++++++---
+ 2 files changed, 30 insertions(+), 8 deletions(-)
+
+diff --git a/mm/compaction.c b/mm/compaction.c
+index bddfdd33b07..0ab2840807a 100644
+--- a/mm/compaction.c
++++ b/mm/compaction.c
+@@ -871,6 +871,7 @@ static int compact_finished(struct zone *zone,
+ {
+ 	unsigned int order;
+ 	unsigned long watermark;
++	int alloc_flags = 0;
+ 
+ 	if (fatal_signal_pending(current))
+ 		return COMPACT_PARTIAL;
+@@ -900,7 +901,9 @@ static int compact_finished(struct zone *zone,
+ 	watermark = low_wmark_pages(zone);
+ 	watermark += (1 << cc->order);
+ 
+-	if (!zone_watermark_ok(zone, cc->order, watermark, 0, 0))
++	if (current_is_kswapd() && (zone_idx(zone) == ZONE_MOVABLE))
++		alloc_flags |= ALLOC_CMA;
++	if (!zone_watermark_ok(zone, cc->order, watermark, 0, alloc_flags))
+ 		return COMPACT_CONTINUE;
+ 
+ 	/* Direct compactor: Is a suitable page free? */
+@@ -930,6 +933,7 @@ unsigned long compaction_suitable(struct zone *zone, int order)
+ {
+ 	int fragindex;
+ 	unsigned long watermark;
++	int alloc_flags = 0;
+ 
+ 	/*
+ 	 * order == -1 is expected when compacting via
+@@ -938,13 +942,15 @@ unsigned long compaction_suitable(struct zone *zone, int order)
+ 	if (order == -1)
+ 		return COMPACT_CONTINUE;
+ 
++	if (current_is_kswapd() && (zone_idx(zone) == ZONE_MOVABLE))
++		alloc_flags |= ALLOC_CMA;
+ 	/*
+ 	 * Watermarks for order-0 must be met for compaction. Note the 2UL.
+ 	 * This is because during migration, copies of pages need to be
+ 	 * allocated and for a short time, the footprint is higher
+ 	 */
+ 	watermark = low_wmark_pages(zone) + (2UL << order);
+-	if (!zone_watermark_ok(zone, 0, watermark, 0, 0))
++	if (!zone_watermark_ok(zone, 0, watermark, 0, alloc_flags))
+ 		return COMPACT_SKIPPED;
+ 
+ 	/*
+@@ -963,7 +969,7 @@ unsigned long compaction_suitable(struct zone *zone, int order)
+ 		return COMPACT_SKIPPED;
+ 
+ 	if (fragindex == -1000 && zone_watermark_ok(zone, order, watermark,
+-	    0, 0))
++	    0, alloc_flags))
+ 		return COMPACT_PARTIAL;
+ 
+ 	return COMPACT_CONTINUE;
+@@ -1235,8 +1241,13 @@ static void __compact_pgdat(pg_data_t *pgdat, struct compact_control *cc)
+ 			compact_zone(zone, cc);
+ 
+ 		if (cc->order > 0) {
+-			int ok = zone_watermark_ok(zone, cc->order,
+-						low_wmark_pages(zone), 0, 0);
++			int alloc_flags = 0;
++			int ok;
++
++			if (current_is_kswapd() && (zoneid == ZONE_MOVABLE))
++				alloc_flags |= ALLOC_CMA;
++			ok = zone_watermark_ok(zone, cc->order,
++					low_wmark_pages(zone), 0, alloc_flags);
+ 			if (ok && cc->order >= zone->compact_order_failed)
+ 				zone->compact_order_failed = cc->order + 1;
+ 			/* Currently async compaction is never deferred. */
+diff --git a/mm/vmscan.c b/mm/vmscan.c
+index 5237447b0d2..e02e3bfe378 100644
+--- a/mm/vmscan.c
++++ b/mm/vmscan.c
+@@ -2873,8 +2873,12 @@ static void age_active_anon(struct zone *zone, struct scan_control *sc)
+ static bool zone_balanced(struct zone *zone, int order,
+ 			  unsigned long balance_gap, int classzone_idx)
+ {
++	int alloc_flags = 0;
++
++	if (zone_idx(zone) == ZONE_MOVABLE)
++		alloc_flags |= ALLOC_CMA;
+ 	if (!zone_watermark_ok_safe(zone, order, high_wmark_pages(zone) +
+-				    balance_gap, classzone_idx, 0))
++				    balance_gap, classzone_idx, alloc_flags))
+ 		return false;
+ 
+ 	if (IS_ENABLED(CONFIG_COMPACTION) && order &&
+@@ -3153,6 +3157,7 @@ static unsigned long balance_pgdat(pg_data_t *pgdat, int order,
+ 
+ 		for (i = 0; i <= end_zone; i++) {
+ 			struct zone *zone = pgdat->node_zones + i;
++			int alloc_flags = 0;
+ 
+ 			if (!populated_zone(zone))
+ 				continue;
+@@ -3164,10 +3169,12 @@ static unsigned long balance_pgdat(pg_data_t *pgdat, int order,
+ 			 * not call compaction as it is expected that the
+ 			 * necessary pages are already available.
+ 			 */
++			if (i == ZONE_MOVABLE)
++				alloc_flags |= ALLOC_CMA;
+ 			if (pgdat_needs_compaction &&
+ 					zone_watermark_ok(zone, order,
+ 						low_wmark_pages(zone),
+-						*classzone_idx, 0))
++						*classzone_idx, alloc_flags))
+ 				pgdat_needs_compaction = false;
+ 		}
+ 
+@@ -3440,6 +3447,7 @@ static int kswapd(void *p)
+ void wakeup_kswapd(struct zone *zone, int order, enum zone_type classzone_idx)
+ {
+ 	pg_data_t *pgdat;
++	int alloc_flags = 0;
+ 
+ 	if (!populated_zone(zone))
+ 		return;
+@@ -3453,7 +3461,10 @@ void wakeup_kswapd(struct zone *zone, int order, enum zone_type classzone_idx)
+ 	}
+ 	if (!waitqueue_active(&pgdat->kswapd_wait))
+ 		return;
+-	if (zone_watermark_ok_safe(zone, order, low_wmark_pages(zone), 0, 0))
++	if (zone_idx(zone) == ZONE_MOVABLE)
++		alloc_flags |= ALLOC_CMA;
++	if (zone_watermark_ok_safe(zone, order, low_wmark_pages(zone), 0,
++				alloc_flags))
+ 		return;
+ 
+ 	trace_mm_vmscan_wakeup_kswapd(pgdat->node_id, zone_idx(zone), order);
+-- 
+2.11.0
+

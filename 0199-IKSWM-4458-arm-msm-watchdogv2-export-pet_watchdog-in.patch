@@ -1,0 +1,108 @@
+From 0002f0b58094711695e9c4cfbfd0f0f75f5c208b Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Wed, 19 Jun 2013 01:48:09 +0800
+Subject: [PATCH 199/959] IKSWM-4458: arm: msm: watchdogv2: export pet_watchdog
+ interface
+
+Add pet_watchdog interface, so that we can feed watchdog timer
+before some cirtical scenarios:
+    soft lockup detector
+    modem panic/shutdown handler
+    CPU power off handler
+
+Change-Id: I6546c233f86e3c54b3652545ce39aea72b3a7819
+---
+ arch/arm/mach-msm/msm_watchdog.h |  5 +++++
+ drivers/soc/qcom/watchdog_v2.c   |  7 +++++++
+ include/soc/qcom/mmi_watchdog.h  | 27 +++++++++++++++++++++++++++
+ 3 files changed, 39 insertions(+)
+ create mode 100644 include/soc/qcom/mmi_watchdog.h
+
+diff --git a/arch/arm/mach-msm/msm_watchdog.h b/arch/arm/mach-msm/msm_watchdog.h
+index 6818680d681..cf940b77e2e 100644
+--- a/arch/arm/mach-msm/msm_watchdog.h
++++ b/arch/arm/mach-msm/msm_watchdog.h
+@@ -74,10 +74,15 @@ void msm_wdog_fiq_setup(void *stack);
+ extern unsigned int msm_wdog_fiq_length, msm_wdog_fiq_start;
+ extern unsigned int msm7k_fiq_start, msm7k_fiq_length;
+ 
++#ifdef CONFIG_MSM_WATCHDOG_V2
++void g_pet_watchdog(void);
++#define pet_watchdog(void) g_pet_watchdog(void);
++#else
+ #ifdef CONFIG_MSM_WATCHDOG
+ void pet_watchdog(void);
+ #else
+ static inline void pet_watchdog(void) { }
+ #endif
++#endif
+ 
+ #endif
+diff --git a/drivers/soc/qcom/watchdog_v2.c b/drivers/soc/qcom/watchdog_v2.c
+index 65182b40f0a..a976e707317 100644
+--- a/drivers/soc/qcom/watchdog_v2.c
++++ b/drivers/soc/qcom/watchdog_v2.c
+@@ -52,6 +52,7 @@
+ 
+ static struct workqueue_struct *wdog_wq;
+ static struct msm_watchdog_data *wdog_data;
++static struct msm_watchdog_data *g_wdog_dd;
+ 
+ static int cpu_idle_pc_state[NR_CPUS];
+ 
+@@ -302,6 +303,11 @@ static void pet_watchdog(struct msm_watchdog_data *wdog_dd)
+ 	wdog_dd->last_pet = time_ns;
+ }
+ 
++void g_pet_watchdog(void)
++{
++	pet_watchdog(g_wdog_dd);
++}
++
+ static void keep_alive_response(void *info)
+ {
+ 	int cpu = smp_processor_id();
+@@ -720,6 +726,7 @@ static int msm_watchdog_probe(struct platform_device *pdev)
+ 	cpumask_clear(&wdog_dd->alive_mask);
+ 	INIT_WORK(&wdog_dd->init_dogwork_struct, init_watchdog_work);
+ 	INIT_DELAYED_WORK(&wdog_dd->dogwork_struct, pet_watchdog_work);
++	g_wdog_dd = wdog_dd;
+ 	queue_work(wdog_wq, &wdog_dd->init_dogwork_struct);
+ 	return 0;
+ err:
+diff --git a/include/soc/qcom/mmi_watchdog.h b/include/soc/qcom/mmi_watchdog.h
+new file mode 100644
+index 00000000000..d0de6becdc9
+--- /dev/null
++++ b/include/soc/qcom/mmi_watchdog.h
+@@ -0,0 +1,27 @@
++/*
++ * arch/arm/mach-msm/include/mach/mmi_watchdog.h: include file for watchdog
++ *
++ * Copyright (C) 2015 Motorola Mobility LLC.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License
++ * as published by the Free Software Foundation; either version 2
++ * of the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ */
++
++#include "../../../arch/arm/mach-msm/msm_watchdog.h"
++
++static inline void touch_hw_watchdog(void)
++{
++	pet_watchdog();
++}
+-- 
+2.11.0
+

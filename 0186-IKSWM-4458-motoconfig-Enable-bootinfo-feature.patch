@@ -1,0 +1,26 @@
+From 1a74ad6893bcd03c3f7fca1df77510e404907fec Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Thu, 24 Sep 2015 01:51:49 -0700
+Subject: [PATCH 186/959] IKSWM-4458 motoconfig: Enable bootinfo feature
+
+Enable the feature, so that we can use /proc/bootinfo from userspace
+and provide interface to last_kmsg
+
+Change-Id: Ic4dc54b6631b48451ca1fd6673af588ae83323a8
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index 0ca2ad77812..75344e3dff8 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -30,3 +30,4 @@ CONFIG_PSTORE=y
+ CONFIG_PSTORE_CONSOLE=y
+ CONFIG_PSTORE_RAM=y
+ CONFIG_PSTORE_RAM_ANNOTATION_APPEND=y
++CONFIG_BOOTINFO=y
+-- 
+2.11.0
+

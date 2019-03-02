@@ -1,0 +1,98 @@
+From e71ff9b71da295aee3292383a5523a109f06741c Mon Sep 17 00:00:00 2001
+From: Manasa Guntaka <mguntaka@motorola.com>
+Date: Thu, 26 Mar 2015 14:18:06 -0500
+Subject: [PATCH 119/959] IKSWL-629 drivers:misc:stml0xx:Device tree entry to
+ detect cover
+
+Added device tree entry to select the detect polarity
+
+Change-Id: Ic98901388ac80cc23ceca8f0d4fe6ed35a2f1da5
+
+Signed-off-by: Manasa Guntaka <mguntaka@motorola.com>
+Change-Id: I789b97c6c7588b4a4cd357884ad2353fb6429f49
+Reviewed-on: http://gerrit.mot.com/728541
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Vladimir Karpovich <vkarpovich@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c     |  4 ++++
+ drivers/misc/stml0xx/stml0xx_wake_irq.c | 18 +++++++++++++-----
+ include/linux/stml0xx.h                 |  1 +
+ 3 files changed, 18 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 399b1a02405..3a386b05133 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -449,6 +449,10 @@ static struct stml0xx_platform_data *stml0xx_of_init(struct spi_device *spi)
+ 	of_property_read_u32(np, "headset_button_4_keycode",
+ 			     &pdata->headset_button_4_keycode);
+ 
++	pdata->cover_detect_polarity = 0;
++	of_property_read_u32(np, "cover_detect_polarity",
++			     &pdata->cover_detect_polarity);
++
+ 	pdata->accel_orientation_1 = 0;
+ 	pdata->accel_orientation_2 = 0;
+ 	of_property_read_u32(np, "accel_orientation_1",
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index bf321c95a9f..67a1552a3cc 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -53,6 +53,13 @@ enum headset_state_t {
+ 	SH_HEADSET_BUTTON_4
+ };
+ 
++enum cover_detect_states {
++	STML0XX_HALL_NO_DETECT,
++	STML0XX_HALL_SOUTH_DETECT,
++	STML0XX_HALL_NORTH_DETECT,
++	STML0XX_HALL_NORTH_OR_SOUTH_DETECT
++};
++
+ enum headset_state_t Headset_State = SH_HEADSET_REMOVED;
+ 
+ irqreturn_t stml0xx_wake_isr(int irq, void *dev)
+@@ -90,6 +97,9 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 	struct stml0xx_data *ps_stml0xx = stml0xx_misc_data;
+ 	unsigned char buf[SPI_MSG_SIZE];
+ 
++	struct stml0xx_platform_data *pdata;
++	pdata = ps_stml0xx->pdata;
++
+ 	dev_dbg(&stml0xx_misc_data->spi->dev, "stml0xx_irq_wake_work_func");
+ 	mutex_lock(&ps_stml0xx->lock);
+ 
+@@ -141,11 +151,9 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 	}
+ 	if (irq_status & M_COVER) {
+ 		int state = 0;
+-		if (buf[WAKE_IRQ_IDX_COVER] == STML0XX_HALL_NORTH)
+-			state = 1;
+-		else
+-			state = 0;
+-
++		if ((pdata->cover_detect_polarity
++			& buf[WAKE_IRQ_IDX_COVER]) != 0)
++				state = 1;
+ 		input_report_switch(ps_stml0xx->input_dev, SW_LID, state);
+ 		input_sync(ps_stml0xx->input_dev);
+ 
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 4f545846fce..6c25edc0cc2 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -623,6 +623,7 @@ struct stml0xx_platform_data {
+ 	int accel_orientation_1;
+ 	int accel_orientation_2;
+ 	int accel_swap;
++	int cover_detect_polarity;
+ };
+ 
+ struct stml0xx_data {
+-- 
+2.11.0
+

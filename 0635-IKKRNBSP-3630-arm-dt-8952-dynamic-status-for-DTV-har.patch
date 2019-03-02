@@ -1,0 +1,40 @@
+From 52e50e92ded4936e43eee14fc92102df57bf7106 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Thu, 21 Jan 2016 16:52:53 -0600
+Subject: [PATCH 635/959] IKKRNBSP-3630 arm/dt: 8952: dynamic status for DTV
+ hardware
+
+Use DTV HW descriptor to set status of SPI interface and FCI nodes.
+
+Change-Id: I70f1fef3f42c89ce0a31a84ba31cb176bff9fce3
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/815218
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-dtv.dtsi | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-dtv.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-dtv.dtsi
+index a4203f023e7..41b8efb3ea3 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-dtv.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-dtv.dtsi
+@@ -117,10 +117,10 @@
+ 		qcom,bam-producer-pipe-index = <7>;
+ 		/* master-id for BLSP2 is MSM_BUS_MASTER_BLSP_2 or 84 */
+ 		qcom,master-id = <84>;
+-		status = "ok";
++		status = "/chosen", "mmi,dtv", "true";
+ 
+ 		fci_dtv: fc8300@0 {
+-			status = "ok";
++			status = "/chosen", "mmi,dtv", "true";
+ 			compatible = "fci,isdbt";
+ 			reg = <0>;
+ 			spi-max-frequency = <50000000>;
+-- 
+2.11.0
+

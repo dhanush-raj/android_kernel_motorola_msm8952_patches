@@ -1,0 +1,215 @@
+From e3bea6150276363b31f84bb1df4e641d0d876ebe Mon Sep 17 00:00:00 2001
+From: Konstantin Makariev <kmakariev@motorola.com>
+Date: Wed, 21 Oct 2015 11:13:22 -0500
+Subject: [PATCH 388/959] IKSWM-7604 input: synaptics_dsx_i2c: fix minor issues
+
+This commit fixes the following issues:
+ * world writable sysfs entries permissions
+ * replace size_t with unsigned int
+ * fix might be used unassigned warning
+ * use do_div to divide u64 values
+
+Change-Id: I76ce4a4e0569ae2a9262908f497bb78da2085cd3
+Signed-off-by: Konstantin Makariev <kmakariev@motorola.com>
+---
+ .../input/touchscreen/synaptics_dsx_fw_update.c    | 40 +++++++++++-----------
+ drivers/input/touchscreen/synaptics_dsx_i2c.c      | 20 ++++++-----
+ 2 files changed, 31 insertions(+), 29 deletions(-)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_fw_update.c b/drivers/input/touchscreen/synaptics_dsx_fw_update.c
+index 09a285a780f..57a32f5ba6c 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_fw_update.c
++++ b/drivers/input/touchscreen/synaptics_dsx_fw_update.c
+@@ -621,25 +621,25 @@ static struct bin_attribute dev_attr_data = {
+ };
+ 
+ static struct device_attribute attrs[] = {
+-	__ATTR(dorecovery, S_IWUGO,
++	__ATTR(dorecovery, S_IWUSR | S_IWGRP,
+ 			synaptics_rmi4_show_error,
+ 			fwu_sysfs_do_recovery_store),
+-	__ATTR(doreflash, S_IWUGO,
++	__ATTR(doreflash, S_IWUSR | S_IWGRP,
+ 			synaptics_rmi4_show_error,
+ 			fwu_sysfs_do_reflash_store),
+-	__ATTR(writeconfig, S_IWUGO,
++	__ATTR(writeconfig, S_IWUSR | S_IWGRP,
+ 			synaptics_rmi4_show_error,
+ 			fwu_sysfs_write_config_store),
+-	__ATTR(readconfig, S_IWUGO,
++	__ATTR(readconfig, S_IWUSR | S_IWGRP,
+ 			synaptics_rmi4_show_error,
+ 			fwu_sysfs_read_config_store),
+-	__ATTR(configarea, S_IWUGO,
++	__ATTR(configarea, S_IWUSR | S_IWGRP,
+ 			synaptics_rmi4_show_error,
+ 			fwu_sysfs_config_area_store),
+-	__ATTR(imagename, S_IWUGO,
++	__ATTR(imagename, S_IWUSR | S_IWGRP,
+ 			synaptics_rmi4_show_error,
+ 			fwu_sysfs_image_name_store),
+-	__ATTR(imagesize, S_IWUGO,
++	__ATTR(imagesize, S_IWUSR | S_IWGRP,
+ 			synaptics_rmi4_show_error,
+ 			fwu_sysfs_image_size_store),
+ 	__ATTR(blocksize, S_IRUGO,
+@@ -663,10 +663,10 @@ static struct device_attribute attrs[] = {
+ 	__ATTR(guestcodeblockcount, S_IRUGO,
+ 			fwu_sysfs_guest_code_block_count_show,
+ 			synaptics_rmi4_store_error),
+-	__ATTR(writeguestcode, S_IWUGO,
++	__ATTR(writeguestcode, S_IWUSR | S_IWGRP,
+ 			synaptics_rmi4_show_error,
+ 			fwu_sysfs_write_guest_code_store),
+-	__ATTR(forcereflash, S_IWUGO,
++	__ATTR(forcereflash, S_IWUSR | S_IWGRP,
+ 			synaptics_rmi4_show_error,
+ 			fwu_sysfs_force_reflash_store),
+ };
+@@ -3224,11 +3224,11 @@ static bool fwu_tdat_image_format(const unsigned char *fw_image)
+ 	return fw_image[0] == 0x31;
+ }
+ 
+-static void fwu_tdat_config_set(const unsigned char *data, size_t size,
+-		const unsigned char **image, size_t *image_size)
++static void fwu_tdat_config_set(const unsigned char *data, unsigned int size,
++		const unsigned char **image, unsigned int *image_size)
+ {
+ 	unsigned short id;
+-	size_t length, offset;
++	unsigned int length, offset;
+ 
+ 	for (offset = 0; offset < size; offset += length+5) {
+ 		id = (data[offset+1] << 8) | data[offset];
+@@ -3241,9 +3241,9 @@ static void fwu_tdat_config_set(const unsigned char *data, size_t size,
+ }
+ 
+ static void fwu_tdat_section_offset(
+-		const unsigned char **image, size_t *image_size)
++		const unsigned char **image, unsigned int *image_size)
+ {
+-	size_t offset;
++	unsigned int offset;
+ 	offset = (*image)[0] + 1;
+ 	*image_size -= offset;
+ 	*image = &(*image)[offset];
+@@ -3253,7 +3253,7 @@ static int fwu_parse_tdat_image(void)
+ {
+ 	int ii;
+ 	unsigned int id;
+-	size_t length, offset;
++	unsigned int length, offset;
+ 	struct image_metadata *img = &fwu->img;
+ 	const unsigned char *section, *data = fwu->image;
+ 	unsigned int fw_size = fwu->image_size;
+@@ -3272,12 +3272,12 @@ static int fwu_parse_tdat_image(void)
+ 			 (data[offset+2] << 8) | data[offset+1];
+ 
+ 		dev_dbg(&fwu->rmi4_data->i2c_client->dev,
+-				"Record[%d]: length %zu, offset %zu\n",
++				"Record[%d]: length %u, offset %u\n",
+ 				ii++, length, offset);
+ 
+ 		if ((offset+length+4) > fw_size) {
+ 			dev_err(&fwu->rmi4_data->i2c_client->dev,
+-					"Data overflow at offset %zu (%u)\n",
++					"Data overflow at offset %u (%u)\n",
+ 					offset, data[offset]);
+ 			return -EINVAL;
+ 		}
+@@ -3298,7 +3298,7 @@ static int fwu_parse_tdat_image(void)
+ 		switch (id) {
+ 		case 1: /* config */
+ 			dev_dbg(&fwu->rmi4_data->i2c_client->dev,
+-				"%s: Config record %d, size %zu\n",
++				"%s: Config record %d, size %u\n",
+ 				__func__, id, length);
+ 
+ 			fwu_tdat_config_set(section, length,
+@@ -3310,7 +3310,7 @@ static int fwu_parse_tdat_image(void)
+ 
+ 		case 2: /* firmware */
+ 			dev_dbg(&fwu->rmi4_data->i2c_client->dev,
+-				"%s: Firmware record %d, size %zu\n",
++				"%s: Firmware record %d, size %u\n",
+ 				__func__,
+ 				id,
+ 				length);
+@@ -3340,7 +3340,7 @@ static int fwu_parse_tdat_image(void)
+ 	}
+ 
+ 	dev_dbg(&fwu->rmi4_data->i2c_client->dev,
+-		"%s: Firwmare size %zu, config size %zu\n",
++		"%s: Firwmare size %u, config size %u\n",
+ 		__func__,
+ 		img->ui_firmware.size,
+ 		img->ui_config.size);
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.c b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+index 5a51af26ddd..f586d560f29 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.c
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+@@ -93,7 +93,7 @@
+ #define SYDBG(fmt, args...)	printk(KERN_ERR "%s: " fmt, __func__, ##args)
+ #define SYDBG_REG(subpkt, fld) SYDBG(#subpkt "." #fld " = 0x%02X\n", subpkt.fld)
+ 
+-#define tk_debug(fmt, args...) pr_err(fmt, ##args)
++#define tk_debug(fmt, args...)
+ 
+ #ifdef CONFIG_MMI_HALL_NOTIFICATIONS
+ static int folio_notifier_callback(struct notifier_block *self,
+@@ -1294,7 +1294,7 @@ int synaptics_dsx_dt_parse_mode(struct synaptics_rmi4_data *data,
+ 	struct device *dev = &data->i2c_client->dev;
+ 	struct device_node *np = dev->of_node;
+ 	struct device_node *np_modes;
+-	int ret;
++	int ret = 0;
+ 	char *propname;
+ 	struct property *prop;
+ 	const __be32 *list;
+@@ -1361,6 +1361,7 @@ static struct synaptics_dsx_platform_data *
+ 	struct synaptics_dsx_platform_data *pdata;
+ 	struct device_node *np = client->dev.of_node;
+ 	struct synaptics_dsx_cap_button_map *button_map = NULL;
++	struct synaptics_clip_area clip_area;
+ 
+ 	rmi4_data->patching_enabled = 1;
+ 	retval = synaptics_dsx_dt_parse_mode(rmi4_data, "default",
+@@ -1457,11 +1458,12 @@ static struct synaptics_dsx_platform_data *
+ 		rmi4_data->aod_mt = 1;
+ 	}
+ 
+-	if (of_property_read_bool(np, "synaptics,touch-clip-area")) {
+-		struct synaptics_clip_area *clip_area;
+-
+-		clip_area = kzalloc(sizeof(*clip_area), GFP_KERNEL);
+-		if (!clip_area) {
++	retval = of_property_read_u32_array(np,
++			"synaptics,touch-clip-area",
++			(unsigned *)&clip_area, 4);
++	if (!retval) {
++		rmi4_data->clipa = kzalloc(sizeof(clip_area), GFP_KERNEL);
++		if (!rmi4_data->clipa) {
+ 			dev_err(&client->dev, "clip area allocation failure\n");
+ 			return NULL;
+ 		}
+@@ -2848,7 +2850,7 @@ static ssize_t synaptics_rmi4_f01_flashprog_show(struct device *dev,
+ 		struct device_attribute *attr, char *buf)
+ {
+ 	struct synaptics_rmi4_data *rmi4_data =
+-                                        i2c_get_clientdata(to_i2c_client(dev));
++					i2c_get_clientdata(to_i2c_client(dev));
+ 	return scnprintf(buf, PAGE_SIZE, "%d\n", rmi4_data->in_bootloader);
+ }
+ 
+@@ -6215,7 +6217,7 @@ static int synaptics_dsx_sysfs_touchscreen(
+ {
+ 	struct synaptics_rmi4_device_info *rmi = &(rmi4_data->rmi4_mod_info);
+ 	struct device_attribute *attrs = touchscreen_attributes;
+-	int i, error;
++	int i, error = 0;
+ 	static struct class *touchscreen_class;
+ 	static struct device *ts_class_dev;
+ 
+-- 
+2.11.0
+

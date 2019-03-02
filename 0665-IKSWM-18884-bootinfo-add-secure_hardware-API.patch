@@ -1,0 +1,90 @@
+From ed5567934a32f4a4c7e0910b28b6c2c781e90776 Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Fri, 29 Jan 2016 14:27:03 -0800
+Subject: [PATCH 665/959] IKSWM-18884 bootinfo: add secure_hardware API
+
+Add secure_hardware to bootinfo API.
+The secure_hardware info is also written to /proc/bootinfo
+and lask kmsg.
+
+Change-Id: I190959ecd109f5aeb6f1fbb3b5edf292cacf7323
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/817419
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/soc/qcom/bootinfo.c | 20 ++++++++++++++++++++
+ include/soc/qcom/bootinfo.h |  2 ++
+ 2 files changed, 22 insertions(+)
+
+diff --git a/drivers/soc/qcom/bootinfo.c b/drivers/soc/qcom/bootinfo.c
+index f7b9f4bace3..1a1d7b61493 100644
+--- a/drivers/soc/qcom/bootinfo.c
++++ b/drivers/soc/qcom/bootinfo.c
+@@ -309,6 +309,24 @@ const char *bi_bootreason(void)
+ }
+ EXPORT_SYMBOL(bi_bootreason);
+ 
++static u32 secure_hardware;
++static int __init bootinfo_secure_hardware_init(char *s)
++{
++	secure_hardware = simple_strtoul(s, NULL, 0);
++
++	return 1;
++}
++__setup("androidboot.secure_hardware=", bootinfo_secure_hardware_init);
++
++u32 bi_secure_hardware(void)
++{
++	return secure_hardware;
++}
++EXPORT_SYMBOL(bi_secure_hardware);
++
++#define EMIT_SECURE_HW() \
++		EMIT_BOOTINFO("SECURE_HW", "%d", secure_hardware)
++
+ static void bootinfo_lastkmsg_annotate_bl(struct bl_build_sig *bl)
+ {
+ 	int i;
+@@ -326,6 +344,7 @@ static void bootinfo_lastkmsg_annotate_bl(struct bl_build_sig *bl)
+ 	pstore_annotate(linux_banner);
+ 	EMIT_BOOTINFO_LASTKMSG(buf, "SERIAL", "0x%llx", serial);
+ 	EMIT_BOOTINFO_LASTKMSG(buf, "HW_REV", "0x%04x", hwrev);
++	EMIT_BOOTINFO_LASTKMSG(buf, "SECURE_HW", "%d", secure_hardware);
+ 	EMIT_BOOTINFO_LASTKMSG(buf, "BOOT_SEQ", "0x%08x", boot_seq);
+ 	persistent_ram_annotation_append("POWERUPREASON: 0x%08x\n",
+ 						bi_powerup_reason());
+@@ -344,6 +363,7 @@ static int get_bootinfo(struct seq_file *m, void *v)
+ 
+ 	EMIT_SERIAL();
+ 	EMIT_HWREV();
++	EMIT_SECURE_HW();
+ 	EMIT_POWERUPREASON();
+ 	EMIT_MBM_VERSION();
+ 	EMIT_BL_BUILD_SIG();
+diff --git a/include/soc/qcom/bootinfo.h b/include/soc/qcom/bootinfo.h
+index c9a05f62ed4..c8721691259 100644
+--- a/include/soc/qcom/bootinfo.h
++++ b/include/soc/qcom/bootinfo.h
+@@ -85,6 +85,7 @@ extern struct proc_dir_entry proc_root;
+ u32  bi_powerup_reason(void);
+ const char *bi_bootreason(void);
+ u32  bi_mbm_version(void);
++u32  bi_secure_hardware(void);
+ 
+ void bi_add_bl_build_sig(char *bld_sig);
+ 
+@@ -100,6 +101,7 @@ extern unsigned int system_serial_high;
+ static inline u32 bi_powerup_reason(void) { return PU_REASON_INVALID; }
+ static inline const char *bi_bootreason(void) { return "NOTSUPPORTED"; }
+ static inline u32 bi_mbm_version(void) { return 0xFFFFFFFF; }
++static inline u32 bi_secure_hardware(void) { return 1; }
+ #endif /* !defined(CONFIG_BOOTINFO) */
+ #endif /* defined(__KERNEL__) */
+ 
+-- 
+2.11.0
+

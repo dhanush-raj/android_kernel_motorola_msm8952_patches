@@ -1,0 +1,35 @@
+From 8ae6b06223734b2a7c837f6df47049bc5eb1d09d Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Tue, 17 Mar 2015 18:02:37 -0800
+Subject: [PATCH 335/959] IKSWM-5783 motoconfig: enable TZ log and CPU CTX
+
+Enable TZ Log and CPU context dump after watchdog reset.
+
+Change-Id: I9279acaac21ebbf1c328f9b9c24c57e5668a2741
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+Reviewed-on: http://gerrit.mot.com/722588
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/787913
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index 6b89faaef74..3ee2894a48f 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -47,3 +47,6 @@ CONFIG_XFRM_MIGRATE=y
+ CONFIG_NET_KEY_MIGRATE=y
+ CONFIG_INET_XFRM_MODE_BEET=y
+ CONFIG_MMI_UNIT_INFO=y
++CONFIG_MSM_WATCHDOG_CTX_PRINT=y
++CONFIG_MSM_TZ_LOG=y
++CONFIG_MSM_TZ_LOG_WDOG_DUMP=y
+-- 
+2.11.0
+

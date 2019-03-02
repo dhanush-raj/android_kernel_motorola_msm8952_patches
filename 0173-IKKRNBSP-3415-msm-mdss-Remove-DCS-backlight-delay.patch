@@ -1,0 +1,43 @@
+From aef97ad137ea2c0bdfb5956f047d5753d9959bb0 Mon Sep 17 00:00:00 2001
+From: Zac Crosby <zac@motorola.com>
+Date: Mon, 2 Jun 2014 13:36:05 -0500
+Subject: [PATCH 173/959] IKKRNBSP-3415 msm: mdss: Remove DCS backlight delay
+
+When sending a DCS backlight command, a 1 msec delay is being used.  This
+1 msec delay occurs during a lock which prevents a new frame from being
+setup.  On panels with a short vertical porch, this can cause a backlight
+update to delay a new frame long enough to miss the TE pulse.
+
+To address this, remove the delay.
+
+Port of 2cbf846 from 8996.
+
+Change-Id: I06ca1db63858215f0ac8ebe431f4ecea921654f9
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/786047
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index b9a18f40a4a..c53a6411ed9 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -188,7 +188,7 @@ static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
+ 
+ static char led_pwm1[2] = {0x51, 0x0};	/* DTYPE_DCS_WRITE1 */
+ static struct dsi_cmd_desc backlight_cmd = {
+-	{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(led_pwm1)},
++	{DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(led_pwm1)},
+ 	led_pwm1
+ };
+ 
+-- 
+2.11.0
+

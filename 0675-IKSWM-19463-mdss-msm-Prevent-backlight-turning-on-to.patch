@@ -1,0 +1,169 @@
+From 0e50d3e537fdcc641805188fd163494e367dbcaa Mon Sep 17 00:00:00 2001
+From: Zac Crosby <zac@motorola.com>
+Date: Tue, 11 Nov 2014 10:56:33 -0600
+Subject: [PATCH 675/959] IKSWM-19463 mdss: msm: Prevent backlight turning on
+ too soon
+
+Some displays have a requirement for the amount of time between the
+start of sending image frames and turning on the backlight.  Add a
+method to enforce that requirement.
+
+Change-Id: Id80de45392b7fcd265beb151aaacd458bac5ffde
+(cherry picked from commit b6ceb1054c952b678a260decbde9074137f1a76e)
+
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Change-Id: I2585302ff10e0d00aa7fc79ff2c062033ac5572b
+Reviewed-on: http://gerrit.mot.com/818663
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Patrick Auchter <auchter@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi.c       |  2 ++
+ drivers/video/msm/mdss/mdss_dsi.h       |  1 +
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 50 +++++++++++++++++++++++++++++++++
+ drivers/video/msm/mdss/mdss_panel.h     |  3 ++
+ 4 files changed, 56 insertions(+)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi.c b/drivers/video/msm/mdss/mdss_dsi.c
+index 02e54afbd52..2e0226176f2 100644
+--- a/drivers/video/msm/mdss/mdss_dsi.c
++++ b/drivers/video/msm/mdss/mdss_dsi.c
+@@ -2190,6 +2190,8 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
+ 		break;
+ 	case MDSS_EVENT_PANEL_ON:
+ 		ctrl_pdata->ctrl_state |= CTRL_STATE_MDP_ACTIVE;
++		if (ctrl_pdata->bl_on_defer)
++			ctrl_pdata->bl_on_defer(ctrl_pdata);
+ 		if (ctrl_pdata->on_cmds.link_state == DSI_HS_MODE)
+ 			rc = mdss_dsi_unblank(pdata);
+ 		pdata->panel_info.esd_rdy = true;
+diff --git a/drivers/video/msm/mdss/mdss_dsi.h b/drivers/video/msm/mdss/mdss_dsi.h
+index c20929f3bff..fd2fb2faa84 100644
+--- a/drivers/video/msm/mdss/mdss_dsi.h
++++ b/drivers/video/msm/mdss/mdss_dsi.h
+@@ -385,6 +385,7 @@ struct mdss_dsi_ctrl_pdata {
+ 	int (*check_read_status) (struct mdss_dsi_ctrl_pdata *pdata);
+ 	int (*cmdlist_commit)(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp);
+ 	void (*switch_mode) (struct mdss_panel_data *pdata, int mode);
++	void (*bl_on_defer)(struct mdss_dsi_ctrl_pdata *ctrl);
+ 	struct mdss_panel_data panel_data;
+ 	struct mdss_panel_config panel_config;
+ 	unsigned char *ctrl_base;
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index 0e9caa8e541..cf1c4aba8a5 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -24,6 +24,8 @@
+ #include <linux/string.h>
+ #include <linux/uaccess.h>
+ #include <linux/msm_mdp.h>
++#include <linux/jiffies.h>
++#include <linux/ktime.h>
+ 
+ #include "mdss_dsi.h"
+ #include "mdss_dba_utils.h"
+@@ -49,6 +51,42 @@ static char rc_range_max_qp[] = {4, 4, 5, 6, 7, 7, 7, 8, 9, 10, 11, 12,
+ static char rc_range_bpg_offset[] = {2, 0, 0, -2, -4, -6, -8, -8, -8, -10, -10,
+ 	-12, -12, -12, -12};
+ 
++static DECLARE_COMPLETION(bl_on_delay_completion);
++static enum hrtimer_restart mdss_dsi_panel_bl_on_defer_timer_expire(
++	struct hrtimer *timer)
++{
++	complete_all(&bl_on_delay_completion);
++	return HRTIMER_NORESTART;
++}
++
++static void mdss_dsi_panel_bl_on_defer_start(struct mdss_dsi_ctrl_pdata *ctrl)
++{
++	ktime_t delay_time;
++	struct mdss_panel_info *pinfo;
++
++	pinfo = &(ctrl->panel_data.panel_info);
++	if (pinfo->bl_on_defer_delay) {
++		delay_time = ktime_set(0, pinfo->bl_on_defer_delay * 1000000);
++		hrtimer_cancel(&pinfo->bl_on_defer_hrtimer);
++		INIT_COMPLETION(bl_on_delay_completion);
++		hrtimer_start(&pinfo->bl_on_defer_hrtimer,
++			delay_time,
++			HRTIMER_MODE_REL);
++	}
++}
++
++static void mdss_dsi_panel_bl_on_defer_wait(struct mdss_dsi_ctrl_pdata *ctrl)
++{
++	struct mdss_panel_info *pinfo;
++
++	pinfo = &(ctrl->panel_data.panel_info);
++	if (pinfo->bl_on_defer_delay &&
++		!pinfo->cont_splash_enabled) {
++		wait_for_completion_timeout(&bl_on_delay_completion,
++			msecs_to_jiffies(pinfo->bl_on_defer_delay) + 1);
++	}
++}
++
+ void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
+ {
+ 	if (ctrl->pwm_pmi)
+@@ -796,6 +834,8 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
+ 	if ((bl_level < pdata->panel_info.bl_min) && (bl_level != 0))
+ 		bl_level = pdata->panel_info.bl_min;
+ 
++	mdss_dsi_panel_bl_on_defer_wait(ctrl_pdata);
++
+ 	switch (ctrl_pdata->bklt_ctrl) {
+ 	case BL_WLED:
+ 		led_trigger_event(bl_led_trigger, bl_level);
+@@ -2538,6 +2578,15 @@ static int mdss_panel_parse_dt(struct device_node *np,
+ 	pinfo->bl_max = (!rc ? tmp : 255);
+ 	ctrl_pdata->bklt_max = pinfo->bl_max;
+ 
++	rc = of_property_read_u32(np, "qcom,mdss-dsi-bl-on-defer-delay", &tmp);
++	pinfo->bl_on_defer_delay = (!rc ? tmp : 0);
++	if (pinfo->bl_on_defer_delay) {
++		hrtimer_init(&pinfo->bl_on_defer_hrtimer,
++			CLOCK_MONOTONIC, HRTIMER_MODE_REL);
++		pinfo->bl_on_defer_hrtimer.function =
++			&mdss_dsi_panel_bl_on_defer_timer_expire;
++	}
++
+ 	rc = of_property_read_u32(np, "qcom,mdss-dsi-interleave-mode", &tmp);
+ 	pinfo->mipi.interleave_mode = (!rc ? tmp : 0);
+ 
+@@ -2918,6 +2967,7 @@ int mdss_dsi_panel_init(struct device_node *node,
+ 	ctrl_pdata->panel_data.set_backlight = mdss_dsi_panel_bl_ctrl;
+ 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
+ 	ctrl_pdata->panel_data.set_param = mdss_dsi_panel_set_param;
++	ctrl_pdata->bl_on_defer = mdss_dsi_panel_bl_on_defer_start;
+ 
+ 	return 0;
+ }
+diff --git a/drivers/video/msm/mdss/mdss_panel.h b/drivers/video/msm/mdss/mdss_panel.h
+index cd18beaf711..6b09d39a43e 100644
+--- a/drivers/video/msm/mdss/mdss_panel.h
++++ b/drivers/video/msm/mdss/mdss_panel.h
+@@ -18,6 +18,7 @@
+ #include <linux/stringify.h>
+ #include <linux/types.h>
+ #include <linux/debugfs.h>
++#include <linux/hrtimer.h>
+ 
+ /* panel id type */
+ struct panel_id {
+@@ -606,6 +607,8 @@ struct mdss_panel_info {
+ 	bool dynamic_switch_pending;
+ 	bool is_lpm_mode;
+ 	bool is_split_display;
++	u32 bl_on_defer_delay;
++	struct hrtimer bl_on_defer_hrtimer;
+ 
+ 	bool is_prim_panel;
+ 	bool is_pluggable;
+-- 
+2.11.0
+

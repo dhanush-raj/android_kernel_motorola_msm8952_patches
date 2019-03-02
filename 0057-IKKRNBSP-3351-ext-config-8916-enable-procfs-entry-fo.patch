@@ -1,0 +1,32 @@
+From a34417119ff67ea24f4c08d479e742a1f229d3d8 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Tue, 1 Sep 2015 13:46:50 -0500
+Subject: [PATCH 057/959] IKKRNBSP-3351 ext-config: 8916: enable procfs entry
+ for device tree
+
+Enable procfs support for device tree.
+
+Change-Id: I6e37c921f5f428ff3dfb80a19ed3cec13865b87c
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/780623
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index 134f6e6a878..b02abc6c7a3 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -23,3 +23,4 @@ CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_RMI_DEV_MMI=y
+ CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_TEST_REPORTING=y
+ CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_MMI=y
+ CONFIG_MOT_UTAG=y
++CONFIG_PROC_DEVICETREE=y
+-- 
+2.11.0
+

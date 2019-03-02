@@ -1,0 +1,50 @@
+From 81bd2b4fbf1fe5412fdbb0876c83f0186bb38b93 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Thu, 9 Jul 2015 17:32:21 -0500
+Subject: [PATCH 275/959] IKSWL-29148: power: smbcharger-mmi: Pass Bad Charger
+
+Bad Charger detection was done if too many AICL
+IRQs fire in a short time period.  If a charger
+deemed Bad it AICL HW rerun would be disabled.
+This is bad since the Charger would then never
+supply power to the phone again until removal
+and insert.  The choice was made to let the
+struggling continue with bad charge rate rather
+then stop it completely.
+
+Change-Id: I5fc3915bc8cbd04d896e172083e0404210bce13b
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/765464
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 10 +---------
+ 1 file changed, 1 insertion(+), 9 deletions(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 8526063f8af..7b4d31a8d81 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -4797,15 +4797,7 @@ static irqreturn_t aicl_done_handler(int irq, void *_chip)
+ 				elapsed_seconds, chip->first_aicl_seconds,
+ 				now_seconds, chip->aicl_irq_count);
+ 			if (elapsed_seconds <= AICL_IRQ_LIMIT_SECONDS) {
+-				pr_smb(PR_INTERRUPT, "Disable AICL rerun\n");
+-				/*
+-				 * Disable AICL rerun since many interrupts were
+-				 * triggered in a short time
+-				 */
+-				rc = smbchg_hw_aicl_rerun_en(chip, false);
+-				if (rc)
+-					pr_err("Couldn't turn off AICL rerun rc:%d\n",
+-						rc);
++				pr_smb(PR_INTERRUPT, "Many IRQ for AICL!\n");
+ 				bad_charger = true;
+ 			}
+ 			chip->aicl_irq_count = 0;
+-- 
+2.11.0
+

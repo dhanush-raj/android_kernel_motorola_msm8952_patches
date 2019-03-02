@@ -1,0 +1,33 @@
+From 638c5b3e53dcfaf79c69469fa2bd235d8bb2cd56 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Mon, 28 Sep 2015 10:46:59 -0500
+Subject: [PATCH 310/959] power: qpnp-smbcharger-mmi: Ensure USB OTG is called
+
+If usbid_disabled is set then need to ensure that
+the usb driver is told to disable OTG mode.
+
+Change-Id: Ifc1845801e50137637f0d8dee837e600d477f0a3
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 056eb63d5f4..9e44b57c44a 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -5072,8 +5072,10 @@ static irqreturn_t usbid_change_handler(int irq, void *_chip)
+ 	struct smbchg_chip *chip = _chip;
+ 	bool otg_present;
+ 
+-	if (chip->usbid_disabled)
++	if (chip->usbid_disabled) {
++		power_supply_set_usb_otg(chip->usb_psy, 0);
+ 		return IRQ_HANDLED;
++	}
+ 
+ 	pr_smb(PR_INTERRUPT, "triggered\n");
+ 
+-- 
+2.11.0
+

@@ -1,0 +1,45 @@
+From a0fbeab309320de9d18a93c7e98059d930bb2508 Mon Sep 17 00:00:00 2001
+From: yangjq <yangjq@lenovo.com>
+Date: Tue, 17 Nov 2015 17:32:30 +0800
+Subject: [PATCH 529/959] IKKRNBSP-3527 gpio: msm-v3: Add sysfs node for debug
+
+Add sysfs node /sys/private/tlmm
+
+Change-Id: I1a26427f106be4f0dbf47a93ab7c9ae0de056a8d
+Signed-off-by: yangjq <yangjq@lenovo.com>
+Reviewed-on: http://gerrit.mot.com/800567
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravi Chebolu <arc095@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/gpio/gpio-msm-v3.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/drivers/gpio/gpio-msm-v3.c b/drivers/gpio/gpio-msm-v3.c
+index 9b3e42e0c1c..8706eb4ab30 100644
+--- a/drivers/gpio/gpio-msm-v3.c
++++ b/drivers/gpio/gpio-msm-v3.c
+@@ -237,3 +237,17 @@ void __msm_gpio_install_direct_irq(unsigned gpio, unsigned irq,
+ 		cfg |= DC_POLARITY_HI;
+ 	__raw_writel_no_log(cfg, GPIO_DIR_CONN_INTR(irq));
+ }
++
++/* Add sysfs for gpio's debug */
++int tlmm_get_config(unsigned gpio, unsigned *cfg)
++{
++	unsigned flags;
++
++	BUG_ON(gpio >= TLMM_NUM_GPIO);
++
++	flags = __raw_readl(GPIO_CONFIG(gpio));
++	*cfg = GPIO_CFG(gpio, (flags >> 2) & 0xf, (flags >> 9) & 0x1,
++		flags & 0x3, (flags >> 6) & 0x7);
++
++	return 0;
++}
+-- 
+2.11.0
+

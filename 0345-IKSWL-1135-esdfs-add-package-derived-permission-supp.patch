@@ -1,0 +1,1455 @@
+From ebf6349c0cca1fa0edc06f60846c73e0569a3de0 Mon Sep 17 00:00:00 2001
+From: "Russ W. Knize" <Russ.Knize@motorola.com>
+Date: Wed, 21 May 2014 15:53:28 -0500
+Subject: [PATCH 345/959] IKSWL-1135: esdfs: add package-derived permission
+ support
+
+Propagated from IKXREL3KK-2650, IKXREL3KK-5723, IKXREL3KK-6543,
+IKXREL3KK-6674, IKXREL3KK-7107, and IKXLUPGRD-5487.
+
+This commit implements the new derived permissions functionality in
+the "sdcard" service that was introduced in Android 4.4.  The file
+system is still case-sensitive and case-preserving and uses fixed
+permissions for the majority of the tree, but the "Android" tree is
+handled specially.  User space feeds the Android package list to the
+driver, which is used to determine the ownership of package-specific
+directories under "Android/data".
+
+Signed-off-by: Russ Knize <Russ.Knize@motorola.com>
+Change-Id: I97fa60d49b481e7e488fa2e9501eb777824d7225
+Reviewed-on: http://gerrit.mot.com/658207
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+SLTApproved: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/esdfs/Makefile |   4 +-
+ fs/esdfs/dentry.c |   7 +-
+ fs/esdfs/derive.c | 549 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ fs/esdfs/esdfs.h  | 190 +++++++++++++++----
+ fs/esdfs/file.c   |   9 +-
+ fs/esdfs/inode.c  |  44 +++--
+ fs/esdfs/lookup.c |  39 +++-
+ fs/esdfs/main.c   | 137 +++++++++++---
+ fs/esdfs/super.c  |  42 ++++-
+ 9 files changed, 924 insertions(+), 97 deletions(-)
+ create mode 100644 fs/esdfs/derive.c
+
+diff --git a/fs/esdfs/Makefile b/fs/esdfs/Makefile
+index a8a185181f7..43787b5fbf3 100644
+--- a/fs/esdfs/Makefile
++++ b/fs/esdfs/Makefile
+@@ -1,7 +1,7 @@
+-ESDFS_VERSION="0.1"
++ESDFS_VERSION="0.2"
+ 
+ EXTRA_CFLAGS += -DESDFS_VERSION=\"$(ESDFS_VERSION)\"
+ 
+ obj-$(CONFIG_ESD_FS) += esdfs.o
+ 
+-esdfs-y := dentry.o file.o inode.o main.o super.o lookup.o mmap.o
++esdfs-y := dentry.o file.o inode.o main.o super.o lookup.o mmap.o derive.o
+diff --git a/fs/esdfs/dentry.c b/fs/esdfs/dentry.c
+index fe3bc0826bb..2894ba940fb 100644
+--- a/fs/esdfs/dentry.c
++++ b/fs/esdfs/dentry.c
+@@ -40,7 +40,7 @@ static int esdfs_d_revalidate(struct dentry *dentry, unsigned int flags)
+ 
+ 	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+-	lower_parent_dentry = dget_parent(lower_dentry);
++	esdfs_get_lower_parent(dentry, lower_dentry, &lower_parent_dentry);
+ 
+ 	parent_dentry = dget_parent(dentry);
+ 	esdfs_get_lower_path(parent_dentry, &lower_parent_path);
+@@ -68,6 +68,8 @@ static int esdfs_d_revalidate(struct dentry *dentry, unsigned int flags)
+ 	spin_unlock(&dentry->d_lock);
+ 	spin_unlock(&lower_dentry->d_lock);
+ 
++	esdfs_revalidate_perms(dentry);
++
+ 	goto out;
+ 
+ drop:
+@@ -76,7 +78,7 @@ drop:
+ out:
+ 	esdfs_put_lower_path(parent_dentry, &lower_parent_path);
+ 	dput(parent_dentry);
+-	dput(lower_parent_dentry);
++	esdfs_put_lower_parent(dentry, &lower_parent_dentry);
+ 	esdfs_put_lower_path(dentry, &lower_path);
+ 	return err;
+ }
+@@ -136,6 +138,7 @@ static void esdfs_d_release(struct dentry *dentry)
+ {
+ 	/* release and reset the lower paths */
+ 	esdfs_put_reset_lower_path(dentry);
++	esdfs_release_lower_parent(dentry);
+ 	free_dentry_private_data(dentry);
+ 	return;
+ }
+diff --git a/fs/esdfs/derive.c b/fs/esdfs/derive.c
+new file mode 100644
+index 00000000000..1901d92ca75
+--- /dev/null
++++ b/fs/esdfs/derive.c
+@@ -0,0 +1,549 @@
++/*
++ * Copyright (c) 2013-2014 Motorola Mobility LLC
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ */
++
++#include <linux/proc_fs.h>
++#include <linux/hashtable.h>
++#include <linux/syscalls.h>
++#include <linux/fcntl.h>
++#include <linux/ctype.h>
++#include <asm/uaccess.h>
++#include "../internal.h"
++#include "esdfs.h"
++
++#define PKG_NAME_MAX		128
++#define PKG_APPID_PER_USER	100000
++#define PKG_APPID_MIN		1000
++#define PKG_APPID_MAX		(PKG_APPID_PER_USER - 1)
++
++static char *names_secure[] = {
++	"autorun.inf",
++	".android_secure",
++	"android_secure",
++	"" };
++
++/* special path name searches */
++static inline bool match_name(struct qstr *name, char *names[])
++{
++	int i = 0;
++
++	BUG_ON(!name);
++	for (i = 0; *names[i]; i++)
++		if (name->len == strlen(names[i]) &&
++		    !strncasecmp(names[i],
++				 name->name,
++				 name->len))
++			return true;
++
++	return false;
++}
++
++struct esdfs_package_list {
++	struct hlist_node package_node;
++	struct hlist_node access_node;
++	char *name;
++	uid_t appid;
++	unsigned access;
++#define HAS_SDCARD_RW	(1 << 0)
++#define HAS_MEDIA_RW	(1 << 1)
++};
++
++/*
++ * Used for taking the raw package list in from user space.
++ */
++static struct proc_dir_entry *esdfs_proc_root;
++static struct proc_dir_entry *esdfs_proc_packages;
++static char *raw_package_list;
++static unsigned long raw_package_list_size;
++
++/*
++ * The package list is global for all instances.  Since the entire list fits
++ * into a few memory pages, keep it around as a means to store the package
++ * names.  This is much more efficient than dynamically allocating heap for
++ * each package.
++ */
++static unsigned num_packages;
++static char *package_list_buffer;
++static struct esdfs_package_list *package_list;
++static DEFINE_HASHTABLE(package_list_hash, 8);
++static DEFINE_HASHTABLE(access_list_hash, 7);
++static DEFINE_MUTEX(package_list_lock);
++
++unsigned esdfs_package_list_version;
++
++/*
++ * Parse the raw package list, which is one package per line with each element
++ * separated by a single white space.  Skip lines that do not parse correctly.
++ */
++static int parse_package_list(char *buffer, unsigned long size)
++{
++	char *next_line = buffer;
++	char *sep, *sepres, *name;
++	uid_t appid;
++	gid_t gid;
++	unsigned hash, access;
++	unsigned count = 0, line = 0, pi = 0;
++	struct esdfs_package_list *pl = NULL;
++	int ret, err = -EINVAL;
++
++	if (!buffer || size == 0)
++		return -EINVAL;
++
++	while ((next_line = strnchr(next_line, size, '\n'))) {
++		count++;
++		next_line++;
++	}
++
++	pr_debug("esdfs: %s: package list: %lu bytes, %d lines\n",
++		__func__, size, count);
++	if (count == 0)
++		return -EINVAL;
++	pl = kzalloc(count * sizeof(struct esdfs_package_list), GFP_KERNEL);
++	if (!pl)
++		return -ENOMEM;
++
++	next_line = buffer;
++	sep = strsep(&next_line, "\n");
++	while (next_line && sep && line < count) {
++		line++;
++		err = -EINVAL;
++		name = strsep(&sep, " ");
++		if (!sep)
++			goto next;
++
++		sepres = strsep(&sep, " ");
++		if (!sep)
++			goto next;
++		ret = kstrtou32(sepres, 0, &appid);
++		if (ret) {
++			err = ret;
++			goto next;
++		}
++
++		strsep(&sep, " ");
++		if (!sep)
++			goto next;
++		strsep(&sep, " ");
++		if (!sep)
++			goto next;
++		strsep(&sep, " ");
++		if (!sep)
++			goto next;
++
++		sepres = strsep(&sep, ",");
++		while (sepres) {
++			gid = 0;
++			if (kstrtou32(sepres, 0, &gid) == 0) {
++				if (gid == AID_SDCARD_RW)
++					access |= HAS_SDCARD_RW;
++				else if (gid == AID_MEDIA_RW)
++					access |= HAS_MEDIA_RW;
++			}
++			sepres = strsep(&sep, ",");
++		}
++		pr_debug("esdfs: %s: %s, %u, 0x%02X\n",
++			 __func__, name, appid, access);
++
++		/* Parsed the line OK, so do some sanity checks. */
++		if (strlen(name) > PKG_NAME_MAX - 1 ||
++		    appid < PKG_APPID_MIN || appid > PKG_APPID_MAX)
++			goto next;
++
++		err = 0;
++		pl[pi].name = name;
++		pl[pi].appid = appid;
++		pl[pi].access = access;
++		pi++;
++next:
++		if (err)
++			pr_err("esdfs: %s: package list parse error on line %d: %d\n",
++				__func__, line, err);
++		appid = 0;
++		access = 0;
++		sep = strsep(&next_line, "\n");
++	}
++	count = pi;
++
++	pr_debug("esdfs: %s: parsed %d packages\n", __func__, count);
++
++	/* Commit the new list */
++	mutex_lock(&package_list_lock);
++
++	hash_init(package_list_hash);
++	hash_init(access_list_hash);
++
++	for (pi = 0; pi < count; pi++) {
++		hash = full_name_hash(pl[pi].name, strlen(pl[pi].name));
++		hash_add(package_list_hash, &pl[pi].package_node, hash);
++		if (pl[pi].access)
++			hash_add(access_list_hash, &pl[pi].access_node,
++				 pl[pi].appid);
++		pr_debug("esdfs: %s: %s (0x%08x), %u, 0x%02X\n", __func__,
++			pl[pi].name, hash, pl[pi].appid, pl[pi].access);
++	}
++
++	num_packages = count;
++	kfree(package_list);
++	package_list = pl;
++	kfree(package_list_buffer);
++	package_list_buffer = buffer;
++	esdfs_package_list_version++;
++
++	mutex_unlock(&package_list_lock);
++
++	return 0;
++}
++
++static ssize_t proc_packages_write(struct file *file, const char __user *chunk,
++			       size_t count, loff_t *offset)
++{
++	char *buffer;
++	int err;
++
++	buffer = kmalloc(count + raw_package_list_size, GFP_KERNEL);
++	if (!buffer)
++		return -ENOMEM;
++
++	if (raw_package_list) {
++		memcpy(buffer, raw_package_list, raw_package_list_size);
++		kfree(raw_package_list);
++		raw_package_list_size = 0;
++		raw_package_list = NULL;
++	}
++
++	if (copy_from_user(buffer + raw_package_list_size, chunk, count)) {
++		kfree(buffer);
++		pr_err("esdfs: %s: :(\n", __func__);
++		return -EFAULT;
++	}
++	raw_package_list_size += count;
++	raw_package_list = buffer;
++
++	/*  The list is terminated by an empty line. */
++	if (raw_package_list[raw_package_list_size - 2] == '\n' &&
++	    raw_package_list[raw_package_list_size - 1] == '\n') {
++		raw_package_list[raw_package_list_size - 1] = '\0';
++		err = parse_package_list(raw_package_list,
++					 raw_package_list_size);
++		raw_package_list_size = 0;
++		raw_package_list = NULL;
++		if (err)
++			pr_err("esdfs: %s: failed to parse package list: %d\n",
++			       __func__, err);
++		else
++			pr_debug("esdfs: %s: package list loaded successfully\n",
++				__func__);
++	}
++
++	return count;
++}
++
++static const struct file_operations esdfs_proc_fops = {
++	.write  = proc_packages_write,
++};
++
++int esdfs_init_package_list(void)
++{
++	if (!esdfs_proc_root)
++		esdfs_proc_root = proc_mkdir("fs/esdfs", NULL);
++	if (esdfs_proc_root && !esdfs_proc_packages)
++		esdfs_proc_packages = proc_create("packages", S_IWUSR,
++						  esdfs_proc_root,
++						  &esdfs_proc_fops);
++
++	return 0;
++}
++
++void esdfs_destroy_package_list(void)
++{
++	if (esdfs_proc_packages)
++		remove_proc_entry("fs/esdfs/packages", NULL);
++	if (esdfs_proc_root)
++		remove_proc_entry("fs/esdfs", NULL);
++}
++
++/*
++ * Derive an entry's premissions tree position based on its parent.
++ */
++void esdfs_derive_perms(struct dentry *dentry)
++{
++	struct esdfs_inode_info *inode_i = ESDFS_I(dentry->d_inode);
++	bool is_root;
++	struct esdfs_package_list *package;
++	unsigned hash;
++	int ret;
++
++	spin_lock(&dentry->d_lock);
++	is_root = IS_ROOT(dentry);
++	spin_unlock(&dentry->d_lock);
++	if (is_root)
++		return;
++
++	/* Inherit from the parent to start */
++	inode_i->tree = ESDFS_I(dentry->d_parent->d_inode)->tree;
++	inode_i->userid = ESDFS_I(dentry->d_parent->d_inode)->userid;
++	inode_i->appid = ESDFS_I(dentry->d_parent->d_inode)->appid;
++
++	/*
++	 * ESDFS_TREE_MEDIA* are intentionally dead ends.
++	 */
++	switch (inode_i->tree) {
++	case ESDFS_TREE_ROOT_LEGACY:
++		inode_i->tree = ESDFS_TREE_ROOT;
++		if (!strncasecmp(dentry->d_name.name,
++					"obb",
++					dentry->d_name.len))
++			inode_i->tree = ESDFS_TREE_ANDROID_OBB;
++		break;
++
++	case ESDFS_TREE_ROOT:
++		inode_i->tree = ESDFS_TREE_MEDIA;
++		ret = kstrtou32(dentry->d_name.name, 0, &inode_i->userid);
++		if (!strncasecmp(dentry->d_name.name,
++				 "Android",
++				 dentry->d_name.len))
++			inode_i->tree = ESDFS_TREE_ANDROID;
++		break;
++
++	case ESDFS_TREE_ANDROID:
++		if (!strncasecmp(dentry->d_name.name,
++				 "data",
++				 dentry->d_name.len))
++			inode_i->tree = ESDFS_TREE_ANDROID_DATA;
++		else if (!strncasecmp(dentry->d_name.name,
++					"obb",
++					dentry->d_name.len))
++			inode_i->tree = ESDFS_TREE_ANDROID_OBB;
++		else if (test_opt(ESDFS_SB(dentry->d_sb), DERIVE_UNIFIED) &&
++			   !strncasecmp(dentry->d_name.name,
++					"user",
++					dentry->d_name.len))
++			inode_i->tree = ESDFS_TREE_ANDROID_USER;
++		break;
++
++	case ESDFS_TREE_ANDROID_DATA:
++	case ESDFS_TREE_ANDROID_OBB:
++		hash = full_name_hash(dentry->d_name.name, dentry->d_name.len);
++		mutex_lock(&package_list_lock);
++		hash_for_each_possible(package_list_hash, package,
++				       package_node, hash) {
++			if (!strncmp(package->name, dentry->d_name.name,
++				     dentry->d_name.len)) {
++				inode_i->appid = package->appid;
++				break;
++			}
++		}
++		mutex_unlock(&package_list_lock);
++		inode_i->tree = ESDFS_TREE_ANDROID_APP;
++		break;
++
++	case ESDFS_TREE_ANDROID_USER:
++		/* Another user, so start over */
++		inode_i->tree = ESDFS_TREE_ROOT;
++		ret = kstrtou32(dentry->d_name.name, 0, &inode_i->userid);
++		break;
++	}
++}
++
++/* Apply tree position-specific permissions */
++void esdfs_set_derived_perms(struct inode *inode)
++{
++	struct esdfs_sb_info *sbi = ESDFS_SB(inode->i_sb);
++	struct esdfs_inode_info *inode_i = ESDFS_I(inode);
++
++	inode->i_uid = sbi->upper_perms.uid;
++	inode->i_gid = sbi->upper_perms.gid;
++	inode->i_mode &= S_IFMT;
++
++	switch (inode_i->tree) {
++	case ESDFS_TREE_ROOT_LEGACY:
++		inode->i_mode |= sbi->upper_perms.dmask;
++		break;
++
++	case ESDFS_TREE_NONE:
++	case ESDFS_TREE_ROOT:
++		inode->i_gid = AID_SDCARD_R;
++		inode->i_mode |= sbi->upper_perms.dmask;
++		break;
++
++	case ESDFS_TREE_MEDIA:
++		inode->i_gid = AID_SDCARD_R;
++		inode->i_mode |= 0770;
++		break;
++
++	case ESDFS_TREE_MEDIA_PICS:
++		inode->i_gid = AID_SDCARD_PICS;
++		inode->i_mode |= 0770;
++		break;
++
++	case ESDFS_TREE_MEDIA_AV:
++		inode->i_gid = AID_SDCARD_AV;
++		inode->i_mode |= 0770;
++		break;
++
++	case ESDFS_TREE_ANDROID:
++	case ESDFS_TREE_ANDROID_DATA:
++	case ESDFS_TREE_ANDROID_OBB:
++		inode->i_mode |= 0771;
++		break;
++
++	case ESDFS_TREE_ANDROID_APP:
++		if (inode_i->appid)
++			inode->i_uid = inode_i->userid * PKG_APPID_PER_USER +
++				       (inode_i->appid % PKG_APPID_PER_USER);
++		inode->i_mode |= 0770;
++		break;
++
++	case ESDFS_TREE_ANDROID_USER:
++		inode->i_gid = AID_SDCARD_ALL;
++		inode->i_mode |= 0770;
++		break;
++	}
++
++	/* strip execute bits from any non-directories */
++	if (!S_ISDIR(inode->i_mode))
++		inode->i_mode &= ~S_IXUGO;
++}
++
++int esdfs_derived_lookup(struct dentry *dentry, struct dentry **parent)
++{
++	/* Deny access to security-sensitive entries */
++	if (ESDFS_I((*parent)->d_inode)->tree == ESDFS_TREE_ROOT &&
++	    match_name(&dentry->d_name, names_secure)) {
++		pr_debug("esdfs: denying access to: %s", dentry->d_name.name);
++		return -EACCES;
++	}
++
++	/* Handle obb directory "grafting" as a sort of hard link. */
++	if (ESDFS_I((*parent)->d_inode)->tree == ESDFS_TREE_ANDROID &&
++	    !strncasecmp(dentry->d_name.name, "obb", dentry->d_name.len)) {
++		if (test_opt(ESDFS_SB((*parent)->d_sb), DERIVE_LEGACY))
++			*parent = dget(dentry->d_sb->s_root);
++		/* FIXME: unified mode for SD cards */
++	}
++	return 0;
++}
++
++/*
++ * Implement the extra checking that is done based on the caller's package
++ * list-based access rights.
++ */
++int esdfs_check_derived_permission(struct inode *inode, int mask)
++{
++	const struct cred *cred;
++	struct esdfs_package_list *package;
++	uid_t appid;
++	unsigned access = 0;
++
++	cred = current_cred();
++	appid = cred->uid % PKG_APPID_PER_USER;
++
++	/* Reads, owners, and root are always granted access */
++	if (!(mask & MAY_WRITE) || cred->uid == 0 || cred->uid == inode->i_uid)
++		return 0;
++
++	/*
++	 * Since Android now allows sdcard_r access to the tree and it does not
++	 * know how to use extended attributes, we have to double-check write
++	 * requests against the list of apps that have been granted sdcard_rw.
++	 */
++	mutex_lock(&package_list_lock);
++	hash_for_each_possible(access_list_hash, package, access_node, appid) {
++		if (package->appid == appid) {
++			pr_debug("esdfs: %s: found appid %u, access: %u\n",
++				__func__, package->appid, package->access);
++			access = package->access;
++			break;
++		}
++	}
++	mutex_unlock(&package_list_lock);
++
++	/*
++	 * Grant access to media_rw holders (they can access the source anyway).
++	 */
++	if (access & HAS_MEDIA_RW)
++		return 0;
++
++	/*
++	 * Grant access to sdcard_rw holders, unless we are in unified mode
++	 * and we are trying to write to the protected /Android tree.
++	 */
++	if ((access & HAS_SDCARD_RW) &&
++	    (!test_opt(ESDFS_SB(inode->i_sb), DERIVE_UNIFIED) ||
++	     (ESDFS_I(inode)->tree != ESDFS_TREE_ROOT &&
++	      ESDFS_I(inode)->tree != ESDFS_TREE_ANDROID &&
++	      ESDFS_I(inode)->tree != ESDFS_TREE_ANDROID_DATA &&
++	      ESDFS_I(inode)->tree != ESDFS_TREE_ANDROID_OBB &&
++	      ESDFS_I(inode)->tree != ESDFS_TREE_ANDROID_APP)))
++		return 0;
++
++	pr_debug("esdfs: %s: denying access to appid: %u\n", __func__, appid);
++	return -EACCES;
++}
++
++/*
++ * The sdcard service has a hack that creates .nomedia files along certain
++ * paths to stop MediaScanner.  Create those here.
++ */
++int esdfs_derive_mkdir_contents(struct dentry *dir_dentry)
++{
++	struct esdfs_inode_info *inode_i = ESDFS_I(dir_dentry->d_inode);
++	struct qstr nomedia;
++	struct dentry *lower_dentry;
++	struct path lower_dir_path, lower_path;
++	umode_t mode;
++	int err = 0;
++
++	if (inode_i->tree != ESDFS_TREE_ANDROID_DATA &&
++	    inode_i->tree != ESDFS_TREE_ANDROID_OBB)
++		return 0;
++
++	nomedia.name = ".nomedia";
++	nomedia.len = strlen(nomedia.name);
++	nomedia.hash = full_name_hash(nomedia.name, nomedia.len);
++
++	esdfs_get_lower_path(dir_dentry, &lower_dir_path);
++
++	/* See if the lower file is there already. */
++	err = vfs_path_lookup(lower_dir_path.dentry, lower_dir_path.mnt,
++			      nomedia.name, 0, &lower_path);
++	if (!err)
++		path_put(&lower_path);
++	/* If it's there or there was an error, we're done */
++	if (!err || err != -ENOENT)
++		goto out;
++
++	/* The lower file is not there.  See if the dentry is in the cache. */
++	lower_dentry = d_lookup(lower_dir_path.dentry, &nomedia);
++	if (!lower_dentry) {
++		/* It's not there, so create a negative lower dentry. */
++		lower_dentry = d_alloc(lower_dir_path.dentry, &nomedia);
++		if (!lower_dentry) {
++			err = -ENOMEM;
++			goto out;
++		}
++		d_add(lower_dentry, NULL);
++	}
++
++	/* Now create the lower file. */
++	mode = S_IFREG;
++	esdfs_set_lower_mode(ESDFS_SB(dir_dentry->d_sb), &mode);
++	err = vfs_create(lower_dir_path.dentry->d_inode, lower_dentry, mode,
++			 true);
++	dput(lower_dentry);
++
++out:
++	esdfs_put_lower_path(dir_dentry, &lower_dir_path);
++
++	return err;
++}
+diff --git a/fs/esdfs/esdfs.h b/fs/esdfs/esdfs.h
+index 1a9609111c1..fa3fd5b80f4 100644
+--- a/fs/esdfs/esdfs.h
++++ b/fs/esdfs/esdfs.h
+@@ -37,15 +37,49 @@
+ /* useful for tracking code reachability */
+ #define UDBG printk(KERN_DEFAULT "DBG:%s:%s:%d\n", __FILE__, __func__, __LINE__)
+ 
+-/* default permissions as specified by the Android sdcard service */
+-#define ESDFS_DEFAULT_LOWER_UID		1023	/* AID_MEDIA_RW */
+-#define ESDFS_DEFAULT_LOWER_GID		1023	/* AID_MEDIA_RW */
+-#define ESDFS_DEFAULT_LOWER_FMASK	0664
+-#define ESDFS_DEFAULT_LOWER_DMASK	0775
+-#define ESDFS_DEFAULT_UPPER_UID		0	/* AID_ROOT */
+-#define ESDFS_DEFAULT_UPPER_GID		1015	/* AID_SDCARD_RW */
+-#define ESDFS_DEFAULT_UPPER_FMASK	0664
+-#define ESDFS_DEFAULT_UPPER_DMASK	0775
++/* mount options */
++#define ESDFS_MOUNT_DERIVE_LEGACY	0x00000001
++#define ESDFS_MOUNT_DERIVE_UNIFIED	0x00000002
++#define ESDFS_MOUNT_DERIVE_SPLIT	0x00000004
++
++#define clear_opt(sbi, option)	(sbi->options &= ~ESDFS_MOUNT_##option)
++#define set_opt(sbi, option)	(sbi->options |= ESDFS_MOUNT_##option)
++#define test_opt(sbi, option)	(sbi->options & ESDFS_MOUNT_##option)
++
++#define ESDFS_DERIVE_PERMS(sbi)	(test_opt(sbi, DERIVE_UNIFIED) || \
++					 test_opt(sbi, DERIVE_LEGACY))
++
++/* from android_filesystem_config.h */
++#define AID_ROOT             0
++#define AID_SDCARD_RW     1015
++#define AID_MEDIA_RW      1023
++#define AID_SDCARD_R      1028
++#define AID_SDCARD_PICS   1033
++#define AID_SDCARD_AV     1034
++#define AID_SDCARD_ALL    1035
++
++/* derived permissions model based on tree location */
++enum {
++	ESDFS_TREE_NONE = 0,		/* permissions not derived */
++	ESDFS_TREE_ROOT_LEGACY,		/* root for legacy emulated storage */
++	ESDFS_TREE_ROOT,		/* root for a user */
++	ESDFS_TREE_MEDIA,		/* per-user basic permissions */
++	ESDFS_TREE_MEDIA_PICS,		/* .../DCIM, Pictures */
++	ESDFS_TREE_MEDIA_AV,		/* .../Alarm, Movies, etc */
++	ESDFS_TREE_ANDROID,		/* .../Android */
++	ESDFS_TREE_ANDROID_DATA,	/* .../Android/data */
++	ESDFS_TREE_ANDROID_OBB,		/* .../Android/obb */
++	ESDFS_TREE_ANDROID_APP,		/* .../Android/data|obb/... */
++	ESDFS_TREE_ANDROID_USER,	/* .../Android/user */
++};
++
++/* for permissions table lookups */
++enum {
++	ESDFS_PERMS_LOWER_DEFAULT = 0,
++	ESDFS_PERMS_UPPER_LEGACY,
++	ESDFS_PERMS_UPPER_DERIVED,
++	ESDFS_PERMS_TABLE_SIZE
++};
+ 
+ /* operations vectors defined in specific files */
+ extern const struct file_operations esdfs_main_fops;
+@@ -58,6 +92,7 @@ extern const struct dentry_operations esdfs_dops;
+ extern const struct address_space_operations esdfs_aops, esdfs_dummy_aops;
+ extern const struct vm_operations_struct esdfs_vm_ops;
+ 
++extern void esdfs_msg(struct super_block *, const char *, const char *, ...);
+ extern int esdfs_init_inode_cache(void);
+ extern void esdfs_destroy_inode_cache(void);
+ extern int esdfs_init_dentry_cache(void);
+@@ -66,11 +101,18 @@ extern int new_dentry_private_data(struct dentry *dentry);
+ extern void free_dentry_private_data(struct dentry *dentry);
+ extern int init_lower_nd(struct nameidata *nd, unsigned int flags);
+ extern struct dentry *esdfs_lookup(struct inode *dir, struct dentry *dentry,
+-				    unsigned int flags);
++				   unsigned int flags);
+ extern struct inode *esdfs_iget(struct super_block *sb,
+-				 struct inode *lower_inode);
++				struct inode *lower_inode);
+ extern int esdfs_interpose(struct dentry *dentry, struct super_block *sb,
+-			    struct path *lower_path);
++			   struct path *lower_path);
++extern int esdfs_init_package_list(void);
++extern void esdfs_destroy_package_list(void);
++extern void esdfs_derive_perms(struct dentry *dentry);
++extern void esdfs_set_derived_perms(struct inode *inode);
++extern int esdfs_derived_lookup(struct dentry *dentry, struct dentry **parent);
++extern int esdfs_check_derived_permission(struct inode *inode, int mask);
++extern int esdfs_derive_mkdir_contents(struct dentry *dentry);
+ 
+ /* file private data */
+ struct esdfs_file_info {
+@@ -78,33 +120,43 @@ struct esdfs_file_info {
+ 	const struct vm_operations_struct *lower_vm_ops;
+ };
+ 
++struct esdfs_perms {
++	uid_t uid;
++	gid_t gid;
++	unsigned short fmask;
++	unsigned short dmask;
++};
++
+ /* esdfs inode data in memory */
+ struct esdfs_inode_info {
+ 	struct inode *lower_inode;
+ 	struct inode vfs_inode;
++	unsigned version;	/* package list version this was derived from */
++	int tree;		/* storage tree location */
++	uid_t userid;		/* Android User ID (not Linux UID) */
++	uid_t appid;		/* Linux UID for this app/user combo */
+ };
+ 
+ /* esdfs dentry data in memory */
+ struct esdfs_dentry_info {
+ 	spinlock_t lock;	/* protects lower_path */
+ 	struct path lower_path;
+-};
+-
+-struct esdfs_perms {
+-	uid_t uid;
+-	gid_t gid;
+-	unsigned short fmask;
+-	unsigned short dmask;
++	struct dentry *real_parent;
+ };
+ 
+ /* esdfs super-block data in memory */
+ struct esdfs_sb_info {
+ 	struct super_block *lower_sb;
+ 	struct esdfs_perms lower_perms;
+-	struct esdfs_perms upper_perms;
++	struct esdfs_perms upper_perms;	/* root in derived mode */
+ 	unsigned int options;
+ };
+ 
++extern struct esdfs_perms esdfs_perms_table[ESDFS_PERMS_TABLE_SIZE];
++extern unsigned esdfs_package_list_version;
++
++#define ESDFS_INODE_IS_STALE(i) (i->version != esdfs_package_list_version)
++
+ /*
+  * inode to private data
+  *
+@@ -210,6 +262,54 @@ static inline void esdfs_put_reset_lower_path(const struct dentry *dent)
+ 	path_put(&lower_path);
+ 	return;
+ }
++static inline void esdfs_get_lower_parent(const struct dentry *dent,
++					  struct dentry *lower_dentry,
++					  struct dentry **lower_parent)
++{
++	*lower_parent = NULL;
++	spin_lock(&ESDFS_D(dent)->lock);
++	if (ESDFS_D(dent)->real_parent) {
++		*lower_parent = ESDFS_D(dent)->real_parent;
++		dget(*lower_parent);
++	}
++	spin_unlock(&ESDFS_D(dent)->lock);
++	if (!*lower_parent)
++		*lower_parent = dget_parent(lower_dentry);
++	return;
++}
++static inline void esdfs_put_lower_parent(const struct dentry *dent,
++					  struct dentry **lower_parent)
++{
++	dput(*lower_parent);
++	return;
++}
++static inline void esdfs_set_lower_parent(const struct dentry *dent,
++					  struct dentry *parent)
++{
++	struct dentry *old_parent = NULL;
++	spin_lock(&ESDFS_D(dent)->lock);
++	if (ESDFS_D(dent)->real_parent)
++		old_parent = ESDFS_D(dent)->real_parent;
++	ESDFS_D(dent)->real_parent = parent;
++	dget(parent);	/* pin the lower parent */
++	spin_unlock(&ESDFS_D(dent)->lock);
++	if (old_parent)
++		dput(old_parent);
++	return;
++}
++static inline void esdfs_release_lower_parent(const struct dentry *dent)
++{
++	struct dentry *real_parent = NULL;
++	spin_lock(&ESDFS_D(dent)->lock);
++	if (ESDFS_D(dent)->real_parent) {
++		real_parent = ESDFS_D(dent)->real_parent;
++		ESDFS_D(dent)->real_parent = NULL;
++	}
++	spin_unlock(&ESDFS_D(dent)->lock);
++	if (real_parent)
++		dput(real_parent);
++	return;
++}
+ 
+ /* locking helpers */
+ static inline struct dentry *lock_parent(struct dentry *dentry)
+@@ -225,7 +325,8 @@ static inline void unlock_dir(struct dentry *dir)
+ 	dput(dir);
+ }
+ 
+-static inline void esdfs_set_lower_perms(struct esdfs_sb_info *sbi,
++/* permission overriders */
++static inline void esdfs_set_lower_owner(struct esdfs_sb_info *sbi,
+ 		uid_t *uid, gid_t *gid)
+ {
+ 	*uid = sbi->lower_perms.uid;
+@@ -241,19 +342,43 @@ static inline void esdfs_set_lower_mode(struct esdfs_sb_info *sbi,
+ 		*mode = (*mode & S_IFMT) | sbi->lower_perms.fmask;
+ }
+ 
+-static inline void esdfs_lower_i_perms(struct inode *inode)
++static inline void esdfs_set_upper_owner(struct esdfs_sb_info *sbi,
++		uid_t *uid, gid_t *gid)
++{
++	*uid = sbi->upper_perms.uid;
++	*gid = sbi->upper_perms.gid;
++}
++
++static inline void esdfs_set_upper_mode(struct esdfs_sb_info *sbi,
++		umode_t *mode)
++{
++	if (S_ISDIR(*mode))
++		*mode = (*mode & S_IFMT) | sbi->upper_perms.dmask;
++	else
++		*mode = (*mode & S_IFMT) | sbi->upper_perms.fmask;
++}
++
++static inline void esdfs_set_perms(struct inode *inode)
+ {
+ 	struct esdfs_sb_info *sbi = ESDFS_SB(inode->i_sb);
+ 
+-	esdfs_set_lower_perms(sbi, &inode->i_uid, &inode->i_gid);
+-	esdfs_set_lower_mode(sbi, &inode->i_mode);
++	if (ESDFS_DERIVE_PERMS(sbi)) {
++		esdfs_set_derived_perms(inode);
++		return;
++	}
++	esdfs_set_upper_owner(sbi, &inode->i_uid, &inode->i_gid);
++	esdfs_set_upper_mode(sbi, &inode->i_mode);
++	return;
+ }
+ 
+-static inline void esdfs_set_perms(struct esdfs_sb_info *sbi,
+-		uid_t *uid, gid_t *gid)
++static inline void esdfs_revalidate_perms(struct dentry *dentry)
+ {
+-	*uid = sbi->upper_perms.uid;
+-	*gid = sbi->upper_perms.gid;
++	if (ESDFS_DERIVE_PERMS(ESDFS_SB(dentry->d_sb)) &&
++	    dentry->d_inode &&
++	    ESDFS_INODE_IS_STALE(ESDFS_I(dentry->d_inode))) {
++		esdfs_derive_perms(dentry);
++		esdfs_set_perms(dentry->d_inode);
++	}
+ }
+ 
+ /* file attribute helpers */
+@@ -272,15 +397,8 @@ static inline void esdfs_copy_lower_attr(struct inode *dest,
+ 
+ static inline void esdfs_copy_attr(struct inode *dest, const struct inode *src)
+ {
+-	struct esdfs_sb_info *sbi = ESDFS_SB(dest->i_sb);
+-
+ 	esdfs_copy_lower_attr(dest, src);
+-	dest->i_uid = sbi->upper_perms.uid;
+-	dest->i_gid = sbi->upper_perms.gid;
+-	if (S_ISDIR(dest->i_mode))
+-		dest->i_mode |= sbi->upper_perms.dmask;
+-	else
+-		dest->i_mode |= sbi->upper_perms.fmask;
++	esdfs_set_perms(dest);
+ }
+ 
+ /*
+diff --git a/fs/esdfs/file.c b/fs/esdfs/file.c
+index 47a570b6ed9..9e808b8f807 100644
+--- a/fs/esdfs/file.c
++++ b/fs/esdfs/file.c
+@@ -81,7 +81,7 @@ static long esdfs_unlocked_ioctl(struct file *file, unsigned int cmd,
+ 	/* some ioctls can change inode attributes (EXT2_IOC_SETFLAGS) */
+ 	if (!err)
+ 		esdfs_copy_attr(file->f_path.dentry->d_inode,
+-				lower_file->f_path.dentry->d_inode);
++				     lower_file->f_path.dentry->d_inode);
+ out:
+ 	return err;
+ }
+@@ -129,8 +129,8 @@ static int esdfs_mmap(struct file *file, struct vm_area_struct *vma)
+ 	lower_file = esdfs_lower_file(file);
+ 	if (willwrite && !lower_file->f_mapping->a_ops->writepage) {
+ 		err = -EINVAL;
+-		printk(KERN_ERR "esdfs: lower file system does not "
+-		       "support writeable mmap\n");
++		esdfs_msg(file->f_mapping->host->i_sb, KERN_INFO,
++			"lower file system does not support writeable mmap\n");
+ 		goto out;
+ 	}
+ 
+@@ -142,7 +142,8 @@ static int esdfs_mmap(struct file *file, struct vm_area_struct *vma)
+ 	if (!ESDFS_F(file)->lower_vm_ops) {
+ 		err = lower_file->f_op->mmap(lower_file, vma);
+ 		if (err) {
+-			printk(KERN_ERR "esdfs: lower mmap failed %d\n", err);
++			esdfs_msg(file->f_mapping->host->i_sb, KERN_ERR,
++				"lower mmap failed %d\n", err);
+ 			goto out;
+ 		}
+ 		saved_vm_ops = vma->vm_ops; /* save: came from lower ->mmap */
+diff --git a/fs/esdfs/inode.c b/fs/esdfs/inode.c
+index 3f366057ac6..a4c7255c566 100644
+--- a/fs/esdfs/inode.c
++++ b/fs/esdfs/inode.c
+@@ -56,8 +56,9 @@ static int esdfs_unlink(struct inode *dir, struct dentry *dentry)
+ 	struct inode *lower_dir_inode = esdfs_lower_inode(dir);
+ 	struct dentry *lower_dir_dentry;
+ 	struct path lower_path;
+-	const struct cred *creds =
+-			esdfs_override_creds(ESDFS_SB(dir->i_sb), NULL);
++	const struct cred *creds;
++
++	creds = esdfs_override_creds(ESDFS_SB(dir->i_sb), NULL);
+ 	if (!creds)
+ 		return -ENOMEM;
+ 
+@@ -125,6 +126,9 @@ static int esdfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
+ 	/* update number of links on parent directory */
+ 	set_nlink(dir, esdfs_lower_inode(dir)->i_nlink);
+ 
++	if (ESDFS_DERIVE_PERMS(ESDFS_SB(dir->i_sb)))
++		err = esdfs_derive_mkdir_contents(dentry);
++
+ out:
+ 	unlock_dir(lower_parent_dentry);
+ 	esdfs_put_lower_path(dentry, &lower_path);
+@@ -189,8 +193,10 @@ static int esdfs_rename(struct inode *old_dir, struct dentry *old_dentry,
+ 	esdfs_get_lower_path(new_dentry, &lower_new_path);
+ 	lower_old_dentry = lower_old_path.dentry;
+ 	lower_new_dentry = lower_new_path.dentry;
+-	lower_old_dir_dentry = dget_parent(lower_old_dentry);
+-	lower_new_dir_dentry = dget_parent(lower_new_dentry);
++	esdfs_get_lower_parent(old_dentry, lower_old_dentry,
++			       &lower_old_dir_dentry);
++	esdfs_get_lower_parent(new_dentry, lower_new_dentry,
++			       &lower_new_dir_dentry);
+ 
+ 	trap = lock_rename(lower_old_dir_dentry, lower_new_dir_dentry);
+ 	/* source should not be ancestor of target */
+@@ -213,15 +219,15 @@ static int esdfs_rename(struct inode *old_dir, struct dentry *old_dentry,
+ 	fsstack_copy_inode_size(new_dir, lower_new_dir_dentry->d_inode);
+ 	if (new_dir != old_dir) {
+ 		esdfs_copy_attr(old_dir,
+-				lower_old_dir_dentry->d_inode);
++				      lower_old_dir_dentry->d_inode);
+ 		fsstack_copy_inode_size(old_dir,
+ 					lower_old_dir_dentry->d_inode);
+ 	}
+ 
+ out:
+ 	unlock_rename(lower_old_dir_dentry, lower_new_dir_dentry);
+-	dput(lower_old_dir_dentry);
+-	dput(lower_new_dir_dentry);
++	esdfs_put_lower_parent(old_dentry, &lower_old_dir_dentry);
++	esdfs_put_lower_parent(new_dentry, &lower_new_dir_dentry);
+ 	esdfs_put_lower_path(old_dentry, &lower_old_path);
+ 	esdfs_put_lower_path(new_dentry, &lower_new_path);
+ 	esdfs_revert_creds(creds, &mask);
+@@ -230,18 +236,28 @@ out:
+ 
+ static int esdfs_permission(struct inode *inode, int mask)
+ {
++	struct esdfs_sb_info *sbi = ESDFS_SB(inode->i_sb);
+ 	struct inode *lower_inode;
+ 	int err;
+-	int oldmask;
+-	const struct cred *creds =
+-			esdfs_override_creds(ESDFS_SB(inode->i_sb), &oldmask);
+-	if (!creds)
+-		return -ENOMEM;
+ 
++	/* First, check the upper permissions */
++	err = generic_permission(inode, mask);
++
++	/* Basic checking of the lower inode (can't override creds here) */
+ 	lower_inode = esdfs_lower_inode(inode);
+-	err = inode_permission(lower_inode, mask);
++	if (lower_inode->i_uid != sbi->lower_perms.uid ||
++	    lower_inode->i_gid != sbi->lower_perms.gid ||
++	    S_ISSOCK(lower_inode->i_mode) ||
++	    S_ISLNK(lower_inode->i_mode) ||
++	    S_ISBLK(lower_inode->i_mode) ||
++	    S_ISCHR(lower_inode->i_mode) ||
++	    S_ISFIFO(lower_inode->i_mode))
++		err = -EACCES;
++
++	/* Finally, check the derived permissions */
++	if (!err && ESDFS_DERIVE_PERMS(ESDFS_SB(inode->i_sb)))
++		err = esdfs_check_derived_permission(inode, mask);
+ 
+-	esdfs_revert_creds(creds, &oldmask);
+ 	return err;
+ }
+ 
+diff --git a/fs/esdfs/lookup.c b/fs/esdfs/lookup.c
+index 68bf8439e4b..8c75d72987e 100644
+--- a/fs/esdfs/lookup.c
++++ b/fs/esdfs/lookup.c
+@@ -125,6 +125,9 @@ struct inode *esdfs_iget(struct super_block *sb, struct inode *lower_inode)
+ 
+ 	/* initialize new inode */
+ 	info = ESDFS_I(inode);
++	info->tree = ESDFS_TREE_NONE;
++	info->userid = 0;
++	info->appid = 0;
+ 
+ 	inode->i_ino = lower_inode->i_ino;
+ 	if (!igrab(lower_inode)) {
+@@ -165,7 +168,7 @@ struct inode *esdfs_iget(struct super_block *sb, struct inode *lower_inode)
+ 				   lower_inode->i_rdev);
+ 
+ 	/* all well, copy inode attributes */
+-	esdfs_copy_attr(inode, lower_inode);
++	esdfs_copy_lower_attr(inode, lower_inode);
+ 	fsstack_copy_inode_size(inode, lower_inode);
+ 
+ 	unlock_new_inode(inode);
+@@ -211,6 +214,9 @@ int esdfs_interpose(struct dentry *dentry, struct super_block *sb,
+ 
+ 	d_add(dentry, inode);
+ 
++	if (ESDFS_DERIVE_PERMS(ESDFS_SB(sb)))
++		esdfs_derive_perms(dentry);
++	esdfs_set_perms(inode);
+ out:
+ 	return err;
+ }
+@@ -300,15 +306,23 @@ out:
+ struct dentry *esdfs_lookup(struct inode *dir, struct dentry *dentry,
+ 			    unsigned int flags)
+ {
+-	struct dentry *ret, *parent;
+-	struct path lower_parent_path;
++	struct dentry *ret, *old_parent, *parent;
++	struct path lower_parent_path, old_lower_parent_path;
+ 	int err = 0;
+ 	const struct cred *creds =
+ 			esdfs_override_creds(ESDFS_SB(dir->i_sb), NULL);
+ 	if (!creds)
+ 		return NULL;
+ 
+-	parent = dget_parent(dentry);
++	parent = old_parent = dget_parent(dentry);
++
++	if (ESDFS_DERIVE_PERMS(ESDFS_SB(dir->i_sb))) {
++		err = esdfs_derived_lookup(dentry, &parent);
++		if (err) {
++			ret = ERR_PTR(err);
++			goto out;
++		}
++	}
+ 
+ 	esdfs_get_lower_path(parent, &lower_parent_path);
+ 
+@@ -316,11 +330,11 @@ struct dentry *esdfs_lookup(struct inode *dir, struct dentry *dentry,
+ 	err = new_dentry_private_data(dentry);
+ 	if (err) {
+ 		ret = ERR_PTR(err);
+-		goto out;
++		goto out_put;
+ 	}
+ 	ret = __esdfs_lookup(dentry, flags, &lower_parent_path);
+ 	if (IS_ERR(ret))
+-		goto out;
++		goto out_put;
+ 	if (ret)
+ 		dentry = ret;
+ 	if (dentry->d_inode)
+@@ -330,9 +344,20 @@ struct dentry *esdfs_lookup(struct inode *dir, struct dentry *dentry,
+ 	fsstack_copy_attr_atime(parent->d_inode,
+ 				esdfs_lower_inode(parent->d_inode));
+ 
+-out:
++	/* More pseudo-hard-link artifacts */
++	if (parent != old_parent) {
++		esdfs_get_lower_path(old_parent, &old_lower_parent_path);
++		esdfs_set_lower_parent(dentry, old_lower_parent_path.dentry);
++		esdfs_put_lower_path(old_parent, &old_lower_parent_path);
++		esdfs_derive_mkdir_contents(dentry);
++	}
++out_put:
+ 	esdfs_put_lower_path(parent, &lower_parent_path);
++out:
+ 	dput(parent);
++	if (parent != old_parent)
++		dput(old_parent);
++
+ 	esdfs_revert_creds(creds, NULL);
+ 	return ret;
+ }
+diff --git a/fs/esdfs/main.c b/fs/esdfs/main.c
+index c70a4f75c05..93b9f9286de 100644
+--- a/fs/esdfs/main.c
++++ b/fs/esdfs/main.c
+@@ -20,15 +20,43 @@
+ enum {
+ 	Opt_lower_perms,
+ 	Opt_upper_perms,
++	Opt_derive_none,
++	Opt_derive_legacy,
++	Opt_derive_unified,
++	Opt_split,
++	Opt_nosplit,
+ 	Opt_err
+ };
+ 
+ static match_table_t esdfs_tokens = {
+ 	{Opt_lower_perms, "lower=%s"},
+ 	{Opt_upper_perms, "upper=%s"},
++	{Opt_derive_none, "derive=none"},
++	{Opt_derive_legacy, "derive=legacy"},
++	{Opt_derive_unified, "derive=unified"},
++	{Opt_split, "split"},
++	{Opt_nosplit, "nosplit"},
+ 	{Opt_err, NULL},
+ };
+ 
++struct esdfs_perms esdfs_perms_table[ESDFS_PERMS_TABLE_SIZE] = {
++	/* ESDFS_PERMS_LOWER_DEFAULT */
++	{ .uid   = AID_MEDIA_RW,
++	  .gid   = AID_MEDIA_RW,
++	  .fmask = 0664,
++	  .dmask = 0775 },
++	/* ESDFS_PERMS_UPPER_LEGACY */
++	{ .uid   = AID_ROOT,
++	  .gid   = AID_SDCARD_RW,
++	  .fmask = 0664,
++	  .dmask = 0775 },
++	/* ESDFS_PERMS_UPPER_DERIVED */
++	{ .uid   = AID_ROOT,
++	  .gid   = AID_SDCARD_R,
++	  .fmask = 0660,
++	  .dmask = 0771 },
++};
++
+ static int parse_perms(struct esdfs_perms *perms, char *args)
+ {
+ 	char *sep = args;
+@@ -114,8 +142,26 @@ static int parse_options(struct super_block *sb, char *options)
+ 			} else
+ 				return -EINVAL;
+ 			break;
++		case Opt_derive_none:
++			clear_opt(sbi, DERIVE_LEGACY);
++			clear_opt(sbi, DERIVE_UNIFIED);
++			break;
++		case Opt_derive_legacy:
++			set_opt(sbi, DERIVE_LEGACY);
++			clear_opt(sbi, DERIVE_UNIFIED);
++			break;
++		case Opt_derive_unified:
++			clear_opt(sbi, DERIVE_LEGACY);
++			set_opt(sbi, DERIVE_UNIFIED);
++			break;
++		case Opt_split:
++			set_opt(sbi, DERIVE_SPLIT);
++			break;
++		case Opt_nosplit:
++			clear_opt(sbi, DERIVE_SPLIT);
++			break;
+ 		default:
+-			printk(KERN_ERR	"Unrecognized mount option \"%s\" or missing value",
++			esdfs_msg(sb, KERN_ERR, "unrecognized mount option \"%s\" or missing value\n",
+ 				p);
+ 			return -EINVAL;
+ 		}
+@@ -133,11 +179,11 @@ static int esdfs_read_super(struct super_block *sb, const char *dev_name,
+ 	int err = 0;
+ 	struct super_block *lower_sb;
+ 	struct path lower_path;
++	struct esdfs_sb_info *sbi;
+ 	struct inode *inode;
+ 
+ 	if (!dev_name) {
+-		printk(KERN_ERR
+-		       "esdfs: read_super: missing dev_name argument\n");
++		esdfs_msg(sb, KERN_ERR, "missing dev_name argument\n");
+ 		err = -EINVAL;
+ 		goto out;
+ 	}
+@@ -146,28 +192,27 @@ static int esdfs_read_super(struct super_block *sb, const char *dev_name,
+ 	err = kern_path(dev_name, LOOKUP_FOLLOW | LOOKUP_DIRECTORY,
+ 			&lower_path);
+ 	if (err) {
+-		printk(KERN_ERR	"esdfs: error accessing "
+-		       "lower directory '%s'\n", dev_name);
++		esdfs_msg(sb, KERN_ERR, "error accessing lower directory '%s'\n",
++			dev_name);
+ 		goto out;
+ 	}
+ 
+ 	/* allocate superblock private data */
+ 	sb->s_fs_info = kzalloc(sizeof(struct esdfs_sb_info), GFP_KERNEL);
+-	if (!ESDFS_SB(sb)) {
+-		printk(KERN_CRIT "esdfs: read_super: out of memory\n");
++	sbi = ESDFS_SB(sb);
++	if (!sbi) {
++		esdfs_msg(sb, KERN_CRIT, "read_super: out of memory\n");
+ 		err = -ENOMEM;
+ 		goto out_pput;
+ 	}
+ 
+ 	/* set defaults and then parse the mount options */
+-	ESDFS_SB(sb)->lower_perms.uid = ESDFS_DEFAULT_LOWER_UID;
+-	ESDFS_SB(sb)->lower_perms.gid = ESDFS_DEFAULT_LOWER_GID;
+-	ESDFS_SB(sb)->lower_perms.fmask = ESDFS_DEFAULT_LOWER_FMASK;
+-	ESDFS_SB(sb)->lower_perms.dmask = ESDFS_DEFAULT_LOWER_DMASK;
+-	ESDFS_SB(sb)->upper_perms.uid = ESDFS_DEFAULT_UPPER_UID;
+-	ESDFS_SB(sb)->upper_perms.gid = ESDFS_DEFAULT_UPPER_GID;
+-	ESDFS_SB(sb)->upper_perms.fmask = ESDFS_DEFAULT_UPPER_FMASK;
+-	ESDFS_SB(sb)->upper_perms.dmask = ESDFS_DEFAULT_UPPER_DMASK;
++	memcpy(&sbi->lower_perms,
++	       &esdfs_perms_table[ESDFS_PERMS_LOWER_DEFAULT],
++	       sizeof(struct esdfs_perms));
++	memcpy(&sbi->upper_perms,
++	       &esdfs_perms_table[ESDFS_PERMS_UPPER_LEGACY],
++	       sizeof(struct esdfs_perms));
+ 	err = parse_options(sb, (char *)raw_data);
+ 	if (err)
+ 		goto out_free;
+@@ -219,12 +264,56 @@ static int esdfs_read_super(struct super_block *sb, const char *dev_name,
+ 	 */
+ 	d_rehash(sb->s_root);
+ 	if (!silent)
+-		printk(KERN_INFO
+-		       "esdfs: mounted on top of %s type %s\n",
+-		       dev_name, lower_sb->s_type->name);
+-	goto out; /* all is well */
++		esdfs_msg(sb, KERN_INFO, "mounted on top of %s type %s\n",
++			dev_name, lower_sb->s_type->name);
++
++	if (!ESDFS_DERIVE_PERMS(sbi))
++		goto out;
++
++	/* let user know that we ignore this option in derived mode */
++	if (memcmp(&sbi->upper_perms,
++		   &esdfs_perms_table[ESDFS_PERMS_UPPER_LEGACY],
++		   sizeof(struct esdfs_perms)))
++		esdfs_msg(sb, KERN_WARNING, "'upper' mount option ignored in derived mode\n");
++
++	/* all derived modes start with the same, basic root */
++	memcpy(&sbi->upper_perms,
++	       &esdfs_perms_table[ESDFS_PERMS_UPPER_DERIVED],
++	       sizeof(struct esdfs_perms));
++
++	/*
++	 * In Android 3.0 all user conent in the emulated storage tree was
++	 * stored in /data/media.  Android 4.2 introduced multi-user support,
++	 * which required that the primary user's content be migrated from
++	 * /data/media to /data/media/0.  The framework then uses bind mounts
++	 * to create per-process namespaces to isolate each user's tree at
++	 * /data/media/N.  This approach of having each user in a common root
++	 * is now considered "legacy" by the sdcard service.
++	 */
++	if (test_opt(sbi, DERIVE_LEGACY))
++		ESDFS_I(inode)->tree = ESDFS_TREE_ROOT_LEGACY;
++	/*
++	 * Android 4.4 reorganized this sturcture yet again, so that the
++	 * primary user's content was again at the root.  Secondary users'
++	 * content is found in Android/user/N.  Emulated internal storage still
++	 * seems to use the legacy tree, but secondary external storage uses
++	 * this method.
++	 */
++	else if (test_opt(sbi, DERIVE_UNIFIED))
++		ESDFS_I(inode)->tree = ESDFS_TREE_ROOT;
++	/*
++	 * Later versions of Android organize user content using quantum
++	 * entanglement, which has a low probability of being supported by
++	 * this driver.
++	 */
++	else
++		esdfs_msg(sb, KERN_WARNING, "unsupported derived permissions mode\n");
++
++	/* initialize root inode */
++	esdfs_derive_perms(sb->s_root);
++
++	goto out;
+ 
+-	/* no longer needed: free_dentry_private_data(sb->s_root); */
+ out_freeroot:
+ 	dput(sb->s_root);
+ out_iput:
+@@ -281,6 +370,8 @@ static int __init init_esdfs_fs(void)
+ 
+ 	pr_info("Registering esdfs " ESDFS_VERSION "\n");
+ 
++	esdfs_init_package_list();
++
+ 	err = esdfs_init_inode_cache();
+ 	if (err)
+ 		goto out;
+@@ -292,6 +383,7 @@ out:
+ 	if (err) {
+ 		esdfs_destroy_inode_cache();
+ 		esdfs_destroy_dentry_cache();
++		esdfs_destroy_package_list();
+ 	}
+ 	return err;
+ }
+@@ -300,13 +392,14 @@ static void __exit exit_esdfs_fs(void)
+ {
+ 	esdfs_destroy_inode_cache();
+ 	esdfs_destroy_dentry_cache();
++	esdfs_destroy_package_list();
+ 	unregister_filesystem(&esdfs_fs_type);
+ 	pr_info("Completed esdfs module unload\n");
+ }
+ 
+ MODULE_AUTHOR("Erez Zadok, Filesystems and Storage Lab, Stony Brook University"
+-	      " (http://www.fsl.cs.sunysb.edu/), Motorola Mobility, LLC");
+-MODULE_DESCRIPTION("Emulated 'SD card' Filesystem");
++	      " (http://www.fsl.cs.sunysb.edu/)");
++MODULE_DESCRIPTION("esdfs " ESDFS_VERSION);
+ MODULE_LICENSE("GPL");
+ 
+ module_init(init_esdfs_fs);
+diff --git a/fs/esdfs/super.c b/fs/esdfs/super.c
+index 2fc61c128e9..186058440f8 100644
+--- a/fs/esdfs/super.c
++++ b/fs/esdfs/super.c
+@@ -18,6 +18,18 @@
+  */
+ static struct kmem_cache *esdfs_inode_cachep;
+ 
++void esdfs_msg(struct super_block *sb, const char *level, const char *fmt, ...)
++{
++	struct va_format vaf;
++	va_list args;
++
++	va_start(args, fmt);
++	vaf.fmt = fmt;
++	vaf.va = &args;
++	printk("%sESDFS-fs (%s): %pV", level, sb->s_id, &vaf);
++	va_end(args);
++}
++
+ /* final actions when unmounting a file system */
+ static void esdfs_put_super(struct super_block *sb)
+ {
+@@ -66,8 +78,8 @@ static int esdfs_remount_fs(struct super_block *sb, int *flags, char *options)
+ 	 * SILENT, but anything else left over is an error.
+ 	 */
+ 	if ((*flags & ~(MS_RDONLY | MS_MANDLOCK | MS_SILENT)) != 0) {
+-		printk(KERN_ERR
+-		       "esdfs: remount flags 0x%x unsupported\n", *flags);
++		esdfs_msg(sb, KERN_ERR, "remount flags 0x%x unsupported\n",
++			*flags);
+ 		err = -EINVAL;
+ 	}
+ 
+@@ -160,26 +172,36 @@ static int esdfs_show_options(struct seq_file *seq, struct dentry *root)
+ {
+ 	struct esdfs_sb_info *sbi = ESDFS_SB(root->d_sb);
+ 
+-	if (sbi->lower_perms.uid != ESDFS_DEFAULT_LOWER_UID ||
+-	    sbi->lower_perms.gid != ESDFS_DEFAULT_LOWER_GID ||
+-	    sbi->lower_perms.fmask != ESDFS_DEFAULT_LOWER_FMASK ||
+-	    sbi->lower_perms.dmask != ESDFS_DEFAULT_LOWER_DMASK)
++	if (memcmp(&sbi->lower_perms,
++		   &esdfs_perms_table[ESDFS_PERMS_LOWER_DEFAULT],
++		   sizeof(struct esdfs_perms)))
+ 		seq_printf(seq, ",lower=%u:%u:%ho:%ho",
+ 				sbi->lower_perms.uid,
+ 				sbi->lower_perms.gid,
+ 				sbi->lower_perms.fmask,
+ 				sbi->lower_perms.dmask);
+ 
+-	if (sbi->upper_perms.uid != ESDFS_DEFAULT_UPPER_UID ||
+-	    sbi->upper_perms.gid != ESDFS_DEFAULT_UPPER_GID ||
+-	    sbi->upper_perms.fmask != ESDFS_DEFAULT_UPPER_FMASK ||
+-	    sbi->upper_perms.dmask != ESDFS_DEFAULT_UPPER_DMASK)
++	if (memcmp(&sbi->upper_perms,
++		   &esdfs_perms_table[ESDFS_PERMS_UPPER_LEGACY],
++		   sizeof(struct esdfs_perms)))
+ 		seq_printf(seq, ",upper=%u:%u:%ho:%ho",
+ 				sbi->upper_perms.uid,
+ 				sbi->upper_perms.gid,
+ 				sbi->upper_perms.fmask,
+ 				sbi->upper_perms.dmask);
+ 
++	if (test_opt(sbi, DERIVE_LEGACY))
++		seq_puts(seq, ",derive=legacy");
++	else if (test_opt(sbi, DERIVE_UNIFIED))
++		seq_puts(seq, ",derive=unified");
++	else
++		seq_puts(seq, ",derive=none");
++
++	if (test_opt(sbi, DERIVE_SPLIT))
++		seq_puts(seq, ",split");
++	else
++		seq_puts(seq, ",nosplit");
++
+ 	return 0;
+ }
+ 
+-- 
+2.11.0
+

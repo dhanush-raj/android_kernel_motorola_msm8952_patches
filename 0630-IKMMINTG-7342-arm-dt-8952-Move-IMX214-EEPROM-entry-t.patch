@@ -1,0 +1,195 @@
+From ce64e718482ac67fd8d154b5b16cce9eaf325c0b Mon Sep 17 00:00:00 2001
+From: chensheng1 <chensheng1@lenovo.com>
+Date: Mon, 4 Jan 2016 17:34:33 +0800
+Subject: [PATCH 630/959] IKMMINTG-7342: arm/dt: 8952: Move IMX214 EEPROM entry
+ to 13MP dts file
+
+Move IMX214 EEPROM entry to 13MP dts file to
+avoid conflict with 16MP.
+
+Change-Id: Iffec8d23a916b88172ad38f692ee4e071eeba49f
+Signed-off-by: chensheng1 <chensheng1@lenovo.com>
+Reviewed-on: http://gerrit.mot.com/810374
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sumit Jamadar <xkbr38@motorola.com>
+Reviewed-by: Satya Prasad Kottisa <fvgm76@motorola.com>
+Reviewed-by: Russell Knize <rknize@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-athene_13mp-p1.dts  | 72 ++++++++++++++++++++++
+ .../boot/dts/qcom/msm8952-camera-sensor-moto.dtsi  | 70 +--------------------
+ 2 files changed, 73 insertions(+), 69 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene_13mp-p1.dts b/arch/arm/boot/dts/qcom/msm8952-athene_13mp-p1.dts
+index d2fe8904e33..18f8fda8dab 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene_13mp-p1.dts
++++ b/arch/arm/boot/dts/qcom/msm8952-athene_13mp-p1.dts
+@@ -20,3 +20,75 @@
+ 	qcom,board-id = <0x42 0x81a0>, <0x42 0x81ad>;
+ };
+ 
++&cci {
++	/* IMX214 EEPROM */
++	eeprom2: qcom,eeprom@2 {
++		cell-index = <2>;
++		reg = <0x2>;
++		qcom,eeprom-name = "mot_imx214";
++		compatible = "qcom,eeprom";
++		qcom,slave-addr = <0xA0>;
++		qcom,cci-master = <0>;
++		qcom,i2c-freq-mode = <1>;
++		qcom,num-blocks = <8>;
++
++		qcom,page0 = <0 0x00 1 0x00 1 0>;
++		qcom,poll0 = <0 0x00 1 0x00 1 0>;
++		qcom,saddr0 = <0xA0>;
++		qcom,mem0 = <256 0x00 1 0x00 1 0>;
++
++		qcom,page1 = <0 0x00 1 0x00 1 0>;
++		qcom,poll1 = <0 0x00 1 0x00 1 0>;
++		qcom,saddr1 = <0xA2>;
++		qcom,mem1 = <256 0x00 1 0x00 1 0>;
++
++		qcom,page2 = <0 0x00 1 0x00 1 0>;
++		qcom,poll2 = <0 0x00 1 0x00 1 0>;
++		qcom,saddr2 = <0xA4>;
++		qcom,mem2 = <256 0x00 1 0x00 1 0>;
++
++		qcom,page3 = <0 0x00 1 0x00 1 0>;
++		qcom,poll3 = <0 0x00 1 0x00 1 0>;
++		qcom,saddr3 = <0xA6>;
++		qcom,mem3 = <256 0x00 1 0x00 1 0>;
++
++		qcom,page4 = <0 0x00 1 0x00 1 0>;
++		qcom,poll4 = <0 0x00 1 0x00 1 0>;
++		qcom,saddr4 = <0xA8>;
++		qcom,mem4 = <256 0x00 1 0x00 1 0>;
++
++		qcom,page5 = <0 0x00 1 0x00 1 0>;
++		qcom,poll5 = <0 0x00 1 0x00 1 0>;
++		qcom,saddr5 = <0xAA>;
++		qcom,mem5 = <256 0x00 1 0x00 1 0>;
++
++		qcom,page6 = <0 0x00 1 0x00 1 0>;
++		qcom,poll6 = <0 0x00 1 0x00 1 0>;
++		qcom,saddr6 = <0xAC>;
++		qcom,mem6 = <256 0x00 1 0x00 1 0>;
++
++		qcom,page7 = <0 0x00 1 0x00 1 0>;
++		qcom,poll7 = <0 0x00 1 0x00 1 0>;
++		qcom,saddr7 = <0xAE>;
++		qcom,mem7 = <256 0x00 1 0x00 1 0>;
++
++		cam_vio-supply = <&pm8950_l10>;
++		qcom,cam-vreg-name = "cam_vio";
++		qcom,cam-vreg-min-voltage = <1800000> ;
++		qcom,cam-vreg-max-voltage = <1800000>;
++		qcom,cam-vreg-op-mode = <1800000>;
++		qcom,gpio-no-mux = <0>;
++
++		qcom,cam-power-seq-type = "sensor_vreg";
++		qcom,cam-power-seq-val = "cam_vio";
++		qcom,cam-power-seq-cfg-val = <1>;
++		qcom,cam-power-seq-delay = <3>;
++
++		status = "ok";
++	};
++
++	qcom,camera@0 {
++		/delete-property/ qcom,eeprom-src;
++		qcom,eeprom-src = <&eeprom2>;
++	};
++};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi b/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
+index 2253c62c7f3..4c41d1c0117 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
+@@ -262,72 +262,6 @@
+ 		status = "ok";
+ 	};
+ 
+-	/* IMX214 EEPROM */
+-	eeprom2: qcom,eeprom@2 {
+-		cell-index = <2>;
+-		reg = <0x2>;
+-		qcom,eeprom-name = "mot_imx214";
+-		compatible = "qcom,eeprom";
+-		qcom,slave-addr = <0xA0>;
+-		qcom,cci-master = <0>;
+-		qcom,i2c-freq-mode = <1>;
+-		qcom,num-blocks = <8>;
+-
+-		qcom,page0 = <0 0x00 1 0x00 1 0>;
+-		qcom,poll0 = <0 0x00 1 0x00 1 0>;
+-		qcom,saddr0 = <0xA0>;
+-		qcom,mem0 = <256 0x00 1 0x00 1 0>;
+-
+-		qcom,page1 = <0 0x00 1 0x00 1 0>;
+-		qcom,poll1 = <0 0x00 1 0x00 1 0>;
+-		qcom,saddr1 = <0xA2>;
+-		qcom,mem1 = <256 0x00 1 0x00 1 0>;
+-
+-		qcom,page2 = <0 0x00 1 0x00 1 0>;
+-		qcom,poll2 = <0 0x00 1 0x00 1 0>;
+-		qcom,saddr2 = <0xA4>;
+-		qcom,mem2 = <256 0x00 1 0x00 1 0>;
+-
+-		qcom,page3 = <0 0x00 1 0x00 1 0>;
+-		qcom,poll3 = <0 0x00 1 0x00 1 0>;
+-		qcom,saddr3 = <0xA6>;
+-		qcom,mem3 = <256 0x00 1 0x00 1 0>;
+-
+-		qcom,page4 = <0 0x00 1 0x00 1 0>;
+-		qcom,poll4 = <0 0x00 1 0x00 1 0>;
+-		qcom,saddr4 = <0xA8>;
+-		qcom,mem4 = <256 0x00 1 0x00 1 0>;
+-
+-		qcom,page5 = <0 0x00 1 0x00 1 0>;
+-		qcom,poll5 = <0 0x00 1 0x00 1 0>;
+-		qcom,saddr5 = <0xAA>;
+-		qcom,mem5 = <256 0x00 1 0x00 1 0>;
+-
+-		qcom,page6 = <0 0x00 1 0x00 1 0>;
+-		qcom,poll6 = <0 0x00 1 0x00 1 0>;
+-		qcom,saddr6 = <0xAC>;
+-		qcom,mem6 = <256 0x00 1 0x00 1 0>;
+-
+-		qcom,page7 = <0 0x00 1 0x00 1 0>;
+-		qcom,poll7 = <0 0x00 1 0x00 1 0>;
+-		qcom,saddr7 = <0xAE>;
+-		qcom,mem7 = <256 0x00 1 0x00 1 0>;
+-
+-		cam_vio-supply = <&pm8950_l10>;
+-		qcom,cam-vreg-name = "cam_vio";
+-		qcom,cam-vreg-min-voltage = <1800000> ;
+-		qcom,cam-vreg-max-voltage = <1800000>;
+-		qcom,cam-vreg-op-mode = <1800000>;
+-		qcom,gpio-no-mux = <0>;
+-
+-		qcom,cam-power-seq-type = "sensor_vreg";
+-		qcom,cam-power-seq-val = "cam_vio";
+-		qcom,cam-power-seq-cfg-val = <1>;
+-		qcom,cam-power-seq-delay = <3>;
+-
+-		status = "ok";
+-	};
+-
+ 	actuator0: qcom,actuator@0 {
+ 		cell-index = <0>;
+ 		reg = <0x0>;
+@@ -348,9 +282,7 @@
+ 		qcom,mount-angle = <90>;
+ 		qcom,led-flash-src = <&led_flash0>;
+ 		qcom,actuator-src = <&actuator0>;
+-		/* TODO: Add eeprom2 to athene_13mp-p1 dts file once
+-		 * 13mp boards available */
+-		qcom,eeprom-src = <&eeprom0 &eeprom2>;
++		qcom,eeprom-src = <&eeprom0>;
+ 		cam_vdig-supply = <&pm8950_s4>;
+ 		cam_vio-supply = <&pm8950_l10>;
+ 		qcom,cam-vreg-name = "cam_vdig", "cam_vio";
+-- 
+2.11.0
+

@@ -1,0 +1,35 @@
+From 175789806c3f2bc6f9e7752b4f49949bd9b52fb0 Mon Sep 17 00:00:00 2001
+From: jixj <jixj@motorola.com>
+Date: Wed, 27 Jan 2016 14:09:29 +0800
+Subject: [PATCH 651/959] IKSWM-16839: moto-msm8916.config: Enable f2fs
+ filesystem
+
+Kernel support f2fs
+
+Change-Id: Ic359b04fd61e9f44452eab443259050536cef057
+Signed-off-by: jixj <jixj@motorola.com>
+Reviewed-on: http://gerrit.mot.com/813137
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index 02e99343244..ef610553e7c 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -64,3 +64,6 @@ CONFIG_MMC_CQ_HCI=y
+ CONFIG_CRYPTO_SHA256_ARM=y
+ CONFIG_KERNEL_MODE_NEON=y
+ CONFIG_CRYPTO_AES_ARM_BS=y
++CONFIG_F2FS_FS=y
++CONFIG_F2FS_FS_SECURITY=y
++CONFIG_F2FS_FS_XATTR=y
+-- 
+2.11.0
+

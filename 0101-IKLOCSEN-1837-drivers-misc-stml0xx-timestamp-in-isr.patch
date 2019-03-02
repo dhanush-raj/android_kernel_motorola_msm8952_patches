@@ -1,0 +1,534 @@
+From 9889003860970598683ea995b01b716541c449c9 Mon Sep 17 00:00:00 2001
+From: "Philip G. Lee" <pglee@motorola.com>
+Date: Mon, 1 Dec 2014 09:38:39 -0600
+Subject: [PATCH 101/959] IKLOCSEN-1837 drivers: misc: stml0xx: timestamp in
+ isr
+
+Moved timestamping to isr, passing to work_func as param to avoid data
+races.
+
+Change-Id: I5690510f6f960c7aed86f76f4e9e3a9c913c6a01
+Signed-off-by: Philip G. Lee <pglee@motorola.com>
+Reviewed-on: http://gerrit.mot.com/694009
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jagatkumar Shah <jagat@motorola.com>
+Reviewed-by: Vladimir Karpovich <vkarpovich@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c     | 18 +++++--
+ drivers/misc/stml0xx/stml0xx_ioctl.c    |  4 +-
+ drivers/misc/stml0xx/stml0xx_irq.c      | 84 ++++++++++++++++++++++++++-------
+ drivers/misc/stml0xx/stml0xx_queue.c    |  8 ++--
+ drivers/misc/stml0xx/stml0xx_wake_irq.c | 71 ++++++++++++++++++++++++----
+ include/linux/stml0xx.h                 | 15 ++++--
+ 6 files changed, 160 insertions(+), 40 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 8f3b484a5ed..0746a682f79 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -816,8 +816,6 @@ static int stml0xx_probe(struct spi_device *spi)
+ 	/* clear the interrupt mask */
+ 	ps_stml0xx->intp_mask = 0x00;
+ 
+-	INIT_WORK(&ps_stml0xx->irq_work, stml0xx_irq_work_func);
+-	INIT_WORK(&ps_stml0xx->irq_wake_work, stml0xx_irq_wake_work_func);
+ 	INIT_WORK(&ps_stml0xx->clear_interrupt_status_work,
+ 		  clear_interrupt_status_work_func);
+ 	INIT_WORK(&ps_stml0xx->initialize_work, stml0xx_initialize_work_func);
+@@ -1089,15 +1087,29 @@ static int stml0xx_remove(struct spi_device *spi)
+ 
+ static int stml0xx_resume(struct device *dev)
+ {
++	static struct timespec ts;
++	static struct stml0xx_work_struct *stm_ws;
+ 	struct stml0xx_data *ps_stml0xx = spi_get_drvdata(to_spi_device(dev));
++
++	getrawmonotonic(&ts);
+ 	dev_dbg(&stml0xx_misc_data->spi->dev, "%s", __func__);
+ 
+ 	mutex_lock(&ps_stml0xx->lock);
+ 	ps_stml0xx->is_suspended = false;
+ 
+ 	if (ps_stml0xx->pending_wake_work) {
++		stm_ws = kmalloc(
++			sizeof(struct stml0xx_work_struct),
++			GFP_ATOMIC);
++		if (!stm_ws) {
++			dev_err(dev, "stml0xx_resume: unable to allocate work struct");
++			return 0;
++		}
++		INIT_WORK((struct work_struct *)stm_ws,
++			stml0xx_irq_wake_work_func);
++		stm_ws->ts_ns = ts_to_ns(ts);
+ 		queue_work(ps_stml0xx->irq_work_queue,
+-			   &ps_stml0xx->irq_wake_work);
++			(struct work_struct *)stm_ws);
+ 		ps_stml0xx->pending_wake_work = false;
+ 	}
+ 
+diff --git a/drivers/misc/stml0xx/stml0xx_ioctl.c b/drivers/misc/stml0xx/stml0xx_ioctl.c
+index a718bbc1b28..5cca3a6a453 100644
+--- a/drivers/misc/stml0xx/stml0xx_ioctl.c
++++ b/drivers/misc/stml0xx/stml0xx_ioctl.c
+@@ -665,8 +665,10 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 			break;
+ 		}
+ 		handle = cpu_to_be32(handle);
++		getrawmonotonic(&current_time);
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_FLUSH,
+-				(char *)&handle, 4, 0);
++				(char *)&handle, 4, 0,
++				ts_to_ns(current_time));
+ 		break;
+ 	}
+ 
+diff --git a/drivers/misc/stml0xx/stml0xx_irq.c b/drivers/misc/stml0xx/stml0xx_irq.c
+index f88b0370cc4..ac253525da5 100644
+--- a/drivers/misc/stml0xx/stml0xx_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_irq.c
+@@ -44,15 +44,26 @@
+ 
+ irqreturn_t stml0xx_isr(int irq, void *dev)
+ {
++	static struct timespec ts;
++	static struct stml0xx_work_struct *stm_ws;
+ 	struct stml0xx_data *ps_stml0xx = dev;
++	getrawmonotonic(&ts);
+ 
+ 	if (stml0xx_irq_disable)
+ 		return IRQ_HANDLED;
+ 
+-	queue_work(ps_stml0xx->irq_work_queue, &ps_stml0xx->irq_work);
+-	if (ps_stml0xx->irq_wake == -1)
+-		queue_work(ps_stml0xx->irq_work_queue,
+-			   &ps_stml0xx->irq_wake_work);
++	stm_ws = kmalloc(
++		sizeof(struct stml0xx_work_struct),
++		GFP_ATOMIC);
++	if (!stm_ws) {
++		dev_err(dev, "stml0xx_isr: unable to allocate work struct");
++		return IRQ_HANDLED;
++	}
++
++	INIT_WORK((struct work_struct *)stm_ws, stml0xx_irq_work_func);
++	stm_ws->ts_ns = ts_to_ns(ts);
++
++	queue_work(ps_stml0xx->irq_work_queue, (struct work_struct *)stm_ws);
+ 	return IRQ_HANDLED;
+ }
+ 
+@@ -60,6 +71,7 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ {
+ 	int err;
+ 	u32 irq_status;
++	struct stml0xx_work_struct *stm_ws = (struct stml0xx_work_struct *)work;
+ 	struct stml0xx_data *ps_stml0xx = stml0xx_misc_data;
+ 	unsigned char buf[SPI_MSG_SIZE];
+ 
+@@ -93,7 +105,13 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 			goto EXIT;
+ 		}
+ 
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_ACCEL, buf, 6, 0);
++		stml0xx_as_data_buffer_write(
++			ps_stml0xx,
++			DT_ACCEL,
++			buf,
++			6,
++			0,
++			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending acc(x,y,z)values:x=%d,y=%d,z=%d",
+@@ -109,7 +127,12 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 			goto EXIT;
+ 		}
+ 
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_ACCEL2, buf, 6, 0);
++		stml0xx_as_data_buffer_write(ps_stml0xx,
++			DT_ACCEL2,
++			buf,
++			6,
++			0,
++			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending acc2(x,y,z)values:x=%d,y=%d,z=%d",
+@@ -130,7 +153,7 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 		}
+ 
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_LIN_ACCEL,
+-					     buf, 6, 0);
++					     buf, 6, 0, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending lin_acc(x,y,z)values:x=%d,y=%d,z=%d",
+@@ -148,7 +171,7 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 		}
+ 		status = buf[COMPASS_STATUS];
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_MAG,
+-					     buf, 6, status);
++					     buf, 6, status, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending mag(x,y,z)values:x=%d,y=%d,z=%d",
+@@ -156,7 +179,7 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 			STM16_TO_HOST(MAG_Z));
+ 
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_ORIENT,
+-					     buf + 6, 6, status);
++					     buf + 6, 6, status, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending orient(x,y,z)values:x=%d,y=%d,z=%d",
+@@ -170,7 +193,13 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 				"Reading Gyroscope failed");
+ 			goto EXIT;
+ 		}
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_GYRO, buf, 6, 0);
++		stml0xx_as_data_buffer_write(
++			ps_stml0xx,
++			DT_GYRO,
++			buf,
++			6,
++			0,
++			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending gyro(x,y,z)values:x=%d,y=%d,z=%d",
+@@ -186,7 +215,7 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 			goto EXIT;
+ 		}
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_UNCALIB_GYRO,
+-					     buf, 12, 0);
++					     buf, 12, 0, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending Gyro uncalib(x,y,z)values:%d,%d,%d;%d,%d,%d",
+@@ -205,7 +234,7 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 		}
+ 
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_UNCALIB_MAG,
+-					     buf, 12, 0);
++					     buf, 12, 0, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending Gyro uncalib(x,y,z)values:%d,%d,%d;%d,%d,%d",
+@@ -221,7 +250,13 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 				"Reading ALS from stml0xx failed");
+ 			goto EXIT;
+ 		}
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_ALS, buf, 2, 0);
++		stml0xx_as_data_buffer_write(
++			ps_stml0xx,
++			DT_ALS,
++			buf,
++			2,
++			0,
++			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending ALS %d", STM16_TO_HOST(ALS_VALUE));
+@@ -234,7 +269,13 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 				"Reading Temperature failed");
+ 			goto EXIT;
+ 		}
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_TEMP, buf, 2, 0);
++		stml0xx_as_data_buffer_write(
++			ps_stml0xx,
++			DT_TEMP,
++			buf,
++			2,
++			0,
++			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending temp(x)value:%d", STM16_TO_HOST(TEMP_VALUE));
+@@ -251,7 +292,7 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 			goto EXIT;
+ 		}
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_PRESSURE,
+-					     buf, 4, 0);
++					     buf, 4, 0, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending pressure %d", STM32_TO_HOST(PRESSURE_VALUE));
+@@ -269,7 +310,13 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 			goto EXIT;
+ 		}
+ 
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_GRAVITY, buf, 6, 0);
++		stml0xx_as_data_buffer_write(
++			ps_stml0xx,
++			DT_GRAVITY,
++			buf,
++			6,
++			0,
++			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending gravity(x,y,z)values:x=%d,y=%d,z=%d",
+@@ -285,7 +332,7 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 			goto EXIT;
+ 		}
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_DISP_ROTATE,
+-					     buf, 1, 0);
++					     buf, 1, 0, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending disp_rotate(x)value: %d", buf[DISP_VALUE]);
+@@ -298,12 +345,13 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 			goto EXIT;
+ 		}
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_DISP_BRIGHT,
+-					     buf, 1, 0);
++					     buf, 1, 0, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending Display Brightness %d", buf[DISP_VALUE]);
+ 	}
+ EXIT:
++	kfree((void *)stm_ws);
+ 	stml0xx_sleep(ps_stml0xx);
+ 	/* For now HAE needs events even if the activity is still */
+ 	mutex_unlock(&ps_stml0xx->lock);
+diff --git a/drivers/misc/stml0xx/stml0xx_queue.c b/drivers/misc/stml0xx/stml0xx_queue.c
+index 7f98b85df48..3fb0f9b8add 100644
+--- a/drivers/misc/stml0xx/stml0xx_queue.c
++++ b/drivers/misc/stml0xx/stml0xx_queue.c
+@@ -45,11 +45,11 @@
+ 
+ int stml0xx_as_data_buffer_write(struct stml0xx_data *ps_stml0xx,
+ 				 unsigned char type, unsigned char *data,
+-				 int size, unsigned char status)
++				 int size, unsigned char status,
++				 uint64_t timestamp_ns)
+ {
+ 	int new_head;
+ 	struct stml0xx_android_sensor_data *buffer;
+-	struct timespec ts;
+ 	static bool error_reported;
+ 
+ 	new_head = (ps_stml0xx->stml0xx_as_data_buffer_head + 1)
+@@ -75,9 +75,7 @@ int stml0xx_as_data_buffer_write(struct stml0xx_data *ps_stml0xx,
+ 		memcpy(buffer->data, data, size);
+ 	}
+ 	buffer->size = size;
+-
+-	ktime_get_ts(&ts);
+-	buffer->timestamp = ts.tv_sec * 1000000000LL + ts.tv_nsec;
++	buffer->timestamp = timestamp_ns;
+ 
+ 	ps_stml0xx->stml0xx_as_data_buffer_head = new_head;
+ 	wake_up(&ps_stml0xx->stml0xx_as_data_wq);
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index 0e9eea60956..a2d00569c35 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -57,14 +57,27 @@ enum headset_state_t Headset_State = SH_HEADSET_REMOVED;
+ 
+ irqreturn_t stml0xx_wake_isr(int irq, void *dev)
+ {
++	static struct timespec ts;
++	static struct stml0xx_work_struct *stm_ws;
+ 	struct stml0xx_data *ps_stml0xx = dev;
++	getrawmonotonic(&ts);
+ 
+ 	if (stml0xx_irq_disable)
+ 		return IRQ_HANDLED;
+ 
+ 	wake_lock_timeout(&ps_stml0xx->wake_sensor_wakelock, HZ);
++	stm_ws = kmalloc(
++		sizeof(struct stml0xx_work_struct),
++		GFP_ATOMIC);
++	if (!stm_ws) {
++		dev_err(dev, "stml0xx_wake_isr: unable to allocate work struct");
++		return IRQ_HANDLED;
++	}
++
++	INIT_WORK((struct work_struct *)stm_ws, stml0xx_irq_wake_work_func);
++	stm_ws->ts_ns = ts_to_ns(ts);
+ 
+-	queue_work(ps_stml0xx->irq_work_queue, &ps_stml0xx->irq_wake_work);
++	queue_work(ps_stml0xx->irq_work_queue, (struct work_struct *)stm_ws);
+ 	return IRQ_HANDLED;
+ }
+ 
+@@ -74,6 +87,7 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 	unsigned short irq_status;
+ 	u32 irq2_status;
+ 	uint8_t irq3_status;
++	struct stml0xx_work_struct *stm_ws = (struct stml0xx_work_struct *)work;
+ 	struct stml0xx_data *ps_stml0xx = stml0xx_misc_data;
+ 	unsigned char buf[SPI_MSG_SIZE];
+ 
+@@ -149,7 +163,7 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 			status = 0x04;
+ 
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_RESET, &status, 1,
+-					     0);
++					     0, stm_ws->ts_ns);
+ 
+ 		stml0xx_reset(stml0xx_misc_data->pdata, stml0xx_cmdbuff);
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+@@ -171,7 +185,13 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 				"Reading Dock state failed");
+ 			goto EXIT;
+ 		}
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_DOCK, buf, 1, 0);
++		stml0xx_as_data_buffer_write(
++			ps_stml0xx,
++			DT_DOCK,
++			buf,
++			1,
++			0,
++			stm_ws->ts_ns);
+ 		state = buf[DOCK_STATE];
+ 		if (ps_stml0xx->dsdev.dev != NULL)
+ 			switch_set_state(&ps_stml0xx->dsdev, state);
+@@ -187,7 +207,13 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 				"Reading prox from stml0xx failed");
+ 			goto EXIT;
+ 		}
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_PROX, buf, 1, 0);
++		stml0xx_as_data_buffer_write(
++			ps_stml0xx,
++			DT_PROX,
++			buf,
++			1,
++			0,
++			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending Proximity distance %d", buf[PROX_DISTANCE]);
+@@ -366,7 +392,13 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 				"Reading flat data from stml0xx failed");
+ 			goto EXIT;
+ 		}
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_FLAT_UP, buf, 1, 0);
++		stml0xx_as_data_buffer_write(
++			ps_stml0xx,
++			DT_FLAT_UP,
++			buf,
++			1,
++			0,
++			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending Flat up %d", buf[FLAT_UP]);
+@@ -379,7 +411,7 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 			goto EXIT;
+ 		}
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_FLAT_DOWN,
+-					     buf, 1, 0);
++					     buf, 1, 0, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending Flat down %d", buf[FLAT_DOWN]);
+@@ -391,7 +423,13 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 				"Reading stowed from stml0xx failed");
+ 			goto EXIT;
+ 		}
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_STOWED, buf, 1, 0);
++		stml0xx_as_data_buffer_write(
++			ps_stml0xx,
++			DT_STOWED,
++			buf,
++			1,
++			0,
++			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending Stowed status %d", buf[STOWED_STATUS]);
+@@ -404,7 +442,7 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 			goto EXIT;
+ 		}
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_CAMERA_ACT,
+-					     buf, 2, 0);
++					     buf, 2, 0, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending Camera: %d", STM16_TO_HOST(CAMERA_VALUE));
+@@ -421,7 +459,13 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 				"Reading nfc data from stm failed");
+ 			goto EXIT;
+ 		}
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_NFC, buf, 1, 0);
++		stml0xx_as_data_buffer_write(
++			ps_stml0xx,
++			DT_NFC,
++			buf,
++			1,
++			0,
++			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending NFC value: %d", buf[NFC_VALUE]);
+@@ -434,7 +478,13 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 				"Reading sig_motion data from stm failed");
+ 			goto EXIT;
+ 		}
+-		stml0xx_as_data_buffer_write(ps_stml0xx, DT_SIM, buf, 2, 0);
++		stml0xx_as_data_buffer_write(
++			ps_stml0xx,
++			DT_SIM,
++			buf,
++			2,
++			0,
++			stm_ws->ts_ns);
+ 
+ 		/* This is one shot sensor */
+ 		stml0xx_g_wake_sensor_state &= (~M_SIM);
+@@ -561,4 +611,5 @@ EXIT:
+ 	stml0xx_sleep(ps_stml0xx);
+ EXIT_NO_WAKE:
+ 	mutex_unlock(&ps_stml0xx->lock);
++	kfree(stm_ws);
+ }
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 5d3c4587697..4059c18aad1 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -575,8 +575,6 @@ struct stml0xx_data {
+ 	struct stml0xx_platform_data *pdata;
+ 	/* to avoid two spi communications at the same time */
+ 	struct mutex lock;
+-	struct work_struct irq_work;
+-	struct work_struct irq_wake_work;
+ 	struct work_struct clear_interrupt_status_work;
+ 	struct work_struct initialize_work;
+ 	struct workqueue_struct *irq_work_queue;
+@@ -635,6 +633,16 @@ struct stml0xx_data {
+ 	struct led_classdev led_cdev;
+ };
+ 
++#ifndef ts_to_ns
++# define ts_to_ns(ts) ((ts).tv_sec*1000000000LL + (ts).tv_nsec)
++#endif
++struct stml0xx_work_struct {
++	/* Base struct */
++	struct work_struct ws;
++	/* Timestamp in nanoseconds */
++	uint64_t ts_ns;
++};
++
+ /* per algo config, request, and event registers */
+ struct stml0xx_algo_info_t {
+ 	unsigned short config_bit;
+@@ -667,7 +675,8 @@ void stml0xx_initialize_work_func(struct work_struct *work);
+ 
+ int stml0xx_as_data_buffer_write(struct stml0xx_data *ps_stml0xx,
+ 				 unsigned char type, unsigned char *data,
+-				 int size, unsigned char status);
++				 int size, unsigned char status,
++				 uint64_t timestamp_ns);
+ int stml0xx_as_data_buffer_read(struct stml0xx_data *ps_stml0xx,
+ 				struct stml0xx_android_sensor_data *buff);
+ int stml0xx_ms_data_buffer_write(struct stml0xx_data *ps_stml0xx,
+-- 
+2.11.0
+

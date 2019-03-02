@@ -1,0 +1,88 @@
+From f46aa1c10f7e3c5087d33996cee64d63ed6961f1 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Fri, 11 Dec 2015 01:04:14 -0800
+Subject: [PATCH 542/959] IKSWM-13762 sound:soc: destroy workqueue before free
+ wcd_priv
+
+Moto added a OPALUM mixer and corresponding work queue to
+msm8x16_wcd_priv. The wq should be destroyed before freeing
+msm8x16_wcd_priv structure.
+
+Change-Id: Ia9b25bb24446a93315365e76dd6d8176e01de8a8
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+Reviewed-on: http://gerrit.mot.com/806502
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/codecs/msm8x16-wcd.c | 17 ++++++++++++-----
+ 1 file changed, 12 insertions(+), 5 deletions(-)
+
+diff --git a/sound/soc/codecs/msm8x16-wcd.c b/sound/soc/codecs/msm8x16-wcd.c
+index b0b4c30a502..cedbe65b48e 100644
+--- a/sound/soc/codecs/msm8x16-wcd.c
++++ b/sound/soc/codecs/msm8x16-wcd.c
+@@ -5376,6 +5376,13 @@ static void msm8x16_wcd_configure_cap(struct snd_soc_codec *codec,
+ 	}
+ }
+ 
++static void kfree_wcd_priv(struct msm8x16_wcd_priv *priv)
++{
++	if (priv->ospl2xx_wq)
++		destroy_workqueue(priv->ospl2xx_wq);
++	kfree(priv);
++}
++
+ static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
+ {
+ 	struct msm8x16_wcd_priv *msm8x16_wcd_priv;
+@@ -5411,7 +5418,7 @@ static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
+ 			MSM8X16_DIGITAL_CODEC_REG_SIZE);
+ 	if (msm8x16_wcd->dig_base == NULL) {
+ 		dev_err(codec->dev, "%s ioremap failed\n", __func__);
+-		kfree(msm8x16_wcd_priv);
++		kfree_wcd_priv(msm8x16_wcd_priv);
+ 		return -ENOMEM;
+ 	}
+ 	msm8x16_wcd_priv->spkdrv_reg =
+@@ -5473,7 +5480,7 @@ static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
+ 	if (!msm8x16_wcd_priv->fw_data) {
+ 		dev_err(codec->dev, "Failed to allocate fw_data\n");
+ 		iounmap(msm8x16_wcd->dig_base);
+-		kfree(msm8x16_wcd_priv);
++		kfree_wcd_priv(msm8x16_wcd_priv);
+ 		return -ENOMEM;
+ 	}
+ 
+@@ -5484,7 +5491,7 @@ static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
+ 		dev_err(codec->dev, "%s hwdep failed %d\n", __func__, ret);
+ 		iounmap(msm8x16_wcd->dig_base);
+ 		kfree(msm8x16_wcd_priv->fw_data);
+-		kfree(msm8x16_wcd_priv);
++		kfree_wcd_priv(msm8x16_wcd_priv);
+ 		return ret;
+ 	}
+ 
+@@ -5514,7 +5521,7 @@ static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
+ 			adsp_type);
+ 		iounmap(msm8x16_wcd->dig_base);
+ 		kfree(msm8x16_wcd_priv->fw_data);
+-		kfree(msm8x16_wcd_priv);
++		kfree_wcd_priv(msm8x16_wcd_priv);
+ 		registered_codec = NULL;
+ 		return -ENOMEM;
+ 	}
+@@ -5533,7 +5540,7 @@ static int msm8x16_wcd_codec_remove(struct snd_soc_codec *codec)
+ 	atomic_set(&msm8x16_wcd_priv->on_demand_list[ON_DEMAND_MICBIAS].ref, 0);
+ 	iounmap(msm8x16_wcd->dig_base);
+ 	kfree(msm8x16_wcd_priv->fw_data);
+-	kfree(msm8x16_wcd_priv);
++	kfree_wcd_priv(msm8x16_wcd_priv);
+ 
+ 	return 0;
+ }
+-- 
+2.11.0
+

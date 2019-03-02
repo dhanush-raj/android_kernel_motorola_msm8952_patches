@@ -1,0 +1,38 @@
+From 41eb618d895101596934849a0e75b8ea6deec956 Mon Sep 17 00:00:00 2001
+From: Seungyoon Lee <yoon@motorola.com>
+Date: Tue, 3 Nov 2015 13:54:47 -0600
+Subject: [PATCH 443/959] IKSWM-10125 Revert "IKKRNBSP-3486 arm/dt: 8952:
+ disable cirrus IC"
+
+Panic in Cirrus Watson IC driver probe routine is fixed.
+revert this to have audio out from P1.1 HW and going forward.
+
+This reverts commit 74686543000c165cf40508d140663e9a9a8fcb19.
+
+Change-Id: Ib1e536858f8a710e132f4649b55c8ea22b98f078
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/797064
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 2472aa45cf2..a2eb0f11d39 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -767,7 +767,6 @@
+ 
+ &i2c_2 { /* BLSP1 QUP2 */
+ 	cs35l34@40 {
+-		status = "disabled";
+ 		compatible = "cirrus,cs35l34";
+ 		reg = <0x40>;
+ 		cirrus,reset = <&msm_gpio 94 0>;
+-- 
+2.11.0
+

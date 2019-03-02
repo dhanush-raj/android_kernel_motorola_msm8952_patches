@@ -1,0 +1,55 @@
+From c2bce2280ca4191ae887a9521bd8b5a4b50fceea Mon Sep 17 00:00:00 2001
+From: daiss1 <daiss1@motorola.com>
+Date: Wed, 25 Nov 2015 15:45:30 +0800
+Subject: [PATCH 516/959] IKKRNBSP-3550 arm/dts: 8952: Partial Update Support
+ for Affinity
+
+Update dts config add partial-update-enabled and panel-roi-alignment
+
+Change-Id: I1b080f309bdb994273caec9fbeb8be4dab0d48b2
+Signed-off-by: daiss1 <daiss1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/802659
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Guobin Zhang <zhanggb@motorola.com>
+Reviewed-by: Patrick Auchter <auchter@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Fred Fettinger <fettinge@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi | 2 ++
+ arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi | 2 ++
+ 2 files changed, 4 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+index 3eb8df77800..24ccfc79966 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+@@ -102,6 +102,8 @@ qcom,mdss-dsi-panel-status-check-mode = "reg_read";
+ qcom,mdss-dsi-panel-status-command = [06 01 00 01 00 00 01 0A];
+ qcom,mdss-dsi-panel-status-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-panel-status-value = <0x1c>;
++qcom,partial-update-enabled;
++qcom,panel-roi-alignment = <8 2 8 2 0 0>;
+ 
+ qcom,panel-supply-entries {
+ 	#address-cells = <1>;
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+index eabdea60d61..80558f37d80 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -99,6 +99,8 @@ qcom,mdss-dsi-panel-status-check-mode = "reg_read";
+ qcom,mdss-dsi-panel-status-command = [06 01 00 01 00 00 01 0A];
+ qcom,mdss-dsi-panel-status-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-panel-status-value = <0x1c>;
++qcom,partial-update-enabled;
++qcom,panel-roi-alignment = <8 2 8 2 0 0>;
+ 
+ qcom,panel-supply-entries {
+ 	#address-cells = <1>;
+-- 
+2.11.0
+

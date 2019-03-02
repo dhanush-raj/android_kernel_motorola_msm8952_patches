@@ -1,0 +1,50 @@
+From 52da365ed21fedf2e08329230e978cfa9b67815d Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Thu, 17 Sep 2015 18:15:50 -0500
+Subject: [PATCH 156/959] IKKRNBSP-3317 misc: utags: fix error checks
+
+Utags names missing ':' in the utag name for
+type separation caused kernel panics. Fix check
+for reload_write function to be single character.
+
+Change-Id: I22825cb3e548d276900cb575ecdd77fb68026d21
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/784417
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/utag/utags.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/misc/utag/utags.c b/drivers/misc/utag/utags.c
+index 2da06050a5f..9e3c4be5817 100644
+--- a/drivers/misc/utag/utags.c
++++ b/drivers/misc/utag/utags.c
+@@ -226,7 +226,7 @@ static inline void split_name(char *full, char *name, char *type)
+ 	}
+ 	memcpy(name, full, pos);
+ 	type_length = strnlen(full, MAX_UTAG_NAME) - 1 - pos;
+-	if (0 < type_length)
++	if (MAX_UTAG_NAME > type_length)
+ 		memcpy(type, (full + pos + 1), type_length);
+ }
+ 
+@@ -847,8 +847,11 @@ static ssize_t reload_write(struct file *file, const char __user *buffer,
+ 	   size_t count, loff_t *pos)
+ {
+ 
+-	if (1 > count)
++	/* only single character input plus new line */
++	if (2 < count) {
++		pr_err("%s invalid command length\n", __func__);
+ 		goto out;
++	}
+ 
+ 	if (copy_from_user(&reload_ctrl, buffer, 1)) {
+ 		pr_err("%s user copy error\n", __func__);
+-- 
+2.11.0
+

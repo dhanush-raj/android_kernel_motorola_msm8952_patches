@@ -1,0 +1,74 @@
+From ccd65097e6ad7969c236af129ae8518c7a70813c Mon Sep 17 00:00:00 2001
+From: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Date: Thu, 17 Dec 2015 12:05:15 -0600
+Subject: [PATCH 567/959] IKLOCSEN-2497 stml0xx: increase streaming sensor
+ queue and spi msg sizes
+
+Increase the streaming sensor queue size to 16. SPI msg size is also
+increased to accommodate the larger queue.
+
+Change-Id: I8921032ae8cc228be4c5115a4c3bce8e10de9d27
+Signed-off-by: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Reviewed-on: http://gerrit.mot.com/808185
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-by: Gabriel Burca <Gabriel.Burca@motorola.com>
+Reviewed-by: Eric Hefner <ehefner@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ include/linux/stml0xx.h      | 14 +++++++-------
+ include/uapi/linux/stml0xx.h |  2 +-
+ 2 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index c70254b2783..48a6b420fe8 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -89,7 +89,7 @@ enum vmm_ids {
+ #define STREAM_SENSOR_TYPE_ACCEL1        1
+ #define STREAM_SENSOR_TYPE_ACCEL2        2
+ #define STREAM_SENSOR_TYPE_UNCAL_GYRO    3
+-#define STREAM_SENSOR_QUEUE_DEPTH        10
++#define STREAM_SENSOR_QUEUE_DEPTH        16
+ #define STREAM_SENSOR_QUEUE_ENTRY_SIZE   9
+ #define STREAM_SENSOR_QUEUE_INSERT_IDX \
+ 	(STREAM_SENSOR_QUEUE_DEPTH * STREAM_SENSOR_QUEUE_ENTRY_SIZE)
+@@ -101,12 +101,12 @@ enum vmm_ids {
+ #define IRQ_IDX_STATUS_MED           1
+ #define IRQ_IDX_STATUS_HI            2
+ #define IRQ_IDX_STREAM_SENSOR_QUEUE  3
+-#define IRQ_IDX_GYRO_CAL_X           98
+-#define IRQ_IDX_GYRO_CAL_Y           100
+-#define IRQ_IDX_GYRO_CAL_Z           102
+-#define IRQ_IDX_ALS                  104
+-#define IRQ_IDX_DISP_ROTATE          106
+-#define IRQ_IDX_STEP_COUNTER         107
++#define IRQ_IDX_GYRO_CAL_X           152
++#define IRQ_IDX_GYRO_CAL_Y           154
++#define IRQ_IDX_GYRO_CAL_Z           156
++#define IRQ_IDX_ALS                  158
++#define IRQ_IDX_DISP_ROTATE          160
++#define IRQ_IDX_STEP_COUNTER         161
+ 
+ /* stml0xx wake IRQ SPI buffer indexes */
+ #define WAKE_IRQ_IDX_STATUS_LO              0
+diff --git a/include/uapi/linux/stml0xx.h b/include/uapi/linux/stml0xx.h
+index 78a42d9c9ee..a62d162ccf3 100644
+--- a/include/uapi/linux/stml0xx.h
++++ b/include/uapi/linux/stml0xx.h
+@@ -140,7 +140,7 @@
+ 		_IOW(STML0XX_IOCTL_BASE, 56, int)
+ 
+ /* SPI contants */
+-#define SPI_MSG_SIZE        128
++#define SPI_MSG_SIZE        192
+ #define SPI_TX_HDR_SIZE     6
+ #define SPI_CRC_SIZE        2
+ #define SPI_TX_PAYLOAD_LEN  (SPI_MSG_SIZE - SPI_TX_HDR_SIZE - SPI_CRC_SIZE)
+-- 
+2.11.0
+

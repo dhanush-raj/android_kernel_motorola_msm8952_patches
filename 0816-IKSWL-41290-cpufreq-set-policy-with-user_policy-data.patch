@@ -1,0 +1,49 @@
+From f2a78246d0d54d26b4115074f6bb1dd04ea76d2c Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Mon, 11 May 2015 12:00:06 -0700
+Subject: [PATCH 816/959] IKSWL-41290 cpufreq: set policy with user_policy data
+
+When we update/set cpufreq policy, we should set the new
+policy with user_policy data, and the cpufreq notifier
+will limit the min/max freq accordingly.
+
+This is the right process to update the cpufreq policy.
+
+But we miss it in store_scaling_governor func, which cause
+the governor set failed if the policy.max is less than
+user_policy.min.
+
+Change-Id: Ie21593e146b8d06fa017c87434e85ff33456c20f
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/746797
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ke Lu <a2435c@motorola.com>
+Reviewed-by: Hong-Mei Li <a21834@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Signed-off-by: chenyb1 <chenyb1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/834091
+Reviewed-by: Lian-Wei Wang <lian-wei.wang@motorola.com>
+---
+ drivers/cpufreq/cpufreq.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/cpufreq/cpufreq.c b/drivers/cpufreq/cpufreq.c
+index 81185c76cdf..4e059bd8da1 100644
+--- a/drivers/cpufreq/cpufreq.c
++++ b/drivers/cpufreq/cpufreq.c
+@@ -512,6 +512,9 @@ static ssize_t store_scaling_governor(struct cpufreq_policy *policy,
+ 						&new_policy.governor))
+ 		return -EINVAL;
+ 
++	new_policy.min = new_policy.user_policy.min;
++	new_policy.max = new_policy.user_policy.max;
++
+ 	ret = cpufreq_set_policy(policy, &new_policy);
+ 
+ 	policy->user_policy.policy = policy->policy;
+-- 
+2.11.0
+

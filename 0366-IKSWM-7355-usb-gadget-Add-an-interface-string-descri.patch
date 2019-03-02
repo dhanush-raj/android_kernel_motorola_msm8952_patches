@@ -1,0 +1,86 @@
+From adcf3e0984c061cdc8f8bb3102ede14860a89362 Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Thu, 19 Feb 2015 12:11:19 -0600
+Subject: [PATCH 366/959] IKSWM-7355: usb: gadget: Add an interface string
+ descriptor for PTP
+
+Needed for test automation to identify that the PTP function
+has successfully enumerated. PTP interface string is currently
+empty.
+
+Propagation of IKXREL3KK-3216
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+
+Change-Id: I89bc2fa2f2ebb68c6121405c3a169fff952b65ca
+Reviewed-on: http://gerrit.mot.com/716978
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/791449
+SME-Granted: SME Approvals Granted
+---
+ drivers/usb/gadget/f_mtp.c | 27 +++++++++++++++++++++++++--
+ 1 file changed, 25 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/usb/gadget/f_mtp.c b/drivers/usb/gadget/f_mtp.c
+index 35975fcd6c1..9e261a6aa15 100644
+--- a/drivers/usb/gadget/f_mtp.c
++++ b/drivers/usb/gadget/f_mtp.c
+@@ -305,6 +305,22 @@ static struct usb_gadget_strings *mtp_strings[] = {
+ 	NULL,
+ };
+ 
++static struct usb_string ptp_string_defs[] = {
++	/* Naming interface "PTP" so test scripts will recognize us */
++	[INTERFACE_STRING_INDEX].s	= "PTP",
++	{  },	/* end of list */
++};
++
++static struct usb_gadget_strings ptp_string_table = {
++	.language		= 0x0409,	/* en-US */
++	.strings		= ptp_string_defs,
++};
++
++static struct usb_gadget_strings *ptp_strings[] = {
++	&ptp_string_table,
++	NULL,
++};
++
+ /* Microsoft MTP OS String */
+ static u8 mtp_os_string[] = {
+ 	18, /* sizeof(mtp_os_string) */
+@@ -1502,7 +1518,13 @@ static int mtp_bind_config(struct usb_configuration *c, bool ptp_config)
+ 	printk(KERN_INFO "mtp_bind_config\n");
+ 
+ 	/* allocate a string ID for our interface */
+-	if (mtp_string_defs[INTERFACE_STRING_INDEX].id == 0) {
++	if (ptp_config && ptp_string_defs[INTERFACE_STRING_INDEX].id == 0) {
++		ret = usb_string_id(c->cdev);
++		if (ret < 0)
++			return ret;
++		ptp_string_defs[INTERFACE_STRING_INDEX].id = ret;
++		ptp_interface_desc.iInterface = ret;
++	} else if (mtp_string_defs[INTERFACE_STRING_INDEX].id == 0) {
+ 		ret = usb_string_id(c->cdev);
+ 		if (ret < 0)
+ 			return ret;
+@@ -1512,13 +1534,14 @@ static int mtp_bind_config(struct usb_configuration *c, bool ptp_config)
+ 
+ 	dev->cdev = c->cdev;
+ 	dev->function.name = "mtp";
+-	dev->function.strings = mtp_strings;
+ 	if (ptp_config) {
++		dev->function.strings = ptp_strings;
+ 		dev->function.fs_descriptors = fs_ptp_descs;
+ 		dev->function.hs_descriptors = hs_ptp_descs;
+ 		if (gadget_is_superspeed(c->cdev->gadget))
+ 			dev->function.ss_descriptors = ss_ptp_descs;
+ 	} else {
++		dev->function.strings = mtp_strings;
+ 		dev->function.fs_descriptors = fs_mtp_descs;
+ 		dev->function.hs_descriptors = hs_mtp_descs;
+ 		if (gadget_is_superspeed(c->cdev->gadget))
+-- 
+2.11.0
+

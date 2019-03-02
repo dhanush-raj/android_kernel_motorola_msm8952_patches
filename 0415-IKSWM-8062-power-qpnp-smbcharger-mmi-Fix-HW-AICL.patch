@@ -1,0 +1,66 @@
+From a5f5c9574f16b3143ad03d53f985e1d3a6888e7a Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Fri, 23 Oct 2015 16:35:16 -0500
+Subject: [PATCH 415/959] IKSWM-8062: power: qpnp-smbcharger-mmi: Fix HW AICL
+
+The SMBLITE changes the configuration bits for the
+HW AICL rerun time.  Fix this by setting it properly
+to 45 sec on SMBLITE.
+
+Change-Id: I5975f40c42a43c0b9881240b3f8552f4fa9c882b
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/794714
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 4f64dc1ba79..c7804467bb1 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -5254,6 +5254,8 @@ static inline int get_bpd(const char *name)
+ #define AICL_WL_SEL_CFG			0xF5
+ #define AICL_WL_SEL_MASK		SMB_MASK(1, 0)
+ #define AICL_WL_SEL_45S		0
++#define AICL_WL_SEL_LITE_MASK		SMB_MASK(2, 0)
++#define AICL_WL_SEL_LITE_45S		0x04
+ #define CHGR_CCMP_CFG			0xFA
+ #define JEITA_TEMP_HARD_LIMIT_BIT	BIT(5)
+ #define USBIN_ALLOW_MASK		SMB_MASK(2, 0)
+@@ -5271,6 +5273,7 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
+ {
+ 	int rc, i;
+ 	u8 reg, mask;
++	u8 aicl_val, aicl_mask;
+ 
+ 	/* Disable Charge LED on PMI8950 Only */
+ 	if (chip->schg_version == QPNP_SCHG_LITE) {
+@@ -5282,6 +5285,11 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
+ 		if (rc < 0)
+ 			dev_err(chip->dev, "Couldn't disable LED rc=%d\n",
+ 				rc);
++		aicl_val = AICL_WL_SEL_LITE_45S;
++		aicl_mask = AICL_WL_SEL_LITE_MASK;
++	} else {
++		aicl_val = AICL_WL_SEL_45S;
++		aicl_mask = AICL_WL_SEL_MASK;
+ 	}
+ 
+ 	rc = smbchg_read(chip, chip->revision,
+@@ -5297,7 +5305,7 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
+ 
+ 	rc = smbchg_sec_masked_write(chip,
+ 			chip->dc_chgpth_base + AICL_WL_SEL_CFG,
+-			AICL_WL_SEL_MASK, AICL_WL_SEL_45S);
++			aicl_mask, aicl_val);
+ 	if (rc < 0) {
+ 		dev_err(chip->dev, "Couldn't set AICL rerun timer rc=%d\n",
+ 				rc);
+-- 
+2.11.0
+

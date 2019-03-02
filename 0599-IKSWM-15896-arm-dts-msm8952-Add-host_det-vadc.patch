@@ -1,0 +1,36 @@
+From 0a49a5b9991b40fcfb855c28affbd6bf9d714a81 Mon Sep 17 00:00:00 2001
+From: yexh1 <yexh1@motorola.com>
+Date: Fri, 8 Jan 2016 15:53:53 +0800
+Subject: [PATCH 599/959] IKSWM-15896: arm/dts: msm8952: Add host_det vadc
+
+Add a node, which is used for disable the USB ID gpio input pin's
+pull up dynamic.
+
+Change-Id: Ie0f20edcac9adc8dbb9dc136874f2b84541a3248
+Signed-off-by: yexh1 <yexh1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/811660
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Hujun Liao <liaohj@motorola.com>
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index ae5fad0f790..114cda600c5 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -389,6 +389,7 @@
+ 	qcom,usbin-vadc = <&pmi8950_vadc>;
+ 	qcom,hsusb-otg-mode = <3>;
+ 	qcom,usbid-gpio = <&msm_gpio 62 0>;
++	qcom,usbid-gpio-hw = <62>;
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&usbid_default>;
+ 	vbus_otg-supply = <&smbcharger_charger_otg>;
+-- 
+2.11.0
+

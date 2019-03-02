@@ -1,0 +1,127 @@
+From 5db4dd96943e7784e37cd0d3dcd567dc1adda942 Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Tue, 10 May 2016 11:04:42 -0700
+Subject: [PATCH 887/959] IKKRNBSP-3894: msm: mdss: do not restore HBM until
+ 1st commit comes
+
+Don't enable HBM until 1st commit comes to avoid visible artifacts at
+unblank.
+
+Change-Id: Ica39e0388a399a8feb3f10a2de7633f16c748c21
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+(cherry picked from commit ea30831c7f3c9f621d104ad47c34bb76b6dd9bd5)
+Reviewed-on: http://gerrit.mot.com/853986
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Patrick Auchter <auchter@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c |  2 ++
+ drivers/video/msm/mdss/mdss_fb.c        | 38 +++++++++++++++++++++++++++++++--
+ drivers/video/msm/mdss/mdss_panel.h     |  1 +
+ 3 files changed, 39 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index c5c6bcc48d7..68dba99ce9c 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -1202,6 +1202,8 @@ static int mdss_panel_parse_param_prop(struct device_node *np,
+ 	struct dsi_panel_cmds *cmds;
+ 	char *prop;
+ 
++	pinfo->hbm_restore = false;
++
+ 	for (i = 0; i < ARRAY_SIZE(mdss_dsi_panel_param); i++) {
+ 		param = &mdss_dsi_panel_param[i];
+ 		cmds = kcalloc(param->val_max, sizeof(struct dsi_panel_cmds),
+diff --git a/drivers/video/msm/mdss/mdss_fb.c b/drivers/video/msm/mdss/mdss_fb.c
+index fea5c4345b9..38f305baf09 100644
+--- a/drivers/video/msm/mdss/mdss_fb.c
++++ b/drivers/video/msm/mdss/mdss_fb.c
+@@ -996,11 +996,22 @@ static int __maybe_unused mdss_fb_set_param(struct device *dev,
+ 
+ 	mutex_lock(&mfd->param_lock);
+ 	mutex_lock(&ctl->offlock);
+-	if (param->value != value) {
+-		if (mdss_fb_is_power_on(mfd))
++
++	if (param->value == value)
++		goto unlock;
++
++	if (id == PARAM_HBM_ID) {
++		if (mdss_fb_is_power_on(mfd) && !mfd->panel_info->hbm_restore)
+ 			ret = mdss_fb_set_hw_param(mfd, id, value);
+ 		param->value = value;
++                goto unlock;
+ 	}
++
++	if (mdss_fb_is_power_on(mfd))
++		ret = mdss_fb_set_hw_param(mfd, id, value);
++	param->value = value;
++
++unlock:
+ 	mutex_unlock(&ctl->offlock);
+ 	mutex_unlock(&mfd->param_lock);
+ 
+@@ -1021,6 +1032,23 @@ static int __maybe_unused mdss_fb_get_param(struct device *dev,
+ 	return 0;
+ }
+ 
++static void mdss_fb_restore_param_hbm(struct msm_fb_data_type *mfd)
++{
++	struct mdss_panel_info *pinfo = mfd->panel_info;
++	struct panel_param *param;
++
++	param = pinfo->param[PARAM_HBM_ID];
++	if (!param || !pinfo->hbm_restore)
++		return;
++
++	mutex_lock(&mfd->param_lock);
++
++	pinfo->hbm_restore = false;
++	mdss_fb_set_hw_param(mfd, PARAM_HBM_ID, param->value);
++
++	mutex_unlock(&mfd->param_lock);
++}
++
+ static void mdss_fb_restore_param(struct msm_fb_data_type *mfd)
+ {
+ 	struct mdss_panel_info *pinfo = mfd->panel_info;
+@@ -1032,6 +1060,10 @@ static void mdss_fb_restore_param(struct msm_fb_data_type *mfd)
+ 		param = pinfo->param[i];
+ 		if (!param || param->value == param->default_value)
+ 			continue;
++		if (i == PARAM_HBM_ID) {
++			pinfo->hbm_restore = true;
++			continue;
++		}
+ 		mdss_fb_set_hw_param(mfd, i, param->value);
+ 	}
+ 	mutex_unlock(&mfd->param_lock);
+@@ -1687,6 +1719,8 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
+ 	struct mdss_panel_data *pdata;
+ 	u32 temp;
+ 	bool bl_notify = false;
++ 
++        mdss_fb_restore_param_hbm(mfd);
+ 
+ 	if (mfd->unset_bl_level == U32_MAX)
+ 		return;
+diff --git a/drivers/video/msm/mdss/mdss_panel.h b/drivers/video/msm/mdss/mdss_panel.h
+index 926799b8274..4f44fdbbb0c 100644
+--- a/drivers/video/msm/mdss/mdss_panel.h
++++ b/drivers/video/msm/mdss/mdss_panel.h
+@@ -639,6 +639,7 @@ struct mdss_panel_info {
+ 	u32 disp_on_check_val;
+ 	bool blank_progress_notify_enabled;
+ 	struct panel_param *param[PARAM_ID_NUM];
++	bool hbm_restore;
+ };
+ 
+ struct mdss_panel_timing {
+-- 
+2.11.0
+

@@ -1,0 +1,52 @@
+From 8764f8517d32b54c4ee506f010c74b5f9d1c7b23 Mon Sep 17 00:00:00 2001
+From: houdz1 <houdz1@motorola.com>
+Date: Tue, 5 Jan 2016 14:39:20 +0800
+Subject: [PATCH 603/959] IKKRNBSP-3588  arm/dts:set panel-on-check-value as
+ 0x1C.
+
+If ESD checking is disabled, kernel would use 0x9C.
+Actually, normal power mode value of LGD and BOE
+panel is 0x1C, not 0x9C.
+
+Change-Id: I34f44408614e1be8209f2c4455564e04b89a51d6
+Signed-off-by: houdz1 <houdz1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/810596
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi | 1 +
+ arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+index 6f3d01491c1..94df437424a 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+@@ -103,6 +103,7 @@ qcom,mdss-dsi-panel-status-check-mode = "reg_read";
+ qcom,mdss-dsi-panel-status-command = [06 01 00 01 00 00 01 0A];
+ qcom,mdss-dsi-panel-status-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-panel-status-value = <0x1c>;
++qcom,mdss-dsi-panel-on-check-value = <0x1c>;
+ qcom,partial-update-enabled;
+ qcom,panel-roi-alignment = <8 2 8 2 0 0>;
+ 
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+index e35eaf891e4..3903ff4a323 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -100,6 +100,7 @@ qcom,mdss-dsi-panel-status-check-mode = "reg_read";
+ qcom,mdss-dsi-panel-status-command = [06 01 00 01 00 00 01 0A];
+ qcom,mdss-dsi-panel-status-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-panel-status-value = <0x1c>;
++qcom,mdss-dsi-panel-on-check-value = <0x1c>;
+ qcom,partial-update-enabled;
+ qcom,panel-roi-alignment = <8 2 8 2 0 0>;
+ 
+-- 
+2.11.0
+

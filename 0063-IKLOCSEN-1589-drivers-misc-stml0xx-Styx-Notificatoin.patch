@@ -1,0 +1,295 @@
+From 8fa1be23248a10ee34764956ededae31d73c434e Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Fri, 8 Aug 2014 13:18:33 -0500
+Subject: [PATCH 063/959] IKLOCSEN-1589 drivers: misc: stml0xx: Styx
+ Notificatoin LED support
+
+Create a LED device used by the lighting HAL to control
+the notification LED. Pass the notification LED settings
+to the Sensor Hub.
+
+Change-Id: I5fe8642bf45f0e2b3e71824ccf5201485d24b3f4
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/661265
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-by: Manasa Guntaka <mguntaka@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/Makefile        |   3 +-
+ drivers/misc/stml0xx/stml0xx_core.c  |  23 ++++++-
+ drivers/misc/stml0xx/stml0xx_led.c   | 122 +++++++++++++++++++++++++++++++++++
+ drivers/misc/stml0xx/stml0xx_reset.c |   4 ++
+ include/linux/stml0xx.h              |  21 ++++++
+ 5 files changed, 171 insertions(+), 2 deletions(-)
+ create mode 100644 drivers/misc/stml0xx/stml0xx_led.c
+
+diff --git a/drivers/misc/stml0xx/Makefile b/drivers/misc/stml0xx/Makefile
+index a206152fc1d..b1475813cfe 100644
+--- a/drivers/misc/stml0xx/Makefile
++++ b/drivers/misc/stml0xx/Makefile
+@@ -6,5 +6,6 @@ stml0xx-objs := stml0xx_core.o \
+ 		stml0xx_reset.o \
+ 		stml0xx_wake_irq.o \
+ 		stml0xx_spi.o \
+-		stml0xx_spi_crc.o
++		stml0xx_spi_crc.o \
++                stml0xx_led.o
+ obj-$(CONFIG_SENSORS_STML0XX) += stml0xx.o
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 78680710fb7..bc6f3980214 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -872,6 +872,22 @@ static int stml0xx_probe(struct spi_device *spi)
+ 		goto err9;
+ 	}
+ 
++	ps_stml0xx->led_cdev.name =  STML0XX_LED_NAME;
++	err = led_classdev_register(&spi->dev, &ps_stml0xx->led_cdev);
++	if (err < 0) {
++		dev_err(&ps_stml0xx->spi->dev,
++			"couldn't register \'%s\' LED class\n",
++			ps_stml0xx->led_cdev.name);
++		goto err10;
++	}
++	err = sysfs_create_group(&ps_stml0xx->led_cdev.dev->kobj,
++			&stml0xx_notification_attribute_group);
++	if (err < 0) {
++		dev_err(&ps_stml0xx->spi->dev,
++			"couldn't register LED attribute sysfs group\n");
++		goto err11;
++	}
++
+ 	ps_stml0xx->is_suspended = false;
+ 
+ 	switch_stml0xx_mode(NORMALMODE);
+@@ -881,7 +897,10 @@ static int stml0xx_probe(struct spi_device *spi)
+ 	dev_dbg(&spi->dev, "probed finished");
+ 
+ 	return 0;
+-
++err11:
++	led_classdev_unregister(&ps_stml0xx->led_cdev);
++err10:
++	input_free_device(ps_stml0xx->input_dev);
+ err9:
+ 	input_free_device(ps_stml0xx->input_dev);
+ err8:
+@@ -924,6 +943,8 @@ static int stml0xx_remove(struct spi_device *spi)
+ {
+ 	struct stml0xx_data *ps_stml0xx = spi_get_drvdata(spi);
+ 
++	led_classdev_unregister(&ps_stml0xx->led_cdev);
++
+ 	switch_dev_unregister(&ps_stml0xx->dsdev);
+ 	switch_dev_unregister(&ps_stml0xx->edsdev);
+ 
+diff --git a/drivers/misc/stml0xx/stml0xx_led.c b/drivers/misc/stml0xx/stml0xx_led.c
+new file mode 100644
+index 00000000000..96e219aca32
+--- /dev/null
++++ b/drivers/misc/stml0xx/stml0xx_led.c
+@@ -0,0 +1,122 @@
++/*
++ * Copyright (C) 2014 Motorola Mobility LLC
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++ * 02111-1307, USA
++ */
++
++#include <linux/stat.h>
++#include <linux/err.h>
++#include <linux/errno.h>
++
++
++#include <linux/stml0xx.h>
++
++int stml0xx_led_set(struct stml0xx_data *ps_stml0xx)
++{
++	unsigned char buf[SPI_MSG_SIZE];
++	int err;
++
++	buf[0] = ps_stml0xx->led_rgb >> 24;
++	buf[1] = (ps_stml0xx->led_rgb >> 16) & 0xFF;
++	buf[2] = (ps_stml0xx->led_rgb >> 8) & 0xFF;
++	buf[3] = ps_stml0xx->led_rgb & 0xFF;
++
++	buf[4] = ps_stml0xx->led_ms_on >> 24;
++	buf[5] = (ps_stml0xx->led_ms_on >> 16) & 0xFF;
++	buf[6] = (ps_stml0xx->led_ms_on >> 8) & 0xFF;
++	buf[7] = ps_stml0xx->led_ms_on & 0xFF;
++
++	buf[8] = ps_stml0xx->led_ms_off >> 24;
++	buf[9] = (ps_stml0xx->led_ms_off >> 16) & 0xFF;
++	buf[10] = (ps_stml0xx->led_ms_off >> 8) & 0xFF;
++	buf[11] = ps_stml0xx->led_ms_off & 0xFF;
++
++	err = stml0xx_spi_send_write_reg(LED_NOTIF_CONTROL, buf, 12);
++	if (err < 0)
++		return err;
++
++	return 0;
++}
++
++static ssize_t notification_show_control(struct device *dev,
++	struct device_attribute *attr, char *buf)
++{
++	struct led_classdev *led = dev_get_drvdata(dev);
++	struct stml0xx_data *ps_stml0xx =
++		container_of(led, struct stml0xx_data, led_cdev);
++
++	scnprintf(buf, PAGE_SIZE,
++		"RGB=0x%08X, on/off=%d/%d ms, ramp=%d%%/%d%%\n",
++		ps_stml0xx->led_rgb, ps_stml0xx->led_ms_on,
++		ps_stml0xx->led_ms_off, ps_stml0xx->led_ramp_up,
++		ps_stml0xx->led_ramp_down);
++
++	return strlen(buf);
++}
++
++static ssize_t notification_store_control(struct device *dev,
++	struct device_attribute *attr,
++	const char *buf, size_t len)
++{
++	struct led_classdev *led = dev_get_drvdata(dev);
++	struct stml0xx_data *ps_stml0xx =
++		container_of(led, struct stml0xx_data, led_cdev);
++	unsigned rgb = 0, ms_on = 0, ms_off = 0, rup = 0, rdown = 0;
++
++	if (len == 0)
++		return 0;
++
++	sscanf(buf, "%x %u %u %u %u", &rgb, &ms_on, &ms_off, &rup, &rdown);
++	dev_dbg(&ps_stml0xx->spi->dev,
++		"0x%X, on/off=%u/%u ms, ramp=%u%%/%u%%\n",
++		rgb, ms_on, ms_off, rup, rdown);
++
++	/* LED that is off is not blinking */
++	if (rgb == 0) {
++		ms_on = 0;
++		ms_off = 0;
++	}
++	/* Total ramp time cannot be more than 100% */
++	if (rup + rdown > 100) {
++		rup = 50;
++		rdown = 50;
++	}
++	/* If ms_on is not 0 but ms_off is 0 we won't blink */
++	if (ms_off == 0)
++		ms_on = 0;
++
++	ps_stml0xx->led_rgb = rgb;
++	ps_stml0xx->led_ms_on = ms_on;
++	ps_stml0xx->led_ms_off = ms_off;
++	ps_stml0xx->led_ramp_up = rup;
++	ps_stml0xx->led_ramp_down = rdown;
++
++	stml0xx_led_set(ps_stml0xx);
++
++	return len;
++}
++
++static DEVICE_ATTR(control, S_IRUGO | S_IWUSR,
++	notification_show_control, notification_store_control);
++
++static struct attribute *notification_led_attributes[] = {
++	&dev_attr_control.attr,
++	NULL,
++};
++
++struct attribute_group stml0xx_notification_attribute_group = {
++	.attrs = notification_led_attributes
++};
++
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index b41dd7fb970..b0d3d93173e 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -144,6 +144,10 @@ int stml0xx_reset_and_init(void)
+ 		ret_err = err;
+ 	}
+ 
++	err = stml0xx_led_set(stml0xx_misc_data);
++	if (err < 0)
++		ret_err =  err;
++
+ 	/* sending reset to slpc hal */
+ 	stml0xx_ms_data_buffer_write(stml0xx_misc_data, DT_RESET, NULL, 0);
+ 
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 3c9e644b9d2..372b4bf5b9e 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -19,6 +19,13 @@
+ #ifndef __STML0XX_H__
+ #define __STML0XX_H__
+ 
++#include <linux/cdev.h>
++#include <linux/irq.h>
++#include <linux/leds.h>
++#include <linux/module.h>
++#include <linux/switch.h>
++#include <linux/wakelock.h>
++
+ /* Log macros */
+ #define ENABLE_VERBOSE_LOGGING 1
+ 
+@@ -328,6 +335,8 @@ struct stm_response {
+ 
+ #define AP_POSIX_TIME                   0x10
+ 
++#define LED_NOTIF_CONTROL               0X11
++
+ #define ACCEL_UPDATE_RATE               0x16
+ #define MAG_UPDATE_RATE                 0x17
+ #define PRESSURE_UPDATE_RATE            0x18
+@@ -595,6 +604,13 @@ struct stml0xx_data {
+ 
+ 	bool is_suspended;
+ 	bool pending_wake_work;
++
++	struct led_classdev led_cdev;
++	unsigned int led_rgb;
++	unsigned int led_ms_on;
++	unsigned int led_ms_off;
++	unsigned int led_ramp_up;
++	unsigned int led_ramp_down;
+ };
+ 
+ /* per algo config, request, and event registers */
+@@ -612,6 +628,9 @@ struct stml0xx_algo_requst_t {
+ 	char data[ALGO_RQST_DATA_SIZE];
+ };
+ 
++#define STML0XX_LED_NAME "rgb"
++extern struct attribute_group stml0xx_notification_attribute_group;
++
+ irqreturn_t stml0xx_isr(int irq, void *dev);
+ void stml0xx_irq_work_func(struct work_struct *work);
+ 
+@@ -671,6 +690,8 @@ int stml0xx_get_version(struct stml0xx_data *ps_stml0xx);
+ int switch_stml0xx_mode(enum stm_mode mode);
+ int stml0xx_bootloadermode(struct stml0xx_data *ps_stml0xx);
+ 
++int stml0xx_led_set(struct stml0xx_data *ps_stml0xx);
++
+ extern struct stml0xx_data *stml0xx_misc_data;
+ 
+ extern unsigned short stml0xx_g_acc_delay;
+-- 
+2.11.0
+

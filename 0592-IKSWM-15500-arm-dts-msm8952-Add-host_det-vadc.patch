@@ -1,0 +1,41 @@
+From b2af65b4db3b9d91d9c63db9b8b5ad0486720ef0 Mon Sep 17 00:00:00 2001
+From: yexh1 <yexh1@motorola.com>
+Date: Wed, 6 Jan 2016 14:48:43 +0800
+Subject: [PATCH 592/959] IKSWM-15500: arm/dts: msm8952: Add host_det vadc
+
+The voltage is expected to about 5V.
+
+Change-Id: Id71c2441d6538a2bb643d5c81ba952a097298b36
+Signed-off-by: yexh1 <yexh1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/810951
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 486cdd70a0c..946b99b6079 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -977,11 +977,11 @@
+ };
+ 
+ &pmi8950_vadc {
+-	chan@20 {
++	chan@10 {
+ 		label = "host_det";
+-		reg = <0x20>;
++		reg = <0x10>;
+ 		qcom,decimation = <0>;
+-		qcom,pre-div-channel-scaling = <0>;
++		qcom,pre-div-channel-scaling = <1>;
+ 		qcom,calibration-type = "absolute";
+ 		qcom,scale-function = <0>;
+ 		qcom,hw-settle-time = <0>;
+-- 
+2.11.0
+

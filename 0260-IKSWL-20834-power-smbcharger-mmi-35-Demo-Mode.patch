@@ -1,0 +1,68 @@
+From c516f8e02b8f84965852f9fd0e418c85ff6b3998 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Wed, 3 Jun 2015 13:22:54 -0500
+Subject: [PATCH 260/959] IKSWL-20834: power: smbcharger-mmi: 35% Demo Mode
+
+Need Input Power cycling in Demo mode between
+30% and 35%.  Both USBIN and DCIN will be
+suspended at SOC at or above 35%.  They will
+be re-enabled at SOC at or below 30%.
+
+Change-Id: Ie99eedb976356faecbdd37ca85e3db6d98e45d34
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/754056
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Reviewed-by: Vidyadhar Gurram <rnh786@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 7c1c082f74e..151e8201034 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -1279,6 +1279,10 @@ enum enable_reason {
+ 	 * charger does not accidentally try to charge from the external supply.
+ 	 */
+ 	REASON_OTG = BIT(5),
++	/*
++	 * The Store DEMO App is running, ensure proper USB Suspend.
++	 */
++	REASON_DEMO = BIT(6),
+ };
+ 
+ enum battchg_enable_reason {
+@@ -6908,6 +6912,8 @@ static void smbchg_sync_accy_property_status(struct smbchg_chip *chip)
+ #define STEPCHG_ONE_FV_COMP 40
+ #define STEPCHG_FULL_FV_COMP 100
+ #define STEPCHG_CURR_ADJ 200
++#define DEMO_MODE_MAX_SOC 35
++#define DEMO_MODE_HYS_SOC 5
+ static void smbchg_heartbeat_work(struct work_struct *work)
+ {
+ 	struct smbchg_chip *chip = container_of(work,
+@@ -6938,6 +6944,16 @@ static void smbchg_heartbeat_work(struct work_struct *work)
+ 	if (chip->demo_mode) {
+ 		chip->stepchg_state = STEP_NONE;
+ 		dev_warn(chip->dev, "Battery in Demo Mode charging Limited\n");
++		if ((!!!(chip->usb_suspended & REASON_DEMO)) &&
++		    (batt_soc >= DEMO_MODE_MAX_SOC)) {
++			smbchg_usb_en(chip, false, REASON_DEMO);
++			smbchg_dc_en(chip, false, REASON_DEMO);
++		} else if (!!(chip->usb_suspended & REASON_DEMO) &&
++			(batt_soc <=
++			 (DEMO_MODE_MAX_SOC - DEMO_MODE_HYS_SOC))) {
++			smbchg_usb_en(chip, true, REASON_DEMO);
++			smbchg_dc_en(chip, true, REASON_DEMO);
++		}
+ 	} else if ((chip->stepchg_state == STEP_NONE) && (chip->usb_present)) {
+ 		if (batt_mv >= chip->stepchg_voltage_mv)
+ 			chip->stepchg_state = STEP_ONE;
+-- 
+2.11.0
+

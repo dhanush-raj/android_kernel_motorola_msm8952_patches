@@ -1,0 +1,88 @@
+From 034561983f81681df52f272c688fdd54c226db0a Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Tue, 7 Oct 2014 20:36:46 -0500
+Subject: [PATCH 084/959] IKVPREL1L-615 driver: misc: stml0xx: reports headset
+ events
+
+report headset, headphone plug/unplug status as input events.
+report default button (KEY_MEDIA) press events as input events.
+
+Change-Id: Ida075df3ed8830e6bd326e049e22e4bc417a1459
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/677179
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Vladimir Karpovich <vkarpovich@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_wake_irq.c | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index c8762868dac..5884aae8c2c 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -227,6 +227,9 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 				dev_dbg(&stml0xx_misc_data->spi->dev,
+ 					"Headset button 1 released");
+ 				Headset_State = SH_HEADSET_INSERTED;
++				input_report_key(ps_stml0xx->input_dev,
++					KEY_MEDIA, 0);
++				input_sync(ps_stml0xx->input_dev);
+ 			}
+ 			break;
+ 		case SH_HEADSET_BUTTON_2:
+@@ -258,12 +261,20 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 				dev_dbg(&stml0xx_misc_data->spi->dev,
+ 					"Headphone removed");
+ 				Headset_State = SH_HEADSET_REMOVED;
++				input_report_switch(ps_stml0xx->input_dev,
++						SW_HEADPHONE_INSERT, 0);
++				input_sync(ps_stml0xx->input_dev);
+ 			}
+ 		} else if (Headset_State ==  SH_HEADSET_INSERTED) {
+ 			if (!(new_state & SH_HEADSET_DETECTED)) {
+ 				dev_dbg(&stml0xx_misc_data->spi->dev,
+ 					"Headset removed");
+ 				Headset_State = SH_HEADSET_REMOVED;
++				input_report_switch(ps_stml0xx->input_dev,
++						SW_HEADPHONE_INSERT,  0);
++				input_report_switch(ps_stml0xx->input_dev,
++						SW_MICROPHONE_INSERT, 0);
++				input_sync(ps_stml0xx->input_dev);
+ 			}
+ 		}
+ 		if (Headset_State == SH_HEADSET_REMOVED) {
+@@ -271,10 +282,18 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 				dev_dbg(&stml0xx_misc_data->spi->dev,
+ 					"Headphone inserted");
+ 				Headset_State = SH_HEADPHONE_INSERTED;
++				input_report_switch(ps_stml0xx->input_dev,
++						SW_HEADPHONE_INSERT, 1);
++				input_sync(ps_stml0xx->input_dev);
+ 			} else if (new_state & SH_HEADSET_DETECTED) {
+ 				dev_dbg(&stml0xx_misc_data->spi->dev,
+ 					"Headset inserted");
+ 				Headset_State = SH_HEADSET_INSERTED;
++				input_report_switch(ps_stml0xx->input_dev,
++						SW_HEADPHONE_INSERT,  1);
++				input_report_switch(ps_stml0xx->input_dev,
++						SW_MICROPHONE_INSERT, 1);
++				input_sync(ps_stml0xx->input_dev);
+ 			}
+ 		}
+ 		if (Headset_State == SH_HEADSET_INSERTED) {
+@@ -282,6 +301,9 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 				dev_dbg(&stml0xx_misc_data->spi->dev,
+ 					"Headset button 1 pressed");
+ 				Headset_State = SH_HEADSET_BUTTON_1;
++				input_report_key(ps_stml0xx->input_dev,
++					KEY_MEDIA, 1);
++				input_sync(ps_stml0xx->input_dev);
+ 			} else if (new_state & SH_HEADSET_BUTTON_2_DOWN) {
+ 				dev_dbg(&stml0xx_misc_data->spi->dev,
+ 					"Headset button 2 pressed");
+-- 
+2.11.0
+

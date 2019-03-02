@@ -1,0 +1,76 @@
+From fb97ffb40b140684e5bcc7ee574e2496ecbd93d9 Mon Sep 17 00:00:00 2001
+From: houdz1 <houdz1@motorola.com>
+Date: Fri, 25 Dec 2015 16:12:03 +0800
+Subject: [PATCH 601/959] IKSWM-15188 arm/dts:change DSI Frequency from 403MHZ
+ to 415MHZ.
+
+modem team finalized DSI Frequency at 415MHZ.
+
+Change-Id: I234cffd4628ba4f26a444ffb871c21ee6598ebe9
+Signed-off-by: houdz1 <houdz1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/809543
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi | 6 +++---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi | 6 +++---
+ 2 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+index 5299eeea9c1..6f3d01491c1 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+@@ -23,7 +23,7 @@ qcom,mdss-dsi-panel-height = <1920>;
+ qcom,mdss-pan-physical-width-dimension = <68>;
+ qcom,mdss-pan-physical-height-dimension = <121>;
+ 
+-qcom,mdss-dsi-panel-clockrate = <807549120>;
++qcom,mdss-dsi-panel-clockrate = <830000000>;
+ qcom,mdss-dsi-h-front-porch = <24>;
+ qcom,mdss-dsi-h-back-porch = <40>;
+ qcom,mdss-dsi-h-pulse-width = <4>;
+@@ -80,9 +80,9 @@ qcom,mdss-dsi-lane-0-state;
+ qcom,mdss-dsi-lane-1-state;
+ qcom,mdss-dsi-lane-2-state;
+ qcom,mdss-dsi-lane-3-state;
+-qcom,mdss-dsi-panel-timings = [d6 32 22 00 60 66 26 36 28 03 04 00];
++qcom,mdss-dsi-panel-timings = [DB 34 22 00 62 66 28 36 2B 03 04 00];
+ qcom,mdss-dsi-t-clk-post = <0x3>;
+-qcom,mdss-dsi-t-clk-pre = <0x28>;
++qcom,mdss-dsi-t-clk-pre = <0x29>;
+ qcom,mdss-dsi-bl-min-level = <1>;
+ qcom,mdss-dsi-bl-max-level = <4095>;
+ qcom,mdss-dsi-bl-on-defer-delay = <30>;
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+index 9f14e7b927d..e35eaf891e4 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -22,7 +22,7 @@ qcom,mdss-dsi-panel-height = <1920>;
+ qcom,mdss-pan-physical-width-dimension = <68>;
+ qcom,mdss-pan-physical-height-dimension = <121>;
+ 
+-qcom,mdss-dsi-panel-clockrate = <807549120>;
++qcom,mdss-dsi-panel-clockrate = <830000000>;
+ qcom,mdss-dsi-h-front-porch = <24>;
+ qcom,mdss-dsi-h-back-porch = <40>;
+ qcom,mdss-dsi-h-pulse-width = <4>;
+@@ -77,9 +77,9 @@ qcom,mdss-dsi-lane-0-state;
+ qcom,mdss-dsi-lane-1-state;
+ qcom,mdss-dsi-lane-2-state;
+ qcom,mdss-dsi-lane-3-state;
+-qcom,mdss-dsi-panel-timings = [d6 32 22 00 60 66 26 36 28 03 04 00];
++qcom,mdss-dsi-panel-timings = [DB 34 22 00 62 66 28 36 2B 03 04 00];
+ qcom,mdss-dsi-t-clk-post = <0x3>;
+-qcom,mdss-dsi-t-clk-pre = <0x28>;
++qcom,mdss-dsi-t-clk-pre = <0x29>;
+ qcom,mdss-dsi-bl-min-level = <1>;
+ qcom,mdss-dsi-bl-max-level = <4095>;
+ qcom,mdss-dsi-bl-on-defer-delay = <30>;
+-- 
+2.11.0
+

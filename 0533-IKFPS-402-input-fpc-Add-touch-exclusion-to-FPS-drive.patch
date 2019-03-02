@@ -1,0 +1,186 @@
+From fbad1d47eb750306e932af1741bf1f70b63c391e Mon Sep 17 00:00:00 2001
+From: Thomas Merrell-ATM098 <thomasmerrell@motorola.com>
+Date: Mon, 7 Dec 2015 20:49:59 -0600
+Subject: [PATCH 533/959] IKFPS-402: input: fpc: Add touch exclusion to FPS
+ driver
+
+When ever FPS is active a small portion of the touch panel will
+be disabled.  This is to prevent the home button or Google Now
+from inadvertently being selected when the user is actually
+interacting with the FPS.
+
+Change-Id: I46fb302c5d9c9337a4c166b01a2d492261334503
+Signed-off-by: Thomas Merrell-ATM098 <thomasmerrell@motorola.com>
+Reviewed-on: http://gerrit.mot.com/805574
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/fpc1020_tee.c | 107 ++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 106 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/input/misc/fpc1020_tee.c b/drivers/input/misc/fpc1020_tee.c
+index eaa7910403d..06f63e3bf68 100644
+--- a/drivers/input/misc/fpc1020_tee.c
++++ b/drivers/input/misc/fpc1020_tee.c
+@@ -21,6 +21,7 @@
+ #include <linux/regulator/consumer.h>
+ #include <linux/spi/spi.h>
+ #include <linux/wakelock.h>
++#include <linux/notifier.h>
+ 
+ struct vreg_config {
+ 	char *name;
+@@ -35,6 +36,94 @@ static const struct vreg_config const vreg_conf[] = {
+ 	{ "vdd_io", 1800000UL, 1800000UL, 6000, },
+ };
+ 
++struct FPS_data {
++	unsigned int enabled;
++	unsigned int state;
++	struct blocking_notifier_head nhead;
++} *fpsData;
++
++struct FPS_data *FPS_init(void)
++{
++	struct FPS_data *mdata = kzalloc(
++			sizeof(struct FPS_data), GFP_KERNEL);
++	if (mdata) {
++		BLOCKING_INIT_NOTIFIER_HEAD(&mdata->nhead);
++		pr_debug("%s: FPS notifier data structure init-ed\n", __func__);
++	}
++	return mdata;
++}
++
++int FPS_register_notifier(struct notifier_block *nb,
++	unsigned long stype, bool report)
++{
++	int error;
++	struct FPS_data *mdata = fpsData;
++
++	if (!mdata)
++		return -ENODEV;
++
++	mdata->enabled = (unsigned int)stype;
++	pr_debug("%s: FPS sensor %lu notifier enabled\n", __func__, stype);
++
++	error = blocking_notifier_chain_register(&mdata->nhead, nb);
++	if (!error && report) {
++		int state = mdata->state;
++		/* send current FPS state on register request */
++		blocking_notifier_call_chain(&mdata->nhead,
++				stype, (void *)&state);
++		pr_debug("%s: FPS reported state %d\n", __func__, state);
++	}
++	return error;
++}
++EXPORT_SYMBOL_GPL(FPS_register_notifier);
++
++int FPS_unregister_notifier(struct notifier_block *nb,
++		unsigned long stype)
++{
++	int error;
++	struct FPS_data *mdata = fpsData;
++
++	if (!mdata)
++		return -ENODEV;
++
++	error = blocking_notifier_chain_unregister(&mdata->nhead, nb);
++	pr_debug("%s: FPS sensor %lu notifier unregister\n", __func__, stype);
++
++	if (!mdata->nhead.head) {
++		mdata->enabled = 0;
++		pr_debug("%s: FPS sensor %lu no clients\n", __func__, stype);
++	}
++
++	return error;
++}
++EXPORT_SYMBOL_GPL(FPS_unregister_notifier);
++
++void FPS_notify(unsigned long stype, int state)
++{
++	struct FPS_data *mdata = fpsData;
++
++	pr_debug("%s: Enter", __func__);
++
++	if (!mdata) {
++		pr_err("%s: FPS notifier not initialized yet\n", __func__);
++		return;
++	}
++
++	pr_debug("%s: FPS current state %d -> (0x%x)\n", __func__,
++	       mdata->state, state);
++
++	if (mdata->enabled && mdata->state != state) {
++		mdata->state = state;
++		blocking_notifier_call_chain(&mdata->nhead,
++					     stype, (void *)&state);
++		pr_debug("%s: FPS notification sent\n", __func__);
++	} else if (!mdata->enabled) {
++		pr_err("%s: !mdata->enabled", __func__);
++	} else {
++		pr_err("%s: mdata->state==state", __func__);
++	}
++}
++
+ struct fpc1020_data {
+ 	struct device *dev;
+ 	struct spi_device *spi;
+@@ -43,6 +132,8 @@ struct fpc1020_data {
+ 	struct regulator *vreg[ARRAY_SIZE(vreg_conf)];
+ 	struct wake_lock wlock;
+ 
++	struct notifier_block nb;
++
+ 	int irq_gpio;
+ 	int rst_gpio;
+ 	int irq_num;
+@@ -164,6 +255,18 @@ out:
+ 	return rc;
+ }
+ 
++static ssize_t dev_enable_set(struct device *dev,
++		struct device_attribute *attr, const char *buf, size_t count)
++{
++	struct  fpc1020_data *fpc1020 = dev_get_drvdata(dev);
++
++	int state = (*buf == '1') ? 1 : 0;
++
++	FPS_notify(0xbeef, state);
++	dev_dbg(fpc1020->dev, "%s state = %d\n", __func__, state);
++	return 1;
++}
++static DEVICE_ATTR(dev_enable, S_IWUSR | S_IWGRP, NULL, dev_enable_set);
+ 
+ static ssize_t clk_enable_set(struct device *dev,
+ 		struct device_attribute *attr, const char *buf, size_t count)
+@@ -172,7 +275,6 @@ static ssize_t clk_enable_set(struct device *dev,
+ 
+ 	return set_clks(fpc1020, (*buf == '1')) ? : count;
+ }
+-
+ static DEVICE_ATTR(clk_enable, S_IWUSR | S_IWGRP, NULL, clk_enable_set);
+ 
+ static ssize_t irq_get(struct device *device,
+@@ -187,6 +289,7 @@ static ssize_t irq_get(struct device *device,
+ static DEVICE_ATTR(irq, S_IRUSR | S_IRGRP, irq_get, NULL);
+ 
+ static struct attribute *attributes[] = {
++	&dev_attr_dev_enable.attr,
+ 	&dev_attr_clk_enable.attr,
+ 	&dev_attr_irq.attr,
+ 	NULL
+@@ -235,6 +338,8 @@ static int fpc1020_probe(struct spi_device *spi)
+ 		goto exit;
+ 	}
+ 
++	fpsData = FPS_init();
++
+ 	fpc1020->dev = dev;
+ 	dev_set_drvdata(dev, fpc1020);
+ 	fpc1020->spi = spi;
+-- 
+2.11.0
+

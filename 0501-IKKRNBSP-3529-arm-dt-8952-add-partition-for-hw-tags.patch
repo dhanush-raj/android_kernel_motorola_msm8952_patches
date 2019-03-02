@@ -1,0 +1,39 @@
+From a4bfeb2a497b55e15fbcbbbeb671eb35e638321f Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Fri, 20 Nov 2015 10:49:36 -0600
+Subject: [PATCH 501/959] IKKRNBSP-3529 arm/dt: 8952: add partition for hw tags
+
+Provision hw partition.
+
+Change-Id: Ib773af2a8ee4c2ff9aa859b7ca6acdc9febdd79d
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/801795
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index b4c50495c7e..ce575a4f7ee 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -62,6 +62,12 @@
+ 		mmi,backup-utags = "/dev/block/bootdevice/by-name/utagsBackup";
+ 	};
+ 
++	hw {
++		compatible = "mmi,utags";
++		mmi,dir-name = "hw";
++		mmi,main-utags = "/dev/block/bootdevice/by-name/hw";
++	};
++
+ };
+ 
+ &tlmm_pinmux {
+-- 
+2.11.0
+

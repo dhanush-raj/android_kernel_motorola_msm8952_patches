@@ -1,0 +1,55 @@
+From eab4738bdccbb4ace4fb2154eb798cf7fa51db04 Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Mon, 15 Dec 2014 14:28:55 -0600
+Subject: [PATCH 109/959] IKVPREL1L-5162:drivers:misc:stml0xx: timeout suspend
+ callback
+
+    Timeout on waiting for the mutex in the
+    suspend callback.
+
+Change-Id: I0ad74815f96f2ef229faacdfa4ec30ea6718170a
+Signed-off-by: Dan Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/697952
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index f501664f404..69491a73322 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -1134,6 +1134,8 @@ static int stml0xx_resume(struct device *dev)
+ 
+ static int stml0xx_suspend(struct device *dev)
+ {
++	int mutex_locked = 0;
++	int mutex_timeout = 50;
+ 	struct stml0xx_data *ps_stml0xx = spi_get_drvdata(to_spi_device(dev));
+ 	dev_dbg(&stml0xx_misc_data->spi->dev, "%s", __func__);
+ 
+@@ -1141,8 +1143,14 @@ static int stml0xx_suspend(struct device *dev)
+ 	ps_stml0xx->is_suspended = true;
+ 
+ 	/* wait for irq handlers to finish */
+-	mutex_lock(&ps_stml0xx->lock);
+-	mutex_unlock(&ps_stml0xx->lock);
++	do {
++		mutex_locked = mutex_trylock(&ps_stml0xx->lock);
++		if (!mutex_locked)
++			usleep_range(500, 1000);
++	} while (!mutex_locked && mutex_timeout-- >= 0);
++
++	if (mutex_locked)
++		mutex_unlock(&ps_stml0xx->lock);
+ 
+ 	return 0;
+ }
+-- 
+2.11.0
+

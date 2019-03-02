@@ -1,0 +1,62 @@
+From d8e08471f07b5ed2815610a007f02fc8d500cc19 Mon Sep 17 00:00:00 2001
+From: Paul Handrigan <Paul.Handrigan@cirrus.com>
+Date: Mon, 16 Nov 2015 16:41:41 -0600
+Subject: [PATCH 503/959] ASoC: cs35l34: Remove startup callback
+
+Remove startup callback since it is not nessary to check the
+sample rates because the sample rate is fixed.
+
+Change-Id: I4de7cf621201a87d8bdbd9e79fe559ddbf02d0f0
+Signed-off-by: Paul Handrigan <Paul.Handrigan@cirrus.com>
+Reviewed-on: http://gerrit.mot.com/801448
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ sound/soc/codecs/cs35l34.c | 21 ---------------------
+ 1 file changed, 21 deletions(-)
+
+diff --git a/sound/soc/codecs/cs35l34.c b/sound/soc/codecs/cs35l34.c
+index d19b467400f..f11343cb617 100644
+--- a/sound/soc/codecs/cs35l34.c
++++ b/sound/soc/codecs/cs35l34.c
+@@ -481,26 +481,6 @@ static int cs35l34_digital_mute(struct snd_soc_dai *codec_dai, int mute)
+ 	return ret;
+ }
+ 
+-static int cs35l34_src_rates[] = {
+-	8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000
+-};
+-
+-
+-static struct snd_pcm_hw_constraint_list cs35l34_constraints = {
+-	.count  = ARRAY_SIZE(cs35l34_src_rates),
+-	.list   = cs35l34_src_rates,
+-};
+-
+-static int cs35l34_pcm_startup(struct snd_pcm_substream *substream,
+-			       struct snd_soc_dai *dai)
+-{
+-
+-	snd_pcm_hw_constraint_list(substream->runtime, 0,
+-				SNDRV_PCM_HW_PARAM_RATE, &cs35l34_constraints);
+-	return 0;
+-}
+-
+-
+ static int cs35l34_set_tristate(struct snd_soc_dai *dai, int tristate)
+ {
+ 
+@@ -556,7 +536,6 @@ static int cs35l34_codec_set_sysclk(struct snd_soc_dai *dai,
+ }
+ 
+ static const struct snd_soc_dai_ops cs35l34_ops = {
+-	.startup = cs35l34_pcm_startup,
+ 	.set_tristate = cs35l34_set_tristate,
+ 	.set_fmt = cs35l34_set_dai_fmt,
+ 	.hw_params = cs35l34_pcm_hw_params,
+-- 
+2.11.0
+

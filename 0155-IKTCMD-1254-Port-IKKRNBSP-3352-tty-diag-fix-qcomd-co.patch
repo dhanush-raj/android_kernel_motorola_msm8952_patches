@@ -1,0 +1,85 @@
+From ab0361117ddac6466b1aaa3561d7619f8212a13c Mon Sep 17 00:00:00 2001
+From: Eyob Tesfu <Eyob.Tesfu@motorola.com>
+Date: Tue, 15 Sep 2015 15:52:05 -0500
+Subject: [PATCH 155/959] IKTCMD-1254 : Port IKKRNBSP-3352 tty: diag: fix qcomd
+ code problem
+
+1. null pointer in usb_diag_request_size
+2. dealock caused by write_lock
+phone reboots when we try to talk to modem using diag
+
+Change-Id: I6aafaa990931c6f9980f0632d674052d5bda21e4
+Signed-off-by: Eyob Tesfu <Eyob.Tesfu@motorola.com>
+Reviewed-on: http://gerrit.mot.com/784140
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/char/diag/diag_usb.c | 13 +++++++++++--
+ drivers/usb/gadget/f_diag.c  | 10 +++++++++-
+ 2 files changed, 20 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/char/diag/diag_usb.c b/drivers/char/diag/diag_usb.c
+index 1785168cf3c..dc2c5da0f70 100644
+--- a/drivers/char/diag/diag_usb.c
++++ b/drivers/char/diag/diag_usb.c
+@@ -295,7 +295,9 @@ static void diag_usb_write_done(struct diag_usb_info *ch,
+ 	int len = 0;
+ 	struct diag_usb_buf_tbl_t *entry = NULL;
+ 	unsigned char *buf = NULL;
++       /* MOT: comment out
+ 	unsigned long flags;
++       */
+ 
+ 	if (!ch || !req)
+ 		return;
+@@ -316,14 +318,21 @@ static void diag_usb_write_done(struct diag_usb_info *ch,
+ 	}
+ 	DIAG_LOG(DIAG_DEBUG_MUX, "full write_done, ctxt: %d\n",
+ 		 ctxt);
+-	spin_lock_irqsave(&ch->write_lock, flags);
++	/* MOT: diag_usb_write uses write_lock as well,
++	   tty_diag_channel_writedirectly send USB_DIAG_WRITE_DONE,
++	   this can cause a deadlock here.Actually,
++	   diag_ws_on_copy_complete has its own lock, we don't need lock
++	   here spin_lock_irqsave(&ch->write_lock, flags);
++	*/
+ 	list_del(&entry->track);
+ 	ctxt = entry->ctxt;
+ 	buf = entry->buf;
+ 	len = entry->len;
+ 	kfree(entry);
+ 	diag_ws_on_copy_complete(DIAG_WS_MUX);
+-	spin_unlock_irqrestore(&ch->write_lock, flags);
++	/* MOT: comment out
++	   spin_unlock_irqrestore(&ch->write_lock, flags);
++	*/
+ 
+ 	if (ch->ops && ch->ops->write_done)
+ 		ch->ops->write_done(buf, len, ctxt, DIAG_USB_MODE);
+diff --git a/drivers/usb/gadget/f_diag.c b/drivers/usb/gadget/f_diag.c
+index 096fbb9d8a4..a5c6282ec5f 100644
+--- a/drivers/usb/gadget/f_diag.c
++++ b/drivers/usb/gadget/f_diag.c
+@@ -479,7 +479,15 @@ EXPORT_SYMBOL(usb_diag_alloc_req);
+ int usb_diag_request_size(struct usb_diag_ch *ch)
+ {
+ 	struct diag_context *ctxt = ch->priv_usb;
+-	struct usb_composite_dev *cdev = ctxt->cdev;
++	struct usb_composite_dev *cdev = NULL;
++
++	/* MOT: qcom code need to check if the pointer is null
++	anyway, we use the default size for tty mode
++	*/
++	if (ctxt != NULL && ctxt->cdev != NULL)
++		cdev = ctxt->cdev;
++	else
++		return CI_MAX_REQUEST_SIZE;
+ 
+ 	if (gadget_is_dwc3(cdev->gadget))
+ 		return DWC3_MAX_REQUEST_SIZE;
+-- 
+2.11.0
+

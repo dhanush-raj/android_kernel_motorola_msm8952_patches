@@ -1,0 +1,53 @@
+From 6b0c61e5673fe5ac32f0d7b4f1af70ae6d1fa405 Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Wed, 26 Aug 2015 14:43:03 -0500
+Subject: [PATCH 324/959] IKKRNBSP-3410: sys: Bail out reboot if already
+ triggered.
+
+There is a small chance that reboot from user space can still be
+scheduled, when it is already in progress from another context.
+
+Change-Id: I82b7e7dc0c12ed9205bec68692afadefdc7ad548
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/779510
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Vadim A Blaker <vblaker@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/786752
+---
+ kernel/sys.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/kernel/sys.c b/kernel/sys.c
+index 713133b34fe..9bdfd5e241e 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -464,7 +464,7 @@ EXPORT_SYMBOL_GPL(kernel_power_off);
+ 
+ int reboot_in_progress(void)
+ {
+-	return atomic_read(&reboot_triggered);
++	return atomic_cmpxchg(&reboot_triggered, 0, 1);
+ }
+ EXPORT_SYMBOL_GPL(reboot_in_progress);
+ 
+@@ -506,7 +506,12 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
+ 	if (ret)
+ 		return ret;
+ 
+-	atomic_set(&reboot_triggered, 1);
++	/* return if reboot is already triggered */
++	if (atomic_cmpxchg(&reboot_triggered, 0, 1)) {
++		pr_err("Reboot already triggered\n");
++		return ret;
++	}
++
+ 	/* Instead of trying to make the power_off code look like
+ 	 * halt when pm_power_off is not set do it the easy way.
+ 	 */
+-- 
+2.11.0
+

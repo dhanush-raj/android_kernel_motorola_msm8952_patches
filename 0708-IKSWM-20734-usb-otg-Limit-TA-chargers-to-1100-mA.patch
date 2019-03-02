@@ -1,0 +1,94 @@
+From 3bdb74d9bc9c5dd620df85baaac1e774394009de Mon Sep 17 00:00:00 2001
+From: mahj2 <mahj2@motorola.com>
+Date: Thu, 25 Feb 2016 10:31:23 +0800
+Subject: [PATCH 708/959] IKSWM-20734 usb: otg: Limit TA chargers to 1100 mA.
+
+Some power packs (such as the morphie) that behave like TA
+chargers are not able to support charging at full rate (1500 mA).
+Charging at full rate (IDEV_CHG_MAX) results in unpredictable
+behavior like power packs shutting down. Hence charge at a reduced
+rate (1100 mA) when TA chargers are detected.
+
+Change-Id: I0ec29daf0690c714765fbfdb7374367ca0b7136a
+Signed-off-by: mahj2 <mahj2@motorola.com>
+Reviewed-on: http://gerrit.mot.com/825292
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/usb/phy/phy-msm-usb.c | 14 +++++++++++---
+ include/linux/usb/msm_hsusb.h |  1 +
+ 2 files changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/usb/phy/phy-msm-usb.c b/drivers/usb/phy/phy-msm-usb.c
+index d38f95213aa..9589a46ed89 100644
+--- a/drivers/usb/phy/phy-msm-usb.c
++++ b/drivers/usb/phy/phy-msm-usb.c
+@@ -138,6 +138,7 @@ static struct regulator *vbus_otg;
+ static struct regulator *mhl_usb_hs_switch;
+ static struct power_supply *psy;
+ 
++static bool ta_charger_detected;
+ static bool aca_id_turned_on;
+ static bool legacy_power_supply;
+ static int msm_otg_get_ext_id_voltage(struct msm_otg *motg);
+@@ -3525,8 +3526,12 @@ static void msm_otg_sm_work(struct work_struct *w)
+ 				case USB_DCP_CHARGER:
+ 					/* fall through */
+ 				case USB_PROPRIETARY_CHARGER:
+-					msm_otg_notify_charger(motg,
+-							dcp_max_current);
++					if (ta_charger_detected)
++						msm_otg_notify_charger(motg,
++								IDEV_CHG_TA);
++					else
++						msm_otg_notify_charger(motg,
++						dcp_max_current);
+ 					if (!motg->is_ext_chg_dcp)
+ 						otg->phy->state =
+ 							OTG_STATE_B_CHARGER;
+@@ -3604,6 +3609,7 @@ static void msm_otg_sm_work(struct work_struct *w)
+ 			pr_debug("chg_work cancel");
+ 			msm_otg_dbg_log_event(&motg->phy, "CHG_WORK CANCEL",
+ 					motg->inputs, otg->phy->state);
++			ta_charger_detected = false;
+ 			del_timer_sync(&motg->chg_check_timer);
+ 			clear_bit(B_FALSE_SDP, &motg->inputs);
+ 			clear_bit(A_BUS_REQ, &motg->inputs);
+@@ -3690,9 +3696,10 @@ static void msm_otg_sm_work(struct work_struct *w)
+ 	case OTG_STATE_B_PERIPHERAL:
+ 		if (test_bit(B_SESS_VLD, &motg->inputs) &&
+ 				test_bit(B_FALSE_SDP, &motg->inputs)) {
+-			pr_debug("B_FALSE_SDP\n");
++			pr_info("B_FALSE_SDP - Might be a TA Charger\n");
+ 			msm_otg_dbg_log_event(&motg->phy, "B_FALSE_SDP",
+ 					motg->inputs, otg->phy->state);
++			ta_charger_detected = true;
+ 			msm_otg_start_peripheral(otg, 0);
+ 			motg->chg_type = USB_DCP_CHARGER;
+ 			clear_bit(B_FALSE_SDP, &motg->inputs);
+@@ -6624,6 +6631,7 @@ static int msm_otg_remove(struct platform_device *pdev)
+ 	msm_otg_perf_vote_update(motg, false);
+ 	cancel_work_sync(&motg->sm_work);
+ 	destroy_workqueue(motg->otg_wq);
++	ta_charger_detected = false;
+ 
+ 	pm_runtime_resume(&pdev->dev);
+ 
+diff --git a/include/linux/usb/msm_hsusb.h b/include/linux/usb/msm_hsusb.h
+index 669243fadee..01dd88bb66e 100644
+--- a/include/linux/usb/msm_hsusb.h
++++ b/include/linux/usb/msm_hsusb.h
+@@ -106,6 +106,7 @@ enum msm_usb_phy_type {
+ };
+ 
+ #define IDEV_CHG_MAX	1500
++#define IDEV_CHG_TA	1100
+ #define IDEV_CHG_MIN	500
+ #define IUNIT		100
+ 
+-- 
+2.11.0
+

@@ -1,0 +1,36 @@
+From cc62132103c7ead95e6910ba21496a144e8aea3e Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Tue, 5 Jan 2016 16:02:03 -0600
+Subject: [PATCH 590/959] IKSWM-15556: alsa_to_h2w: Increase buffer to
+ accomodate LINE_OUT
+
+LINE_OUT (32d) requires 4 bytes in the state buffer to be correctly
+represented. Increase it.
+
+Change-Id: I2fd103d216a4d1c3e2e5a38f66dddee8178d120c
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/810834
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/alsa-to-h2w-headset.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/misc/alsa-to-h2w-headset.c b/drivers/misc/alsa-to-h2w-headset.c
+index fc4a52a48ab..82a13745c76 100644
+--- a/drivers/misc/alsa-to-h2w-headset.c
++++ b/drivers/misc/alsa-to-h2w-headset.c
+@@ -178,7 +178,7 @@ static ssize_t headset_print_state(struct switch_dev *sdev, char *buf)
+ {
+ 	if (!buf)
+ 		return -EINVAL;
+-	return snprintf(buf, 3, "%d\n", switch_get_state(sdev));
++	return snprintf(buf, 4, "%d\n", switch_get_state(sdev));
+ }
+ 
+ static int alsa_to_h2w_probe(struct platform_device *pdev)
+-- 
+2.11.0
+

@@ -1,0 +1,48 @@
+From f5366161e705b9b3523f8019f671c7622bb187a8 Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Wed, 18 Nov 2015 21:53:31 -0600
+Subject: [PATCH 494/959] IKSWM-11518 ASoC: msm8952: Init OSPL controls
+
+add OSPL mixer controls and configuration loading
+when its MI2S dai is registered with amplifier.
+
+Change-Id: I66bc232cd719818caf8cbf334f2f2428f9f02a27
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/801318
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/msm/msm8952.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/sound/soc/msm/msm8952.c b/sound/soc/msm/msm8952.c
+index 4474ed1f866..d23f1a9da2c 100644
+--- a/sound/soc/msm/msm8952.c
++++ b/sound/soc/msm/msm8952.c
+@@ -33,6 +33,7 @@
+ #include "../codecs/msm8x16-wcd.h"
+ #include "../codecs/wsa881x-analog.h"
+ #include <linux/regulator/consumer.h>
++#include <sound/ospl2xx.h>
+ #define DRV_NAME "msm8952-asoc-wcd"
+ 
+ #define BTSCO_RATE_8KHZ 8000
+@@ -1893,6 +1894,12 @@ static int cs35l34_dai_init(struct snd_soc_pcm_runtime *rtd)
+ 	if (ret != 0)
+ 		dev_err(cs35l34_dai->dev, "Cannot set cs35l34 MCLK %d\n", ret);
+ 
++#ifdef CONFIG_SND_SOC_OPALUM
++	ret = ospl2xx_init(rtd);
++	if (ret != 0)
++		dev_err(cs35l34_dai->dev, "Cannot set Opalum controls %d\n", ret);
++#endif
++
+ 	return ret;
+ }
+ #endif
+-- 
+2.11.0
+

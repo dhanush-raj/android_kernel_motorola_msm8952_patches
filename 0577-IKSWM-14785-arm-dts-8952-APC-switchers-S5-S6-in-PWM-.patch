@@ -1,0 +1,37 @@
+From 4661aa7a883a034a355b670d0552dd75ce130391 Mon Sep 17 00:00:00 2001
+From: Ravi Chebolu <arc095@motorola.com>
+Date: Wed, 23 Dec 2015 11:21:15 -0600
+Subject: [PATCH 577/959] IKSWM-14785 arm/dts: 8952: APC switchers S5/S6 in PWM
+ mode.
+
+To address RF desense issues on Athene, it's recommended to use
+APC switchers in PWM mode.
+
+Change-Id: I03ca8c5bafeedaaefb6d1d3c0045d4ef1d4b3e9f
+Signed-off-by: Ravi Chebolu <arc095@motorola.com>
+Reviewed-on: http://gerrit.mot.com/809209
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index a0d90baab79..8214c889d23 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -1008,3 +1008,8 @@
+ 		};
+ 	};
+ };
++
++&pm8950_s5 {
++	/* Force VDD_APC supply (S5-S6) in PWM mode */
++	qcom,mode = "pwm";
++};
+-- 
+2.11.0
+

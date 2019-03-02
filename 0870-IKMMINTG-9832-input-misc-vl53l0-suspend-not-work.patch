@@ -1,0 +1,70 @@
+From 581caf9d23dbb6d36a09da4eb05b3a2d06f94283 Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Fri, 22 Apr 2016 04:55:56 -0500
+Subject: [PATCH 870/959] IKMMINTG-9832:input: misc: vl53l0:suspend not work
+
+suspend not work in some case
+
+Change-Id: I6e4c6d592b7c64e12ecea806633d0e09453db0af
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/847408
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/vl53L0/stmvl53l0_module.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/input/misc/vl53L0/stmvl53l0_module.c b/drivers/input/misc/vl53L0/stmvl53l0_module.c
+index 45878639160..725e3f3f633 100644
+--- a/drivers/input/misc/vl53L0/stmvl53l0_module.c
++++ b/drivers/input/misc/vl53L0/stmvl53l0_module.c
+@@ -1059,6 +1059,7 @@ struct stmvl53l0_data *data, uint8_t input)
+ {
+ 	int nochange = 0;
+ 	uint8_t from = data->w_mode;
++	int temps;
+ 
+ 	vl53l0_dbgmsg_en("Enter, stmvl53l0_work_state:%d\n", input);
+ 	mutex_lock(&data->work_mutex);
+@@ -1145,6 +1146,7 @@ struct stmvl53l0_data *data, uint8_t input)
+ 			stmvl53l0_start(data);
+ 	}
+ 
++	temps = data->c_suspend;
+ 	data->c_suspend = 1;
+ 	cancel_delayed_work(&data->dwork);
+ 	switch (data->w_mode) {
+@@ -1172,7 +1174,7 @@ struct stmvl53l0_data *data, uint8_t input)
+ 		pr_err("status unknown, input = %d", input);
+ 		break;
+ 	}
+-	data->c_suspend = 0;
++	data->c_suspend = temps;
+ 	mutex_unlock(&data->work_mutex);
+ }
+ 
+@@ -1742,14 +1744,18 @@ static int stmvl53l0_ioctl_handler(struct file *file,
+ 		schedule_delayed_work(&data->initwork, 0);
+ 		break;
+ 	case VL53L0_IOCTL_SUSPEND:
++		mutex_lock(&data->work_mutex);
+ 		vl53l0_dbgmsg_en("VL53L0_IOCTL_SUSPEND\n");
+ 		data->c_suspend = 1;
++		mutex_unlock(&data->work_mutex);
+ 		break;
+ 	case VL53L0_IOCTL_RESUME:
+ 		vl53l0_dbgmsg_en("VL53L0_IOCTL_RESUME\n");
++		mutex_lock(&data->work_mutex);
+ 		data->c_suspend = 0;
+ 		VL53L0_ClearInterruptMask(data, 0);
+ 		papi_func_tbl->StartMeasurement(data);
++		mutex_unlock(&data->work_mutex);
+ 		break;
+ 	case VL53L0_IOCTL_RESET:
+ 		stmvl53l0_work_state(data, RESET);
+-- 
+2.11.0
+

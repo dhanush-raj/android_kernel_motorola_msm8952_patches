@@ -1,0 +1,38 @@
+From c5b3ff5663bcfa589eb7010d3e4518a238836b77 Mon Sep 17 00:00:00 2001
+From: weiweij <weiweij@lenovo.com>
+Date: Thu, 18 Feb 2016 14:40:39 +0800
+Subject: [PATCH 681/959] IKSWM-17342: Change VPH_PWR_DROOP_THRES to 3.2V
+
+Test results show that B_PLUS (system supply) is drooping below 3.0V
+when flash LEDs are driven at its highest rate at low battery conditions.
+So we nedd to raise it to 3.2v.
+
+Change-Id: I13fa3144784b80c8e4a4b270b4e91a13acdaa487
+Signed-off-by: weiweij <weiweij@motorola.com>
+Reviewed-on: http://gerrit.mot.com/823156
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm-pmi8950.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi b/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi
+index 23865dc8738..9761ab3abff 100644
+--- a/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi
++++ b/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi
+@@ -544,7 +544,7 @@
+ 			qcom,ramp_up_step = "6P7_US";
+ 			qcom,ramp_dn_step = "6P7_US";
+ 			qcom,vph-pwr-droop-enabled;
+-			qcom,vph-pwr-droop-threshold = <3000>;
++			qcom,vph-pwr-droop-threshold = <3200>;
+ 			qcom,vph-pwr-droop-debounce-time = <10>;
+ 			qcom,headroom-sense-ch0-enabled;
+ 			qcom,headroom-sense-ch1-enabled;
+-- 
+2.11.0
+

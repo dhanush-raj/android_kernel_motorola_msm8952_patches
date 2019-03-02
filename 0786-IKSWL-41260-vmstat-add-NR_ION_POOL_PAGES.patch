@@ -1,0 +1,133 @@
+From 5ab7767f5c4524dcf70eb984c686c43e9a8e6adc Mon Sep 17 00:00:00 2001
+From: Yuanyuan Zhong <zyy@motorola.com>
+Date: Thu, 28 May 2015 23:18:29 -0500
+Subject: [PATCH 786/959] IKSWL-41260: vmstat: add NR_ION_POOL_PAGES
+
+Add NR_ION_POOL_PAGES for the number of pages allocated from system but
+stayed in ion page pool. NR_ION_POOL_PAGES is part of NR_ION_PAGES.
+
+Change-Id: I59a9fb6e85b31fe19c17f40520c8eca5e3115632
+Signed-off-by: Yuanyuan Zhong <zyy@motorola.com>
+Reviewed-on: http://gerrit.mot.com/754834
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/832105
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ drivers/staging/android/ion/ion_page_pool.c | 4 ++++
+ drivers/staging/android/lowmemorykiller.c   | 3 +++
+ include/linux/mmzone.h                      | 1 +
+ mm/page_alloc.c                             | 5 ++++-
+ mm/vmstat.c                                 | 1 +
+ 5 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/staging/android/ion/ion_page_pool.c b/drivers/staging/android/ion/ion_page_pool.c
+index 2c5c3e3cc01..6d0f44b05e1 100644
+--- a/drivers/staging/android/ion/ion_page_pool.c
++++ b/drivers/staging/android/ion/ion_page_pool.c
+@@ -63,6 +63,8 @@ static int ion_page_pool_add(struct ion_page_pool *pool, struct page *page)
+ 		list_add_tail(&page->lru, &pool->low_items);
+ 		pool->low_count++;
+ 	}
++	mod_zone_page_state(page_zone(page), NR_ION_POOL_PAGES,
++			1 << pool->order);
+ 	mutex_unlock(&pool->mutex);
+ 	return 0;
+ }
+@@ -82,6 +84,8 @@ static struct page *ion_page_pool_remove(struct ion_page_pool *pool, bool high)
+ 	}
+ 
+ 	list_del(&page->lru);
++	mod_zone_page_state(page_zone(page), NR_ION_POOL_PAGES,
++			-(1 << pool->order));
+ 	return page;
+ }
+ 
+diff --git a/drivers/staging/android/lowmemorykiller.c b/drivers/staging/android/lowmemorykiller.c
+index f2a80f5e0d4..76729a195ce 100644
+--- a/drivers/staging/android/lowmemorykiller.c
++++ b/drivers/staging/android/lowmemorykiller.c
+@@ -583,6 +583,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 				"   Slab UnReclaimable is %ldkB\n" \
+ 				"   Total Slab is %ldkB\n" \
+ 				"   ION is %ldkB\n" \
++				"   ION_POOL is %ldkB\n" \
+ 				"   ION_CMA is %ldkB\n" \
+ 				"   GFP mask is 0x%x\n",
+ 			     selected->comm, selected->pid,
+@@ -611,6 +612,8 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 				(long)(PAGE_SIZE / 1024),
+ 			     global_page_state(NR_ION_PAGES) *
+ 				(long)(PAGE_SIZE / 1024),
++			     global_page_state(NR_ION_POOL_PAGES) *
++				(long)(PAGE_SIZE / 1024),
+ 			     global_page_state(NR_ION_CMA_PAGES) *
+ 				(long)(PAGE_SIZE / 1024),
+ 			     sc->gfp_mask);
+diff --git a/include/linux/mmzone.h b/include/linux/mmzone.h
+index c6b4bcdc8d3..b827f30c93e 100644
+--- a/include/linux/mmzone.h
++++ b/include/linux/mmzone.h
+@@ -162,6 +162,7 @@ enum zone_stat_item {
+ 	NR_FREE_CMA_PAGES,
+ 	NR_SWAPCACHE,
+ 	NR_ION_PAGES,
++	NR_ION_POOL_PAGES,
+ 	NR_ION_CMA_PAGES,
+ 	NR_VM_ZONE_STAT_ITEMS };
+ 
+diff --git a/mm/page_alloc.c b/mm/page_alloc.c
+index 3932f6e6e8a..6ee7f8dfb63 100644
+--- a/mm/page_alloc.c
++++ b/mm/page_alloc.c
+@@ -3205,7 +3205,7 @@ void show_free_areas(unsigned int filter)
+ 		" dirty:%lu writeback:%lu unstable:%lu\n"
+ 		" free:%lu slab_reclaimable:%lu slab_unreclaimable:%lu\n"
+ 		" mapped:%lu shmem:%lu pagetables:%lu bounce:%lu\n"
+-		" free_cma:%lu ion:%lu ion_cma:%lu\n",
++		" free_cma:%lu ion:%lu ion_pool:%lu ion_cma:%lu\n",
+ 		global_page_state(NR_ACTIVE_ANON),
+ 		global_page_state(NR_INACTIVE_ANON),
+ 		global_page_state(NR_ISOLATED_ANON),
+@@ -3225,6 +3225,7 @@ void show_free_areas(unsigned int filter)
+ 		global_page_state(NR_BOUNCE),
+ 		global_page_state(NR_FREE_CMA_PAGES),
+ 		global_page_state(NR_ION_PAGES),
++		global_page_state(NR_ION_POOL_PAGES),
+ 		global_page_state(NR_ION_CMA_PAGES));
+ 
+ 	for_each_populated_zone(zone) {
+@@ -3260,6 +3261,7 @@ void show_free_areas(unsigned int filter)
+ 			" bounce:%lukB"
+ 			" free_cma:%lukB"
+ 			" ion:%lukB"
++			" ion_pool:%lukB"
+ 			" ion_cma:%lukB"
+ 			" writeback_tmp:%lukB"
+ 			" pages_scanned:%lu"
+@@ -3293,6 +3295,7 @@ void show_free_areas(unsigned int filter)
+ 			K(zone_page_state(zone, NR_BOUNCE)),
+ 			K(zone_page_state(zone, NR_FREE_CMA_PAGES)),
+ 			K(zone_page_state(zone, NR_ION_PAGES)),
++			K(zone_page_state(zone, NR_ION_POOL_PAGES)),
+ 			K(zone_page_state(zone, NR_ION_CMA_PAGES)),
+ 			K(zone_page_state(zone, NR_WRITEBACK_TEMP)),
+ 			zone->pages_scanned,
+diff --git a/mm/vmstat.c b/mm/vmstat.c
+index 1d90881e82e..cc8ac9b1cfd 100644
+--- a/mm/vmstat.c
++++ b/mm/vmstat.c
+@@ -744,6 +744,7 @@ const char * const vmstat_text[] = {
+ 	"nr_free_cma",
+ 	"nr_swapcache",
+ 	"nr_ion",
++	"nr_ion_pool",
+ 	"nr_ion_cma",
+ 	"nr_dirty_threshold",
+ 	"nr_dirty_background_threshold",
+-- 
+2.11.0
+

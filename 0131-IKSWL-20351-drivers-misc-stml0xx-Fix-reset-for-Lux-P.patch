@@ -1,0 +1,46 @@
+From f5e4b307ffffb4a8c0f9fe90091a3c823ec5cfdd Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Tue, 2 Jun 2015 13:01:53 -0500
+Subject: [PATCH 131/959] IKSWL-20351 drivers/misc: stml0xx: Fix reset for Lux
+ P2C
+
+The sensor hub reset during flashing needs to be updated to
+support the new reset hardware on Lux P2C phones.
+
+Change-Id: I8d2b66c9180037f568185670b0968bd1192ba195
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/753627
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-by: Eric Hefner <ehefner@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Vladimir Karpovich <vkarpovich@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_flash.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_flash.c b/drivers/misc/stml0xx/stml0xx_flash.c
+index 6cb2c19a3ef..c6de406b70f 100644
+--- a/drivers/misc/stml0xx/stml0xx_flash.c
++++ b/drivers/misc/stml0xx/stml0xx_flash.c
+@@ -312,10 +312,14 @@ int switch_stml0xx_mode(enum stm_mode mode)
+ 		msleep(stml0xx_spi_retry_delay);
+ 
+ 		/* Toggle reset */
++		if (pdata->reset_hw_type != 0)
++			gpio_direction_output(pdata->gpio_reset, 1);
+ 		gpio_set_value(pdata->gpio_reset, 0);
+ 		msleep(stml0xx_spi_retry_delay);
+ 		gpio_set_value(pdata->gpio_reset, 1);
+ 		msleep(STML0XX_RESET_DELAY);
++		if (pdata->reset_hw_type != 0)
++			gpio_direction_input(pdata->gpio_reset);
+ 
+ 		/* Send SPI bootloader synchronization byte */
+ 		rc = stml0xx_boot_cmd_write(SPI_SYNC, true);
+-- 
+2.11.0
+

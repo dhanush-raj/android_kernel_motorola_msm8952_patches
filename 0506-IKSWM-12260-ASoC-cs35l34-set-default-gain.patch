@@ -1,0 +1,35 @@
+From 5200ee983d0aa7bcc8893ac4a000966246d437ca Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Mon, 23 Nov 2015 12:18:09 -0600
+Subject: [PATCH 506/959] IKSWM-12260 ASoC: cs35l34: set default gain
+
+set default amplipier gain to 16dB not to clip at 0dBFS.
+
+Change-Id: Ibe1a4e88ebf55e7d4cf5546d289eba7a32fb3c8c
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/802224
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/codecs/cs35l34.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/sound/soc/codecs/cs35l34.c b/sound/soc/codecs/cs35l34.c
+index 096425c5c7d..828560d15bb 100644
+--- a/sound/soc/codecs/cs35l34.c
++++ b/sound/soc/codecs/cs35l34.c
+@@ -56,7 +56,7 @@ static const struct reg_default cs35l34_reg[] = {
+ 	{CS35L34_AMP_INP_DRV_CTL, 0x01},
+ 	{CS35L34_AMP_DIG_VOL_CTL, 0x12},
+ 	{CS35L34_AMP_DIG_VOL, 0x00},
+-	{CS35L34_AMP_ANLG_GAIN_CTL, 0x09},
++	{CS35L34_AMP_ANLG_GAIN_CTL, 0x0D},
+ 	{CS35L34_PROTECT_CTL, 0x06},
+ 	{CS35L34_AMP_KEEP_ALIVE_CTL, 0x04},
+ 	{CS35L34_BST_CVTR_V_CTL, 0x00},
+-- 
+2.11.0
+

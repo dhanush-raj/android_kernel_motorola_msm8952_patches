@@ -1,0 +1,46 @@
+From 3d2264ececbbeb2b426f5a569c2fac00ecdf8482 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Thu, 24 Sep 2015 23:20:20 -0500
+Subject: [PATCH 203/959] IKSWM-4458 kernel: sys : print task info on reboot or
+ poweroff
+
+The current task name(pid), and its parent task name(pid)
+are printed out to console on reboot or power off. This
+patch is to indicate which task has triggered the reboot or
+power off.
+
+Change-Id: Ied61b882d30c565f2049790e68b93882a482abc1
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ kernel/sys.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/kernel/sys.c b/kernel/sys.c
+index a3bef5bd452..d5a81205cc1 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -405,6 +405,10 @@ void kernel_restart(char *cmd)
+ 		printk(KERN_EMERG "Restarting system.\n");
+ 	else
+ 		printk(KERN_EMERG "Restarting system with command '%s'.\n", cmd);
++	printk(KERN_EMERG "Current task:%s(%d) Parent task:%s(%d)\n",
++		current->comm, current->pid,
++		current->real_parent->comm,
++		current->real_parent->pid);
+ 	kmsg_dump(KMSG_DUMP_RESTART);
+ 	machine_restart(cmd);
+ }
+@@ -448,6 +452,10 @@ void kernel_power_off(void)
+ 	migrate_to_reboot_cpu();
+ 	syscore_shutdown();
+ 	printk(KERN_EMERG "Power down.\n");
++	printk(KERN_EMERG "Current task:%s(%d) Parent task:%s(%d)\n",
++		current->comm, current->pid,
++		current->real_parent->comm,
++		current->real_parent->pid);
+ 	kmsg_dump(KMSG_DUMP_POWEROFF);
+ 	machine_power_off();
+ }
+-- 
+2.11.0
+

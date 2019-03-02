@@ -1,0 +1,58 @@
+From fa6f8c92b9d7fdddd85ca4beb32ba2bcd446502d Mon Sep 17 00:00:00 2001
+From: Konstantin Makariev <kmakariev@motorola.com>
+Date: Tue, 18 Aug 2015 17:40:29 -0500
+Subject: [PATCH 382/959] IKSWM-7604 input: synaptics_dsx_i2c: reset on charger
+ removal
+
+Work around to force charging bit on USB charger insertion has a
+shortcoming. Touch IC does not get off FNM mode whenever charger
+bit gets cleared as a result of USB charger disconnect. Hence
+perform soft reset.
+
+Change-Id: Iae501f4e0e48d7fc69366feb4a0c93e803c11df2
+Signed-off-by: Konstantin Makariev <kmakariev@motorola.com>
+---
+ drivers/input/touchscreen/synaptics_dsx_i2c.c | 27 ++++++++++++++++++++++++---
+ 1 file changed, 24 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.c b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+index f5fa40009b4..a1da2ee6605 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.c
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+@@ -5929,9 +5929,30 @@ static void ps_external_power_changed(struct power_supply *psy)
+ 		dev_info(dev, "power supply presence %d in state %d\n",
+ 			pval.intval, state);
+ 
+-		if (state == STATE_ACTIVE)
+-			synaptics_dsx_patch_func(rmi4_data,
+-				SYNAPTICS_RMI4_F01, &ps_patch[index]);
++		if (state == STATE_ACTIVE) {
++			/* reset touch ic on charging source removal */
++			/* to kick it off FNM mode */
++			if (index == 0) {
++				int retval;
++				/* set unknown state to ensure IRQ gets */
++				/* enabled on state transition to active */
++				synaptics_dsx_sensor_state(
++						rmi4_data, STATE_UNKNOWN);
++				/* disable IRQ to handle reset */
++				synaptics_rmi4_irq_enable(rmi4_data, false);
++				/* perform SW reset to restore defaults */
++				retval = synaptics_dsx_ic_reset(
++						rmi4_data, RMI4_SW_RESET);
++				if (retval < 0)
++					dev_err(&rmi4_data->i2c_client->dev,
++						"folio: sw reset failed %d\n",
++						retval);
++				synaptics_dsx_sensor_ready_state(
++							rmi4_data, false);
++			} else /* on insertion only apply charging bit */
++				synaptics_dsx_patch_func(rmi4_data,
++					SYNAPTICS_RMI4_F01, &ps_patch[index]);
++		}
+ 	}
+ 	ps_usb_present = pval.intval == 1;
+ }
+-- 
+2.11.0
+

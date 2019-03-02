@@ -1,0 +1,76 @@
+From a30527a983e80245f473a2f3761eb861cee965ab Mon Sep 17 00:00:00 2001
+From: Vladimir Karpovich <cvk011c@motorola.com>
+Date: Mon, 28 Jul 2014 14:07:57 -0500
+Subject: [PATCH 589/959] IKSWM-15556: misc: h2w: Add support for LINEOUT event
+
+Report switch event 6 as Line out.
+
+Change-Id: I53b561a0ac7b0d5b6c071523870be49a19658ff6
+Signed-off-by: Vladimir Karpovich <cvk011c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/657842
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/810577
+SME-Granted: SME Approvals Granted
+---
+ drivers/misc/alsa-to-h2w-headset.c | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/misc/alsa-to-h2w-headset.c b/drivers/misc/alsa-to-h2w-headset.c
+index 03b16cbaa79..fc4a52a48ab 100644
+--- a/drivers/misc/alsa-to-h2w-headset.c
++++ b/drivers/misc/alsa-to-h2w-headset.c
+@@ -26,6 +26,8 @@
+ #define H2W_HS_NO_DEVICE	0
+ #define H2W_HS_HEADSET		1
+ #define H2W_HS_HEADPHONE	2
++#define H2W_HS_LINEOUT		0x20
++
+ 
+ struct alsa_to_h2w_data {
+ 	struct switch_dev sdev;
+@@ -36,6 +38,7 @@ struct alsa_to_h2w_data {
+ static char *name_headsets_with_mic = "Headset with a mic";
+ static char *name_headsets_no_mic = "Headphone";
+ static char *name_headsets_pull_out = "No Device";
++static char *name_headsets_line_out = "Line out";
+ 
+ #define NAME_SIZE  20
+ 
+@@ -64,7 +67,9 @@ static int switch_to_h2w(unsigned long switch_state)
+ 			return H2W_HS_HEADSET;
+ 		else
+ 			return H2W_HS_HEADPHONE;
+-	}
++	} else
++		if (switch_state & (1 << SW_LINEOUT_INSERT))
++			return H2W_HS_LINEOUT;
+ 	return H2W_HS_NO_DEVICE;
+ }
+ 
+@@ -111,7 +116,8 @@ static void alsa_to_h2w_disconnect(struct input_handle *handle)
+ static bool alsa_to_h2w_filter(struct input_handle *handle, unsigned int type,
+ 						unsigned int code, int value)
+ {
+-	if ((code == SW_HEADPHONE_INSERT) || (code == SW_MICROPHONE_INSERT))
++	if ((code == SW_HEADPHONE_INSERT) || (code == SW_MICROPHONE_INSERT) ||
++		(code == SW_LINEOUT_INSERT))
+ 		alsa_to_h2w_headset_report(switch_to_h2w(handle->dev->sw[0]));
+ 	return false;
+ }
+@@ -154,6 +160,9 @@ static ssize_t headset_print_name(struct switch_dev *sdev, char *buf)
+ 	case 2:
+ 		name = name_headsets_no_mic;
+ 		break;
++	case 0x20:
++		name = name_headsets_line_out;
++		break;
+ 	default:
+ 		name = NULL;
+ 		break;
+-- 
+2.11.0
+

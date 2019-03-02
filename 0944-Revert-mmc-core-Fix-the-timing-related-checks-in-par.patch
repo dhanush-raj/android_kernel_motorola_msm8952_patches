@@ -1,0 +1,44 @@
+From b7ad6582d5c4aa6b40dc538d1cf8fc58b8b2b54a Mon Sep 17 00:00:00 2001
+From: Vignesh Mahadevan <vignesh@motorola.com>
+Date: Tue, 22 Nov 2016 22:13:24 -0500
+Subject: [PATCH 944/959] Revert "mmc: core: Fix the timing related checks in
+ partial_init"
+
+This reverts commit a576e4bd71b7a63887d1e28f2075db75b3fc11e2.
+
+Change-Id: I0d9ba1ce865ff0fa9c4881922bdac9237ba58276
+Reviewed-on: https://gerrit.mot.com/922724
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Vignesh Mahadevan <vignesh@motorola.com>
+SLTApproved: Vignesh Mahadevan <vignesh@motorola.com>
+---
+ drivers/mmc/core/mmc.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/mmc/core/mmc.c b/drivers/mmc/core/mmc.c
+index cde2502cd0f..6c763bd8acd 100644
+--- a/drivers/mmc/core/mmc.c
++++ b/drivers/mmc/core/mmc.c
+@@ -2241,13 +2241,13 @@ static int mmc_partial_init(struct mmc_host *host)
+ 
+ 	mmc_host_clk_hold(host);
+ 
+-	if (mmc_card_hs400(card)) {
++	if (mmc_card_hs200(card) || mmc_card_hs400(card)) {
+ 		if (card->ext_csd.raw_strobe_support &&
+ 		    host->ops->enhanced_strobe)
+ 			err = host->ops->enhanced_strobe(host);
+-	} else if (mmc_card_hs200(card) && host->ops->execute_tuning) {
+-		err = host->ops->execute_tuning(host,
+-			MMC_SEND_TUNING_BLOCK_HS200);
++		else
++			err = host->ops->execute_tuning(host,
++				MMC_SEND_TUNING_BLOCK_HS200);
+ 		if (err)
+ 			pr_warn("%s: %s: tuning execution failed (%d)\n",
+ 				mmc_hostname(host), __func__, err);
+-- 
+2.11.0
+

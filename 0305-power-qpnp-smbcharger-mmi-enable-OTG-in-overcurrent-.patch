@@ -1,0 +1,56 @@
+From 7585eebe85b2dd046c2382ac8ef034629bf0a1b7 Mon Sep 17 00:00:00 2001
+From: Subbaraman Narayanamurthy <subbaram@codeaurora.org>
+Date: Tue, 11 Aug 2015 09:48:06 -0700
+Subject: [PATCH 305/959] power: qpnp-smbcharger-mmi: enable OTG in overcurrent
+ scenario conditionally
+
+Currently, in OTG overcurrent conditions, OTG is disabled and
+enabled in the reset sequence when the number of retries is less
+than 5. There is a sleep time of 20 ms between the above sequence.
+
+However, there is a chance that the USBID interrupt for OTG
+removal is handled between the OTG disable and enable sequence.
+Even though the USB driver notifies the charger to disable OTG,
+it will get enabled again because it's already in the OTG reset
+sequence for enabling OTG. Fix this race condition by checking
+the presence of OTG before enabling it in the OTG reset sequence.
+
+CRs-Fixed: 887852
+Change-Id: I9a34f7f8e34edde69c81abc9930a4b36a8c9e66c
+Signed-off-by: Subbaraman Narayanamurthy <subbaram@codeaurora.org>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index e68e28d5466..eac4e16db2c 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -4878,11 +4878,24 @@ static int otg_oc_reset(struct smbchg_chip *chip)
+ 		pr_err("Failed to disable OTG rc=%d\n", rc);
+ 
+ 	msleep(20);
++
++	/*
++	 * There is a possibility that an USBID interrupt might have
++	 * occurred notifying USB power supply to disable OTG. We
++	 * should not enable OTG in such cases.
++	 */
++	if (!is_otg_present(chip)) {
++		pr_smb(PR_STATUS,
++			"OTG is not present, not enabling OTG_EN_BIT\n");
++		goto out;
++	}
++
+ 	rc = smbchg_masked_write(chip, chip->bat_if_base + CMD_CHG_REG,
+ 						OTG_EN_BIT, OTG_EN_BIT);
+ 	if (rc)
+ 		pr_err("Failed to re-enable OTG rc=%d\n", rc);
+ 
++out:
+ 	return rc;
+ }
+ 
+-- 
+2.11.0
+

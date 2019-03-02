@@ -1,0 +1,40 @@
+From b6e4be2077ceb54589f6a02b60a4886a77c72b29 Mon Sep 17 00:00:00 2001
+From: mlmannes <mlmannes@motorola.com>
+Date: Tue, 4 Oct 2016 11:25:33 -0300
+Subject: [PATCH 932/959] IKSWN-4424 arm/dt: 8952: Add channel id for Altice
+ Group
+
+- Add a new ro.carrier for Altice France Group
+- Port IKSWM-51189 - Add entry for Tesco Ireland
+
+Change-Id: I38bec36350f6eb4c9a241b328e1027d74b673459
+Signed-off-by: mlmannes <mlmannes@motorola.com>
+Reviewed-on: https://gerrit.mot.com/905426
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Tarciano Facco Pegoraro <tarciano@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi b/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
+index 87b32920a7d..a6db9ff6168 100644
+--- a/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
++++ b/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
+@@ -101,8 +101,8 @@
+ 		"vfes",	        /* 84 */
+ 		"vfeu",	        /* 85 */
+ 		"3gb",	        /* 86 */
+-		"undefined",	/* 87 */
+-		"undefined",	/* 88 */
++		"tescoie",	/* 87 */
++		"altfr",	/* 88 */
+ 		"undefined",	/* 89 */
+ 		"undefined",	/* 90 */
+ 		"undefined",	/* 91 */
+-- 
+2.11.0
+

@@ -1,0 +1,37 @@
+From 580b5f3f9e4fd7941d6bf66d595e5534c90f03bc Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Mon, 26 Jan 2015 22:08:10 -0600
+Subject: [PATCH 150/959] IKKRNBSP-3380: tty: diag: Set the actual length for
+ diag requests written to TTY
+
+The actual length needs to be populated in the diag request upon write
+completion. Otherwise the diag framework can resend the data and mangle
+the traffic for tty writes.
+
+Change-Id: I04018beb15d7317569982fb5c34893cd891b0de4
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/708226
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/782997
+SME-Granted: SME Approvals Granted
+---
+ drivers/tty/diag/tty_diag.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/tty/diag/tty_diag.c b/drivers/tty/diag/tty_diag.c
+index 4fd798d31e6..03569a4980a 100644
+--- a/drivers/tty/diag/tty_diag.c
++++ b/drivers/tty/diag/tty_diag.c
+@@ -306,6 +306,7 @@ int tty_diag_channel_write(struct usb_diag_ch *diag_ch,
+ 	memcpy(tty_buf, d_req->buf, d_req->length);
+ 	tty_flip_buffer_push(&tty_data->port);
+ 
++	d_req->actual = d_req->length;
+ 	spin_unlock_irqrestore(&diag_tty_lock, flags);
+ 
+ 	diag_ch->notify(diag_ch->priv, USB_DIAG_WRITE_DONE, d_req);
+-- 
+2.11.0
+

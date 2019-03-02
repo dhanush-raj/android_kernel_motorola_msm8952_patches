@@ -1,0 +1,51 @@
+From 719b56598fe9b9551b2d3087370d35250602a1ea Mon Sep 17 00:00:00 2001
+From: Ritesh Harjani <riteshh@codeaurora.org>
+Date: Wed, 6 Apr 2016 13:40:01 +0530
+Subject: [PATCH 943/959] mmc: mmc: Add clk_hold/release pair before caching
+ host->ios
+
+We need to add mmc_host_clk_hold/release pair before caching
+host->ios. Since it may so happen that the clks are gated
+while caching and thus in next CMD5 awake, changing clk back to
+cached_ios->clk might give NOC error.
+
+Ported from kernel 3.18.
+
+CRs-fixed: IKSWN-14590
+Change-Id: I32b8c1bbbd67b4daadaa85c3c01beab8ff1b7cb2
+Signed-off-by: Ritesh Harjani <riteshh@codeaurora.org>
+Reviewed-on: https://gerrit.mot.com/922653
+SME-Granted: SME Approvals Granted
+Reviewed-by: Russell Knize <rknize@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+SLTApproved: Vignesh Mahadevan <vignesh@motorola.com>
+---
+ drivers/mmc/core/mmc.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/drivers/mmc/core/mmc.c b/drivers/mmc/core/mmc.c
+index 0b22d3df0a4..cde2502cd0f 100644
+--- a/drivers/mmc/core/mmc.c
++++ b/drivers/mmc/core/mmc.c
+@@ -2207,9 +2207,16 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
+ 		((host->caps2 & MMC_CAP2_FULL_PWR_CYCLE) || !is_suspend))
+ 		err = mmc_poweroff_notify(host->card, notify_type);
+ 	else if (mmc_can_sleepawake(host)) {
++		/*
++		 * For caching host->ios to cached_ios we need to
++		 * make sure that clocks are not gated otherwise
++		 * cached_ios->clock will be 0.
++		 */
++		mmc_host_clk_hold(host);
+ 		memcpy(&host->cached_ios, &host->ios, sizeof(host->cached_ios));
+ 		mmc_cache_card_ext_csd(host);
+ 		err = mmc_sleep(host);
++		mmc_host_clk_release(host);
+ 	} else if (!mmc_host_is_spi(host))
+ 		err = mmc_deselect_cards(host);
+ 	host->card->state &= ~(MMC_STATE_HIGHSPEED | MMC_STATE_HIGHSPEED_200);
+-- 
+2.11.0
+

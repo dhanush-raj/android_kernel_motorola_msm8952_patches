@@ -1,0 +1,50 @@
+From 0f91413135a478bdade14fefefc9be89a33eaeb2 Mon Sep 17 00:00:00 2001
+From: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Date: Thu, 15 Jan 2015 16:16:27 -0600
+Subject: [PATCH 114/959] IKLOCSEN-1921 drivers:misc:stml0xx: need RFR check
+ for SH boot complete
+
+stml0xx driver needs to wait on the RFR (ready-for-receive) signal from the
+sensorhub before reading out the boot complete message over SPI.
+RFR is a sideband signal to the SPI bus for ensuring that the sensorhub is
+ready to receive incoming SPI messages.
+Failure to receive the boot complete msg results in an unnecessary re-flash
+of the sensorhub firmware during power up.
+
+Change-Id: I0c97e3f7cb88069b882ad10bbd85f1e2f8f42734
+Signed-off-by: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Reviewed-on: http://gerrit.mot.com/705160
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_spi.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_spi.c b/drivers/misc/stml0xx/stml0xx_spi.c
+index ed47d4192b6..25bc2345342 100644
+--- a/drivers/misc/stml0xx/stml0xx_spi.c
++++ b/drivers/misc/stml0xx/stml0xx_spi.c
+@@ -104,7 +104,7 @@ int stml0xx_spi_transfer(unsigned char *tx_buf, unsigned char *rx_buf, int len)
+ 
+ 	spi_message_add_tail(&transfer, &msg);
+ 
+-	if (stml0xx_misc_data->mode != BOOTMODE && stml0xx_g_booted) {
++	if (stml0xx_misc_data->mode != BOOTMODE) {
+ 		if (stml0xx_spi_sensorhub_ready() <= 0) {
+ 			dev_dbg(&stml0xx_misc_data->spi->dev,
+ 				"SPI error STM not ready");
+@@ -115,7 +115,7 @@ int stml0xx_spi_transfer(unsigned char *tx_buf, unsigned char *rx_buf, int len)
+ 
+ 	rc = spi_sync(stml0xx_misc_data->spi, &msg);
+ 
+-	if (stml0xx_misc_data->mode != BOOTMODE && stml0xx_g_booted) {
++	if (stml0xx_misc_data->mode != BOOTMODE) {
+ 		if (rc >= 0) {
+ 			/* wait for the hub to process the message
+ 			   and ack/nack */
+-- 
+2.11.0
+

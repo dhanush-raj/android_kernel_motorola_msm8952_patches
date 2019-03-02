@@ -1,0 +1,211 @@
+From 6dcedc49849de8147489496504c5f1b2ce20940e Mon Sep 17 00:00:00 2001
+From: Jaegeuk Kim <jaegeuk@motorola.com>
+Date: Fri, 2 Oct 2015 15:18:08 -0700
+Subject: [PATCH 690/959] IKKRNBSP-3437 - exfat: implement errors=remount-ro
+
+This patch implements errors=remount-ro for exfat.
+
+Change-Id: I9c6d2db795cb2c0855ad7e696ce57119f6193d93
+Signed-off-by: Jaegeuk Kim <jaegeuk@motorola.com>
+Reviewed-on: http://gerrit.mot.com/788560
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Reviewed-by: Russell Knize <rknize@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/exfat/exfat_blkdev.c | 51 +++++++++++++++++++++++++++++++++++++++++++++++--
+ fs/exfat/exfat_blkdev.h |  3 +++
+ fs/exfat/exfat_cache.c  |  2 +-
+ fs/exfat/exfat_core.c   |  2 +-
+ fs/exfat/exfat_super.c  | 21 +++++++++++++-------
+ fs/exfat/exfat_super.h  |  5 +++++
+ 6 files changed, 73 insertions(+), 11 deletions(-)
+
+diff --git a/fs/exfat/exfat_blkdev.c b/fs/exfat/exfat_blkdev.c
+index 02fa4fe18ec..2d8e794a184 100644
+--- a/fs/exfat/exfat_blkdev.c
++++ b/fs/exfat/exfat_blkdev.c
+@@ -126,6 +126,50 @@ s32 bdev_read(struct super_block *sb, u32 secno, struct buffer_head **bh, u32 nu
+ 	return FFS_MEDIAERR;
+ }
+ 
++void bdev_end_buffer_write(struct buffer_head *bh, int uptodate, int sync)
++{
++	if (!uptodate)
++		fs_error(bh->b_private);
++
++	if (sync)
++		end_buffer_write_sync(bh, uptodate);
++	else
++		end_buffer_async_write(bh, uptodate);
++}
++
++static void exfat_end_buffer_write_sync(struct buffer_head *bh, int uptodate)
++{
++	bdev_end_buffer_write(bh, uptodate, 1);
++}
++
++s32 bdev_sync_dirty_buffer(struct buffer_head *bh,
++					struct super_block *sb, int sync)
++{
++	int ret = 0;
++
++	WARN_ON(atomic_read(&bh->b_count) < 1);
++	lock_buffer(bh);
++	if (test_clear_buffer_dirty(bh)) {
++		if (exfat_readonly(sb)) {
++			unlock_buffer(bh);
++			return 0;
++		}
++
++		get_bh(bh);
++		bh->b_private = sb;
++		bh->b_end_io = exfat_end_buffer_write_sync;
++		ret = submit_bh(WRITE_SYNC, bh);
++		if (sync) {
++			wait_on_buffer(bh);
++			if (!ret && !buffer_uptodate(bh))
++				ret = -EIO;
++		}
++	} else {
++		unlock_buffer(bh);
++	}
++	return ret;
++}
++
+ s32 bdev_write(struct super_block *sb, u32 secno, struct buffer_head *bh, u32 num_secs, s32 sync)
+ {
+ 	s32 count;
+@@ -148,7 +192,7 @@ s32 bdev_write(struct super_block *sb, u32 secno, struct buffer_head *bh, u32 nu
+ 		set_buffer_uptodate(bh);
+ 		mark_buffer_dirty(bh);
+ 		unlock_buffer(bh);
+-		if (sync && (sync_dirty_buffer(bh) != 0))
++		if (bdev_sync_dirty_buffer(bh, sb, sync))
+ 			return FFS_MEDIAERR;
+ 	} else {
+ 		count = num_secs << p_bd->sector_size_bits;
+@@ -163,7 +207,7 @@ s32 bdev_write(struct super_block *sb, u32 secno, struct buffer_head *bh, u32 nu
+ 		set_buffer_uptodate(bh2);
+ 		mark_buffer_dirty(bh2);
+ 		unlock_buffer(bh2);
+-		if (sync && (sync_dirty_buffer(bh2) != 0)) {
++		if (bdev_sync_dirty_buffer(bh2, sb, sync)) {
+ 			__brelse(bh2);
+ 			goto no_bh;
+ 		}
+@@ -193,5 +237,8 @@ s32 bdev_sync(struct super_block *sb)
+ 	if (!p_bd->opened)
+ 		return FFS_MEDIAERR;
+ 
++	if (exfat_readonly(sb))
++		return FFS_MEDIAERR;
++
+ 	return sync_blockdev(sb->s_bdev);
+ }
+diff --git a/fs/exfat/exfat_blkdev.h b/fs/exfat/exfat_blkdev.h
+index 169d25d46bf..2db5e194fb5 100644
+--- a/fs/exfat/exfat_blkdev.h
++++ b/fs/exfat/exfat_blkdev.h
+@@ -69,5 +69,8 @@ s32 bdev_close(struct super_block *sb);
+ s32 bdev_read(struct super_block *sb, u32 secno, struct buffer_head **bh, u32 num_secs, s32 read);
+ s32 bdev_write(struct super_block *sb, u32 secno, struct buffer_head *bh, u32 num_secs, s32 sync);
+ s32 bdev_sync(struct super_block *sb);
++void bdev_end_buffer_write(struct buffer_head *bh, int uptodate, int sync);
++s32 bdev_sync_dirty_buffer(struct buffer_head *bh,
++				struct super_block *sb, int sync);
+ 
+ #endif /* _EXFAT_BLKDEV_H */
+diff --git a/fs/exfat/exfat_cache.c b/fs/exfat/exfat_cache.c
+index e6ca88b8e8d..b6be268724a 100644
+--- a/fs/exfat/exfat_cache.c
++++ b/fs/exfat/exfat_cache.c
+@@ -682,7 +682,7 @@ void buf_sync(struct super_block *sb)
+ 	bp = p_fs->buf_cache_lru_list.next;
+ 	while (bp != &p_fs->buf_cache_lru_list) {
+ 		if ((bp->drv == p_fs->drv) && (bp->flag & DIRTYBIT)) {
+-			sync_dirty_buffer(bp->buf_bh);
++			bdev_sync_dirty_buffer(bp->buf_bh, sb, 1);
+ 			bp->flag &= ~(DIRTYBIT);
+ 		}
+ 		bp = bp->next;
+diff --git a/fs/exfat/exfat_core.c b/fs/exfat/exfat_core.c
+index d48514189f5..438fc0eee21 100644
+--- a/fs/exfat/exfat_core.c
++++ b/fs/exfat/exfat_core.c
+@@ -2306,7 +2306,7 @@ void sync_alloc_bitmap(struct super_block *sb)
+ 		return;
+ 
+ 	for (i = 0; i < p_fs->map_sectors; i++)
+-		sync_dirty_buffer(p_fs->vol_amap[i]);
++		bdev_sync_dirty_buffer(p_fs->vol_amap[i], sb, 1);
+ } /* end of sync_alloc_bitmap */
+ 
+ /*
+diff --git a/fs/exfat/exfat_super.c b/fs/exfat/exfat_super.c
+index 68b2f5eeebd..69119c905a2 100644
+--- a/fs/exfat/exfat_super.c
++++ b/fs/exfat/exfat_super.c
+@@ -1509,19 +1509,26 @@ static int exfat_readpages(struct file *file, struct address_space *mapping,
+ 	return ret;
+ }
+ 
++static void exfat_end_buffer_async_write(struct buffer_head *bh, int uptodate)
++{
++	bdev_end_buffer_write(bh, uptodate, 0);
++}
++
+ static int exfat_writepage(struct page *page, struct writeback_control *wbc)
+ {
+-	int ret;
+-	ret = block_write_full_page(page, exfat_get_block, wbc);
+-	return ret;
++	if (exfat_readonly(page->mapping->host->i_sb))
++		return -EROFS;
++	return block_write_full_page_endio(page, exfat_get_block, wbc,
++					   exfat_end_buffer_async_write);
+ }
+ 
+ static int exfat_writepages(struct address_space *mapping,
+ 						struct writeback_control *wbc)
+ {
+-	int ret;
+-	ret = mpage_writepages(mapping, wbc, exfat_get_block);
+-	return ret;
++	if (exfat_readonly(mapping->host->i_sb))
++		return -EROFS;
++	/* get_block should be NULL to call ->writepage and catch end_io */
++	return mpage_writepages(mapping, wbc, NULL);
+ }
+ 
+ #if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,34)
+@@ -1934,7 +1941,7 @@ static void exfat_write_super(struct super_block *sb)
+ 
+ 	__set_sb_clean(sb);
+ 
+-	if (!(sb->s_flags & MS_RDONLY))
++	if (!exfat_readonly(sb))
+ 		FsSyncVol(sb, 1);
+ 
+ 	__unlock_super(sb);
+diff --git a/fs/exfat/exfat_super.h b/fs/exfat/exfat_super.h
+index 916811e3d31..f647daa41b2 100644
+--- a/fs/exfat/exfat_super.h
++++ b/fs/exfat/exfat_super.h
+@@ -117,6 +117,11 @@ static inline struct exfat_inode_info *EXFAT_I(struct inode *inode)
+ 	return container_of(inode, struct exfat_inode_info, vfs_inode);
+ }
+ 
++static inline bool exfat_readonly(struct super_block *sb)
++{
++	return sb->s_flags & MS_RDONLY;
++}
++
+ /*
+  * If ->i_mode can't hold S_IWUGO (i.e. ATTR_RO), we use ->i_attrs to
+  * save ATTR_RO instead of ->i_mode.
+-- 
+2.11.0
+

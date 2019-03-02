@@ -1,0 +1,47 @@
+From fe51e04d5611b9019887dc8feace7858443b4292 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Tue, 18 Aug 2015 18:34:41 -0500
+Subject: [PATCH 027/959] IKKRNBSP-3333 arm/dt: 8952: remove unused leds, fix
+ regulator config
+
+Display regulator requires mode parameter, delete qcom led devices.
+
+Change-Id: If5b4cec247483f0b0733a81637de765ac4b5aa91
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/777663
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index c21dbbb33a5..3d318af3151 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -100,10 +100,19 @@
+ };
+ 
+ &spmi_bus {
++	qcom,pm8950@0 {
++		/delete-node/ qcom,leds@a300;
++	};
++
++	qcom,pmi8950@2 {
++		/delete-node/ qcom,leds@a100;
++	};
++
+ 	qcom,pmi8950@3 {
+ 		/* display boost and inverting boost regulators */
+ 		labibb: qpnp-labibb-regulator {
+ 			status = "ok";
++			qpnp,qpnp-labibb-mode = "lcd";
+ 		};
+ 		qcom,leds@d800 {
+ 			qcom,fs-curr-ua = <20000>;
+-- 
+2.11.0
+

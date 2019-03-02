@@ -1,0 +1,84 @@
+From c93ba4ac2a3bcb3b02069311a78fcf87b5500cff Mon Sep 17 00:00:00 2001
+From: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Date: Thu, 23 Apr 2015 14:07:35 -0500
+Subject: [PATCH 124/959] IKSWL-9580 drivers:misc:stml0xx: Support DSP
+ interface setting
+
+Send the DSP interface device tree setting to the sensorhub.
+
+Signed-off-by: Jason Jae Hyun Koh <jason.koh@motorola.com>
+
+Change-Id: If28fdc5f6b1561d885fe3fd4759e2205d4dc88ef
+Reviewed-on: http://gerrit.mot.com/741014
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Philip Lee <pglee@motorola.com>
+Reviewed-by: Vladimir Karpovich <vkarpovich@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c  | 4 ++++
+ drivers/misc/stml0xx/stml0xx_reset.c | 9 +++++++++
+ include/linux/stml0xx.h              | 3 +++
+ 3 files changed, 16 insertions(+)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 2e55fb1f0c9..881a4e449af 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -409,6 +409,10 @@ static struct stml0xx_platform_data *stml0xx_of_init(struct spi_device *spi)
+ 	of_property_read_u32(np, "ct406_prox_gain",
+ 			     &pdata->ct406_prox_gain);
+ 
++	pdata->dsp_iface_enable = 0;
++	of_property_read_u32(np, "dsp_iface_enable",
++				&pdata->dsp_iface_enable);
++
+ 	pdata->headset_detect_enable = 0;
+ 	pdata->headset_hw_version = 0;
+ 	pdata->headset_insertion_debounce = 0x01F4;
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index 8be14d78f31..3c113b0796f 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -182,6 +182,15 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 		ret_err = err;
+ 	}
+ 
++	buf[0] = pdata->dsp_iface_enable & 0xff;
++	err = stml0xx_spi_send_write_reg_reset(DSP_CONTROL, buf,
++		1, RESET_NOT_ALLOWED);
++	if (err < 0) {
++		dev_err(&ps_stml0xx->spi->dev,
++			"Unable to write dsp interface enable");
++		ret_err = err;
++	}
++
+ 	buf[0] = (pdata->headset_insertion_debounce >> 8) & 0xff;
+ 	buf[1] = pdata->headset_insertion_debounce & 0xff;
+ 	buf[2] = (pdata->headset_removal_debounce >> 8) & 0xff;
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 6a036eccbe0..e9b93dd6755 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -443,6 +443,8 @@ struct stm_response {
+ 
+ #define SH_LOG_LEVEL_REG                0x55
+ 
++#define DSP_CONTROL                     0x58
++
+ #define ALGO_CFG_ACCUM_MODALITY         0x5D
+ #define ALGO_REQ_ACCUM_MODALITY         0x60
+ #define ALGO_EVT_ACCUM_MODALITY         0x63
+@@ -620,6 +622,7 @@ struct stml0xx_platform_data {
+ 	int ct406_recalibrate_threshold;
+ 	int ct406_pulse_count;
+ 	int ct406_prox_gain;
++	int dsp_iface_enable;
+ 	int headset_detect_enable;
+ 	int headset_hw_version;
+ 	int headset_insertion_debounce;
+-- 
+2.11.0
+

@@ -1,0 +1,30 @@
+From b5a596ef421174faefb3c2f9f1690af29acb75d8 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Fri, 19 Feb 2016 14:05:22 -0800
+Subject: [PATCH 686/959] IKSWM-19916:8952/defconfig: reenable eMMC CMDQ
+
+ Reenable eMMC CMDQ feature CONFIG_MMC_CQ_HCI.
+
+Change-Id: Ia7e8f26bd59f490f21ff4e965c516197d6d881f4
+Reviewed-on: http://gerrit.mot.com/823745
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index 3d4a3fa7eb9..2246b54b820 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -69,3 +69,4 @@ CONFIG_F2FS_FS_SECURITY=y
+ CONFIG_F2FS_FS_XATTR=y
+ CONFIG_QPNP_USER_RESET=y
+ CONFIG_MMC_BLOCK_DEFERRED_RESUME=y
++CONFIG_MMC_CQ_HCI=y
+-- 
+2.11.0
+

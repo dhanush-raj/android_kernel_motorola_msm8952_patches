@@ -1,0 +1,46 @@
+From d1e661d6c8b030848625aa77f194fb05ff19baee Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Thu, 1 Oct 2015 10:58:01 -0500
+Subject: [PATCH 337/959] IKKRNBSP-3423 arm/dt: 8952: configure charging led
+ node
+
+Configure on/off patterns and mask to be used with CHG_LED
+register on PMI8952.
+
+Change-Id: I8c4b49944d8e475d74b9ba72e6cea04ae6e364cf
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/787701
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Eyob Tesfu <Eyob.Tesfu@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 269c9a245ab..d1ceaec33bd 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -635,6 +635,16 @@
+ 
+ 	qcom,pmi8950@2 {
+ 		/delete-node/ qcom,leds@a100;
++
++		qcom,leds@1200 {
++			compatible = "qcom,leds-atc";
++			reg = <0x1200 0x100>;
++			linux,name = "charging";
++			qcom,ctrl-reg = /bits/ 16 <0x1243>;
++			qcom,on-data = /bits/ 8 <0x07>;
++			qcom,off-data = /bits/ 8 <0x01>;
++			qcom,mask = /bits/ 8 <0x07>;
++		};
+ 	};
+ 
+ 	qcom,pmi8950@3 {
+-- 
+2.11.0
+

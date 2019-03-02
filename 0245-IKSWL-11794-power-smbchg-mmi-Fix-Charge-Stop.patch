@@ -1,0 +1,86 @@
+From 950bad67eb0d0e28c4996a404515694dfc3fae0c Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Thu, 30 Apr 2015 07:56:49 -0500
+Subject: [PATCH 245/959] IKSWL-11794: power: smbchg-mmi: Fix Charge Stop
+
+There was a need to stop then start Charging when
+switching from the COOL state to NORMAL when
+making the previous change for Temperature
+Monitoring.  Since then other paths through the
+function have been created.  When those are taken
+it causes the stop then start of Charging but that
+interacts with other processes like Parallel
+Charging and causes it to stop.
+
+To fix this only stop Charging when switching from
+COOL to NORMAL in the path configuration function.
+
+Change-Id: Ie2ac4bebb0214e57b03bf103d4a4045fa289bb91
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/743554
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 15 +++++++++------
+ 1 file changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 7876ddc3f40..f1a5b4d8aa4 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -299,7 +299,7 @@ enum wake_reason {
+ };
+ 
+ static void smbchg_rate_check(struct smbchg_chip *chip);
+-static void smbchg_set_temp_chgpath(struct smbchg_chip *chip);
++static void smbchg_set_temp_chgpath(struct smbchg_chip *chip, int prev_temp);
+ 
+ static int smbchg_debug_mask;
+ module_param_named(
+@@ -4226,7 +4226,7 @@ static void handle_usb_removal(struct smbchg_chip *chip)
+ 	chip->stepchg_state = STEP_NONE;
+ 	chip->vfloat_mv = chip->stepchg_max_voltage_mv;
+ 	set_max_allowed_current_ma(chip, chip->stepchg_current_ma);
+-	smbchg_set_temp_chgpath(chip);
++	smbchg_set_temp_chgpath(chip, chip->temp_state);
+ 	smbchg_stay_awake(chip, PM_HEARTBEAT);
+ 	smbchg_relax(chip, PM_CHARGER);
+ 	cancel_delayed_work(&chip->heartbeat_work);
+@@ -6653,7 +6653,7 @@ static void smbchg_check_temp_state(struct smbchg_chip *chip, int batt_temp)
+ 	return;
+ }
+ 
+-static void smbchg_set_temp_chgpath(struct smbchg_chip *chip)
++static void smbchg_set_temp_chgpath(struct smbchg_chip *chip, int prev_temp)
+ {
+ 	if (chip->factory_mode)
+ 		return;
+@@ -6673,8 +6673,11 @@ static void smbchg_set_temp_chgpath(struct smbchg_chip *chip)
+ 	    (chip->stepchg_state == STEP_FULL))
+ 		smbchg_charging_en(chip, 0);
+ 	else {
+-		smbchg_charging_en(chip, 0);
+-		mdelay(10);
++		if ((prev_temp == POWER_SUPPLY_HEALTH_COOL) &&
++		    (chip->temp_state == POWER_SUPPLY_HEALTH_GOOD)) {
++			smbchg_charging_en(chip, 0);
++			mdelay(10);
++		}
+ 		smbchg_charging_en(chip, 1);
+ 	}
+ }
+@@ -6842,7 +6845,7 @@ static void smbchg_heartbeat_work(struct work_struct *work)
+ 	    (prev_ext_lvl != chip->ext_high_temp) ||
+ 	    (prev_step != chip->stepchg_state) ||
+ 	    (chip->update_allowed_fastchg_current_ma)) {
+-		smbchg_set_temp_chgpath(chip);
++		smbchg_set_temp_chgpath(chip, prev_batt_health);
+ 		if (chip->usb_present) {
+ 			smbchg_parallel_usb_check_ok(chip);
+ 			chip->update_allowed_fastchg_current_ma = false;
+-- 
+2.11.0
+

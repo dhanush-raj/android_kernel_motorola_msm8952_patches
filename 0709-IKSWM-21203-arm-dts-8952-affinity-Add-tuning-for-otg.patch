@@ -1,0 +1,38 @@
+From 4d3384e51d660e2b0098cf5483128e47b86aa4bb Mon Sep 17 00:00:00 2001
+From: Xuehui Ye <yexh1@motorola.com>
+Date: Thu, 18 Feb 2016 15:31:40 +0800
+Subject: [PATCH 709/959] IKSWM-21203: arm/dts: 8952-affinity: Add tuning for
+ otg host mode
+
+Add phy tuning for host mode.
+
+Change-Id: I424df918cc036b48b43f8214ab50b76a5d5e4175
+Signed-off-by: Xuehui Ye <yexh1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/823191
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Hujun Liao <liaohj@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 9f5a7873258..c58ae8efbd3 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -393,6 +393,8 @@
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&usbid_default>;
+ 	vbus_otg-supply = <&smbcharger_charger_otg>;
++	qcom,hsusb-otg-phy-init-seq =
++		<0x73 0x80 0x59 0x81 0x36 0x82 0x3c 0x83 0xffffffff>;
+ };
+ 
+ &pmi8950_charger {
+-- 
+2.11.0
+

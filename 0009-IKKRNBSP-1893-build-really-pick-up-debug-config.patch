@@ -1,0 +1,35 @@
+From 3da7c8f765ea27d019cb43b754d302a9c1c059db Mon Sep 17 00:00:00 2001
+From: Yuanyuan Zhong <zyy@motorola.com>
+Date: Tue, 5 Nov 2013 17:29:22 -0600
+Subject: [PATCH 009/959] IKKRNBSP-1893 build: really pick up debug config
+
+Need to include the debug config in build.
+
+Change-Id: Ibfcba2a10f4119a2984e1d81db0c4751c410b380
+Signed-off-by: Yuanyuan Zhong <zyy@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/580717
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Hrycay <jason.hrycay@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+(cherry picked from commit 589b60e17f4dc9a5a0b800317b09155cb040880a)
+---
+ defconfig.mk | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/defconfig.mk b/defconfig.mk
+index ec190dcef91..313a949c9e5 100644
+--- a/defconfig.mk
++++ b/defconfig.mk
+@@ -10,7 +10,7 @@ endif
+ 
+ # build eng kernel for eng and userdebug Android variants
+ ifneq ($(TARGET_BUILD_VARIANT), user)
+-ifneq ($(wildcard $(DEBUG_CONFIG)),)
++ifneq ($(wildcard $(KERNEL_DEBUG_DEFCONFIG)),)
+ PRODUCT_SPECIFIC_DEFCONFIGS += $(KERNEL_DEBUG_DEFCONFIG)
+ endif
+ 
+-- 
+2.11.0
+

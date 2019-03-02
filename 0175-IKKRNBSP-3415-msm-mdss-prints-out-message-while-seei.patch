@@ -1,0 +1,40 @@
+From d2f6ffbba1d3db5f5d0ae148315827eb07ed7fc4 Mon Sep 17 00:00:00 2001
+From: Bang Nguyen <bangnguyen@motorola.com>
+Date: Mon, 13 Jul 2015 13:39:32 -0500
+Subject: [PATCH 175/959] IKKRNBSP-3415 msm: mdss: prints out message while
+ seeing DSI ack_err
+
+prints out message when receiving MIPI DSI acknowledge error
+report package
+
+Port of 7ae6e19 on 8996.
+
+Change-Id: If1531f6c88970d518e6a66470144487b43cc0275
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/786059
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_host.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_host.c b/drivers/video/msm/mdss/mdss_dsi_host.c
+index d8b1d7e2ce8..83c1e821397 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_host.c
++++ b/drivers/video/msm/mdss/mdss_dsi_host.c
+@@ -1895,7 +1895,7 @@ skip_max_pkt_size:
+ 	cmd = rp->data[0];
+ 	switch (cmd) {
+ 	case DTYPE_ACK_ERR_RESP:
+-		pr_debug("%s: rx ACK_ERR_PACLAGE\n", __func__);
++		pr_info("%s: rx ACK_ERR_PACKAGE\n", __func__);
+ 		rp->len = 0;
+ 		rp->read_cnt = 0;
+ 	case DTYPE_GEN_READ1_RESP:
+-- 
+2.11.0
+

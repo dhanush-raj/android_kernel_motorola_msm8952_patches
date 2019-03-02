@@ -1,0 +1,108 @@
+From c4af56cab3df56dc5e0393fd7d1177f93c4bc130 Mon Sep 17 00:00:00 2001
+From: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Date: Fri, 14 Aug 2015 12:25:57 -0500
+Subject: [PATCH 018/959] arm/dt: 8952: create initial Athene target
+
+Add p0 device tree for Athene. Essentially empty other than HWID.
+
+Change-Id: If200dbe7b46924c6265a602be1b15ce037d0354b
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+---
+ arch/arm/boot/dts/qcom/Makefile                 |  2 ++
+ arch/arm/boot/dts/qcom/msm8952-athene-p0.dts    | 20 ++++++++++++++++++++
+ arch/arm/boot/dts/qcom/msm8952-athene.dtsi      | 20 ++++++++++++++++++++
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 15 +++++++++++++++
+ 4 files changed, 57 insertions(+)
+ create mode 100644 arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+ create mode 100644 arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+ create mode 100644 arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+
+diff --git a/arch/arm/boot/dts/qcom/Makefile b/arch/arm/boot/dts/qcom/Makefile
+index c8c6b8dc6b4..5055da44ace 100644
+--- a/arch/arm/boot/dts/qcom/Makefile
++++ b/arch/arm/boot/dts/qcom/Makefile
+@@ -168,6 +168,8 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
+ 	msm8929-cdp-jdi.dtb
+ endif # CONFIG_MMI_DEVICE_DTBS
+ 
++dtb-$(CONFIG_ARCH_MSM8916) += msm8952-athene-p0.dtb
++
+ dtb-$(CONFIG_ARCH_MSM8226) += msm8226-sim.dtb \
+ 	msm8226-fluid.dtb \
+ 	msm8226-v1-cdp.dtb \
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+new file mode 100644
+index 00000000000..74bae27bf56
+--- /dev/null
++++ b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+@@ -0,0 +1,20 @@
++/* Copyright (c) 2015, Motorola Mobility Inc. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++
++/dts-v1/;
++
++#include "msm8952-athene.dtsi"
++
++/ {
++	qcom,board-id = <0x41 0x8000>;
++};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene.dtsi b/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+new file mode 100644
+index 00000000000..143dc142f9a
+--- /dev/null
++++ b/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+@@ -0,0 +1,20 @@
++/* Copyright (c) 2015, Motorola Mobility Inc. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++
++#include "msm8952-moto-common.dtsi"
++
++/ {
++	model = "Athene";
++	compatible = "qcom,msm8952-athene", "qcom,msm8952-moto",
++			"qcom,msm8952";
++};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+new file mode 100644
+index 00000000000..513a7c97d6b
+--- /dev/null
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -0,0 +1,15 @@
++/* Copyright (c) 2015, Motorola Mobility Inc. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++
++#include "msm8952.dtsi"
++#include "msm8952-pinctrl.dtsi"
+-- 
+2.11.0
+

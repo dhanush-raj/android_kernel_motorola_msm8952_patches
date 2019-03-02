@@ -1,0 +1,97 @@
+From 34fa529a42c3d18e67b54bd0bf4cbd34a1048cca Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Wed, 3 Feb 2016 00:03:37 -0600
+Subject: [PATCH 672/959] IKSWM-19367:input:misc:vl53l0: fix of xtalk cal
+
+ST xtalk cal did not read out the data direct from
+the cal result. and it will enable the xtalk compensation
+after that the reading back value was not correct
+
+Change-Id: I592d0dc8292ea2bc89aa5029734ddf420ef00cbe
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/818310
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/vl53L0/stmvl53l0.h            |  1 +
+ drivers/input/misc/vl53L0/stmvl53l0_module-i2c.c | 12 ++++++++++++
+ drivers/input/misc/vl53L0/stmvl53l0_module.c     | 11 +++++++++--
+ 3 files changed, 22 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/input/misc/vl53L0/stmvl53l0.h b/drivers/input/misc/vl53L0/stmvl53l0.h
+index 1e5a84d1c69..42634b496e4 100644
+--- a/drivers/input/misc/vl53L0/stmvl53l0.h
++++ b/drivers/input/misc/vl53L0/stmvl53l0.h
+@@ -159,6 +159,7 @@ struct stmvl53l0_data {
+ 	uint8_t cut_v;
+ 	unsigned int xtalkCalDistance;
+ 	unsigned int offsetCalDistance;
++	unsigned int xtalkcalval;
+ 	VL53L0_GpioFunctionality gpio_function;
+ };
+ 
+diff --git a/drivers/input/misc/vl53L0/stmvl53l0_module-i2c.c b/drivers/input/misc/vl53L0/stmvl53l0_module-i2c.c
+index 07ed70ba2d4..e9510a927a1 100644
+--- a/drivers/input/misc/vl53L0/stmvl53l0_module-i2c.c
++++ b/drivers/input/misc/vl53L0/stmvl53l0_module-i2c.c
+@@ -260,6 +260,18 @@ static int stmvl53l0_probe(struct i2c_client *client,
+ 		msleep(20);
+ 	}
+ 	if (rc != 0) {
++		stmvl53l0_power_down_i2c(i2c_object);
++		msleep(20);
++		stmvl53l0_power_up_i2c(i2c_object, &present);
++		for (i = 0; i < 10; i++) {
++			rc = stmvl53l0_checkmoduleid
++				(vl53l0_data, i2c_object->client, I2C_BUS);
++			if (!rc)
++				break;
++			msleep(20);
++		}
++	}
++	if (rc != 0) {
+ 		vl53l0_errmsg("%d,error rc %d\n", __LINE__, rc);
+ 		stmvl53l0_power_down_i2c(i2c_object);
+ 		return rc;
+diff --git a/drivers/input/misc/vl53L0/stmvl53l0_module.c b/drivers/input/misc/vl53L0/stmvl53l0_module.c
+index 42d5400f440..b85498d01f9 100644
+--- a/drivers/input/misc/vl53L0/stmvl53l0_module.c
++++ b/drivers/input/misc/vl53L0/stmvl53l0_module.c
+@@ -645,7 +645,7 @@ static void stmvl53l0_setupAPIFunctions(struct stmvl53l0_data *data)
+  */
+ #define VL53L0_IOCTL_INIT			_IO('p', 0x01)
+ #define VL53L0_IOCTL_INIT_NS                       _IO('p', 0x11)
+-#define VL53L0_IOCTL_XTALKCALB		_IOW('p', 0x02, unsigned int)
++#define VL53L0_IOCTL_XTALKCALB		_IOWR('p', 0x02, unsigned int)
+ #define VL53L0_IOCTL_OFFCALB		_IOW('p', 0x03, unsigned int)
+ #define VL53L0_IOCTL_STOPCALB		_IO('p', 0x04)
+ #define VL53L0_IOCTL_STOP			_IO('p', 0x05)
+@@ -832,7 +832,8 @@ static void stmvl53l0_enter_xtalkcal(struct stmvl53l0_data *data,
+ 	papi_func_tbl->SetXTalkCompensationEnable(data, 0);
+ 
+ 	papi_func_tbl->PerformXTalkCalibration(data,
+-		(400 << 16), &XTalkCompensationRateMegaCps);
++		(data->xtalkCalDistance << 16), &XTalkCompensationRateMegaCps);
++	data->xtalkcalval = XTalkCompensationRateMegaCps;
+ 	vl53l0_dbgmsg("End\n");
+ 	mutex_unlock(&data->work_mutex);
+ }
+@@ -1496,6 +1497,12 @@ static int stmvl53l0_ioctl_handler(struct file *file,
+ 		}
+ 		data->xtalkCalDistance = targetDistance;
+ 		stmvl53l0_work_state(data, XTALKCAL_ON);
++		if (copy_to_user((unsigned int *)p,
++			&(data->xtalkcalval),
++			sizeof(unsigned int))) {
++			vl53l0_errmsg("%d, fail\n", __LINE__);
++			return -EFAULT;
++		}
+ 		break;
+ 		/* set up Xtalk value */
+ 	case VL53L0_IOCTL_SETXTALK:
+-- 
+2.11.0
+

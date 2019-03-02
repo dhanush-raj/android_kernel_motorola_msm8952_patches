@@ -1,0 +1,30 @@
+From c619e1f562b50d8605ffd1019d605dcf924b5f58 Mon Sep 17 00:00:00 2001
+From: Alexander Filonenko <alexf@motorola.com>
+Date: Tue, 1 Sep 2015 16:50:35 -0500
+Subject: [PATCH 379/959] IKSWM-7604 input: synaptics_dsx_i2c: fix resource
+ deallocation
+
+Remove unnecessary call to ps_notifier_unregister.
+
+Change-Id: I48c140f741ad998bb2aa04329c849c632f51af8a
+Signed-off-by: Alexander Filonenko <alexf@motorola.com>
+---
+ drivers/input/touchscreen/synaptics_dsx_i2c.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.c b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+index 654999e96ed..19f91843b63 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.c
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+@@ -6357,8 +6357,6 @@ err_free_gpio:
+ 	gpio_free(platform_data->reset_gpio);
+ err_input_device:
+ 	synaptics_dsx_free_modes(rmi4_data);
+-	if (rmi4_data->charger_detection)
+-		ps_notifier_unregister(rmi4_data);
+ 	kfree(rmi4_data);
+ 
+ 	return retval;
+-- 
+2.11.0
+

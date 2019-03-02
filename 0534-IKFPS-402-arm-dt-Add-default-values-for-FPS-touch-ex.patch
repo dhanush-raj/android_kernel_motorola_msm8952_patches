@@ -1,0 +1,38 @@
+From 2e625ca1ef026d084de108c8ca44c3643ee2c6b4 Mon Sep 17 00:00:00 2001
+From: Thomas Merrell-ATM098 <thomasmerrell@motorola.com>
+Date: Mon, 7 Dec 2015 21:08:21 -0600
+Subject: [PATCH 534/959] IKFPS-402: arm/dt: Add default values for FPS touch
+ exclusion
+
+Default values for exclusion region.
+
+Change-Id: I5972bfc1dc388310436d2a65c283fe5846d6cb8b
+Signed-off-by: Thomas Merrell-ATM098 <thomasmerrell@motorola.com>
+Reviewed-on: http://gerrit.mot.com/805575
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Konstantin Makariev <kmakariev@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index ffd0c3d67a5..c8237226e77 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -849,8 +849,8 @@
+ 		interrupts = <65 0>;
+ 		gpios = <&msm_gpio 65 0>, /* IRQ */
+ 			<&msm_gpio 64 0>; /* RESET */
++		synaptics,touch-clip-area = <450 1875 610 1919>;
+ 		vdd_quirk-supply = <&pm8950_l6>;
+-		/*vcc_i2c-supply = <&pm8950_l6>;*/
+ 		synaptics,gpio-config;
+ 		/* pins used by touchscreen */
+ 		pinctrl-names = "default", "active";
+-- 
+2.11.0
+

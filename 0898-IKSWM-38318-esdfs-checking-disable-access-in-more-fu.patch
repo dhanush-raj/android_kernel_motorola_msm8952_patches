@@ -1,0 +1,116 @@
+From 4444a74524039e4517aa1c8416f7cc817ce29bca Mon Sep 17 00:00:00 2001
+From: Shengzhe Zhao <a18689@motorola.com>
+Date: Sun, 29 May 2016 13:04:33 -0700
+Subject: [PATCH 898/959] IKSWM-38318 esdfs: checking disable access in more
+ functions
+
+When umount the storage, apart from open function, create unlink
+mkdir rename getattr setattr statfs could also be used to access
+esdfs. these functions are first-level function not through other
+function called by app, so need to add checking the disable access
+flag in these functions as well.
+
+Change-Id: I9572a5bfb592f4efecd4d111aef0ee5cb95b3232
+Signed-off-by: Shengzhe Zhao <a18689@motorola.com>
+Reviewed-on: http://gerrit.mot.com/861767
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/863309
+---
+ fs/esdfs/inode.c | 26 ++++++++++++++++++++++++++
+ fs/esdfs/super.c |  4 ++++
+ 2 files changed, 30 insertions(+)
+
+diff --git a/fs/esdfs/inode.c b/fs/esdfs/inode.c
+index 6bc03565876..a9840658c02 100644
+--- a/fs/esdfs/inode.c
++++ b/fs/esdfs/inode.c
+@@ -32,6 +32,9 @@ static int esdfs_create(struct inode *dir, struct dentry *dentry,
+ 	    esdfs_check_derived_permission(dir, ESDFS_MAY_CREATE) != 0)
+ 		return -EACCES;
+ 
++	if (test_opt(ESDFS_SB(dir->i_sb), ACCESS_DISABLE))
++		return -ENOENT;
++
+ 	creds = esdfs_override_creds(ESDFS_SB(dir->i_sb), &mask);
+ 	if (!creds)
+ 		return -ENOMEM;
+@@ -73,6 +76,11 @@ static int esdfs_unlink(struct inode *dir, struct dentry *dentry)
+ 	if (!creds)
+ 		return -ENOMEM;
+ 
++	if (test_opt(ESDFS_SB(dir->i_sb), ACCESS_DISABLE)) {
++		esdfs_revert_creds(creds, NULL);
++		return -ENOENT;
++	}
++
+ 	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+ 	dget(lower_dentry);
+@@ -154,6 +162,11 @@ static int esdfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
+ 	if (!creds)
+ 		return -ENOMEM;
+ 
++	if (test_opt(ESDFS_SB(dir->i_sb), ACCESS_DISABLE)) {
++		esdfs_revert_creds(creds, NULL);
++		return -ENOENT;
++	}
++
+ 	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+ 	lower_parent_dentry = lock_parent(lower_dentry);
+@@ -243,6 +256,11 @@ static int esdfs_rename(struct inode *old_dir, struct dentry *old_dentry,
+ 	if (!creds)
+ 		return -ENOMEM;
+ 
++	if (test_opt(ESDFS_SB(old_dir->i_sb), ACCESS_DISABLE)) {
++		esdfs_revert_creds(creds, NULL);
++		return -ENOENT;
++	}
++
+ 	/* Never rename to or from a pseudo hard link target. */
+ 	if (ESDFS_DENTRY_HAS_STUB(old_dentry))
+ 		esdfs_get_lower_stub_path(old_dentry, &lower_old_path);
+@@ -344,6 +362,9 @@ static int esdfs_setattr(struct dentry *dentry, struct iattr *ia)
+ 
+ 	inode = dentry->d_inode;
+ 
++	if (test_opt(ESDFS_SB(inode->i_sb), ACCESS_DISABLE))
++		return -ENOENT;
++
+ 	/*
+ 	 * Check if user has permission to change inode.  We don't check if
+ 	 * this user can change the lower inode: that should happen when
+@@ -428,6 +449,11 @@ static int esdfs_getattr(struct vfsmount *mnt, struct dentry *dentry,
+ 	if (!creds)
+ 		return -ENOMEM;
+ 
++	if (test_opt(ESDFS_SB(inode->i_sb), ACCESS_DISABLE)) {
++		esdfs_revert_creds(creds, NULL);
++		return -ENOENT;
++	}
++
+ 	esdfs_get_lower_path(dentry, &lower_path);
+ 
+ 	/* We need the lower getattr to calculate stat->blocks for us. */
+diff --git a/fs/esdfs/super.c b/fs/esdfs/super.c
+index 7ce04708a6f..84ce8b5b731 100644
+--- a/fs/esdfs/super.c
++++ b/fs/esdfs/super.c
+@@ -121,6 +121,10 @@ static int esdfs_statfs(struct dentry *dentry, struct kstatfs *buf)
+ {
+ 	int err;
+ 	struct path lower_path;
++	struct inode *inode = dentry->d_inode;
++
++	if (test_opt(ESDFS_SB(inode->i_sb), ACCESS_DISABLE))
++		return -ENOENT;
+ 
+ 	esdfs_get_lower_path(dentry, &lower_path);
+ 	err = vfs_statfs(&lower_path, buf);
+-- 
+2.11.0
+

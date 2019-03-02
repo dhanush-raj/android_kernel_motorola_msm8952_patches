@@ -1,0 +1,67 @@
+From 83e53a8055b97872d39fd7e875f67d680fac5102 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Thu, 16 Apr 2015 11:32:21 -0500
+Subject: [PATCH 239/959] IKSWL-9233: power: smbcharger-mmi: Add Charge Counter
+
+Add an interface between the BMS and BATTERY so
+that standard interfaces can read the Coulomb Counter
+at charge_counter location.
+
+Change-Id: Ie0ccdf978b52186d5b7d30fe758a96ac63ffdcc9
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/735777
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index ff6f5338c10..7134a5b570d 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -746,6 +746,7 @@ static enum power_supply_property smbchg_battery_properties[] = {
+ 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+ 	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
+ 	POWER_SUPPLY_PROP_CURRENT_NOW,
++	POWER_SUPPLY_PROP_CHARGE_COUNTER,
+ 	POWER_SUPPLY_PROP_TEMP,
+ 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+ 	POWER_SUPPLY_PROP_SAFETY_TIMER_ENABLE,
+@@ -953,6 +954,20 @@ static int get_prop_batt_current_now(struct smbchg_chip *chip)
+ 	return ua;
+ }
+ 
++#define DEFAULT_CHARGE_COUNT	0
++static int get_prop_charge_counter(struct smbchg_chip *chip)
++{
++	int uah, rc;
++
++	rc = get_property_from_fg(chip,
++				  POWER_SUPPLY_PROP_CHARGE_NOW_RAW, &uah);
++	if (rc) {
++		pr_smb(PR_STATUS, "Couldn't get charge now raw rc = %d\n", rc);
++		uah = DEFAULT_CHARGE_COUNT;
++	}
++	return uah;
++}
++
+ #define DEFAULT_BATT_VOLTAGE_NOW	0
+ static int get_prop_batt_voltage_now(struct smbchg_chip *chip)
+ {
+@@ -2816,6 +2831,9 @@ static int smbchg_battery_get_property(struct power_supply *psy,
+ 	case POWER_SUPPLY_PROP_CURRENT_NOW:
+ 		val->intval = get_prop_batt_current_now(chip);
+ 		break;
++	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
++		val->intval = get_prop_charge_counter(chip);
++		break;
+ 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+ 		val->intval = get_prop_batt_voltage_now(chip);
+ 		break;
+-- 
+2.11.0
+

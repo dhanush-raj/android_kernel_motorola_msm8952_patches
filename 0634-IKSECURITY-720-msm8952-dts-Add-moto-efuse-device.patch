@@ -1,0 +1,37 @@
+From 5b47413763cbb9b06adb4eefa869f92c198f65eb Mon Sep 17 00:00:00 2001
+From: Mark Reed <mreed1@motorola.com>
+Date: Fri, 22 Jan 2016 09:23:00 -0600
+Subject: [PATCH 634/959] IKSECURITY-720 - msm8952: dts: Add moto efuse device.
+
+enable security driver (read fuses) on msm8952
+
+Change-Id: I75373baec5c02b28d09c7a59d3af05a36364f026
+Signed-off-by: mreed1 <mreed1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/815445
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 0d5e9f81504..f84c497c729 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -598,6 +598,10 @@
+ 		};
+ 	};
+ 
++	msm-efuse {
++		compatible = "qcom,msm-efuse";
++	};
++
+ 	sound {
+ 		compatible = "qcom,msm8952-audio-codec";
+ 		qcom,model = "msm8952-cs35l34-snd-card";
+-- 
+2.11.0
+

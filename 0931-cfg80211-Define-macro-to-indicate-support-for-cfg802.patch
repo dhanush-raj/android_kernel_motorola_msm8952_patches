@@ -1,0 +1,39 @@
+From 68d6902451ba52b66024e94fda28ae9df6220c3e Mon Sep 17 00:00:00 2001
+From: Vidyullatha Kanchanapally <vidyullatha@codeaurora.org>
+Date: Wed, 5 Oct 2016 10:37:43 -0500
+Subject: [PATCH 931/959] cfg80211: Define macro to indicate support for
+ cfg80211 abort scan api
+
+Define macro to indicate backport support for cfg80211
+abort scan api.
+
+Mot-CRs-fixed: IKSWN-1560
+
+Change-Id: Iafe90078721766bc0afb5bd2dd525c9d425e6bd7
+CRs-Fixed: 1010945
+Signed-off-by: Vidyullatha Kanchanapally <vidyullatha@codeaurora.org>
+Reviewed-on: https://gerrit.mot.com/906087
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ include/net/cfg80211.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/include/net/cfg80211.h b/include/net/cfg80211.h
+index e59560685ee..eefddb88b6f 100644
+--- a/include/net/cfg80211.h
++++ b/include/net/cfg80211.h
+@@ -63,6 +63,7 @@ struct wiphy;
+ 
+ #define TDLS_MGMT_VERSION2 1
+ #define CFG80211_DEL_STA_V2 1
++#define CFG80211_ABORT_SCAN 1
+ 
+ /*
+  * wireless hardware capability structures
+-- 
+2.11.0
+

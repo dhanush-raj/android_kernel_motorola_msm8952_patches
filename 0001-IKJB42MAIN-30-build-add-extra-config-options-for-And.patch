@@ -1,0 +1,122 @@
+From 9aae885c242062c1307760b68c2acf90fab066a8 Mon Sep 17 00:00:00 2001
+From: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Date: Thu, 20 Dec 2012 14:30:29 -0600
+Subject: [PATCH 001/959] IKJB42MAIN-30 build: add extra config options for
+ Android eng and userdebug builds
+
+When building an Android eng or userdebug build, the eng_bld.config file
+will be appended to the defconfig file. This allows extra debugging
+options to be enabled for the Android debug builds.
+
+Change-Id: I4a93f6197102eb206c9522eeaac364ca0937e16e
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/506754
+Tested-by: Jira Key <JIRAKEY@motorola.com>
+(cherry picked from commit 91d7f93615efd3eaf83847b1a3d1e54004323c65)
+(cherry picked from commit 23a774e50c8012ce16d065b59010f6e70e9cdaf4)
+(cherry picked from commit 19e4a2e006d20a4996b1a81d7e2ba73f4c43a786)
+---
+ AndroidKernel.mk | 28 +++++++++++++++++-----------
+ defconfig.mk     | 23 +++++++++++++++++++++++
+ 2 files changed, 40 insertions(+), 11 deletions(-)
+ create mode 100644 defconfig.mk
+
+diff --git a/AndroidKernel.mk b/AndroidKernel.mk
+index ee89da4f737..88b042286b0 100644
+--- a/AndroidKernel.mk
++++ b/AndroidKernel.mk
+@@ -21,11 +21,6 @@ $(warning Forcing kernel header generation only for '$(TARGET_KERNEL_HEADER_ARCH
+ KERNEL_HEADER_ARCH := $(TARGET_KERNEL_HEADER_ARCH)
+ endif
+ 
+-KERNEL_HEADER_DEFCONFIG := $(strip $(KERNEL_HEADER_DEFCONFIG))
+-ifeq ($(KERNEL_HEADER_DEFCONFIG),)
+-KERNEL_HEADER_DEFCONFIG := $(KERNEL_DEFCONFIG)
+-endif
+-
+ # Force 32-bit binder IPC for 64bit kernel with 32bit userspace
+ ifeq ($(KERNEL_ARCH),arm64)
+ ifeq ($(TARGET_ARCH),arm)
+@@ -93,17 +88,28 @@ mpath=`dirname $$mdpath`; rm -rf $$mpath;\
+ fi
+ endef
+ 
++include kernel/defconfig.mk
++
++KERNEL_HEADER_DEFCONFIG := $(strip $(KERNEL_HEADER_DEFCONFIG))
++ifeq ($(KERNEL_HEADER_DEFCONFIG),)
++KERNEL_HEADER_DEFCONFIG := $(TARGET_DEFCONFIG)
++endif
++
++define do-kernel-config
++	( cp $(3) $(2) && $(7) -C $(4) O=$(1) ARCH=$(5) CROSS_COMPILE=$(6) defoldconfig ) || ( rm -f $(2) && false )
++endef
++
+ $(KERNEL_OUT):
+ 	mkdir -p $(KERNEL_OUT)
+ 
+-$(KERNEL_CONFIG): $(KERNEL_OUT)
+-	$(MAKE) -C kernel O=../$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_DEFCONFIG)
++$(KERNEL_CONFIG): $(KERNEL_OUT) $(TARGET_DEFCONFIG)
++	$(call do-kernel-config,../$(KERNEL_OUT),$@,$(TARGET_DEFCONFIG),kernel,$(KERNEL_ARCH),$(KERNEL_CROSS_COMPILE),$(MAKE))
+ 	$(hide) if [ ! -z "$(KERNEL_CONFIG_OVERRIDE)" ]; then \
+ 			echo "Overriding kernel config with '$(KERNEL_CONFIG_OVERRIDE)'"; \
+ 			echo $(KERNEL_CONFIG_OVERRIDE) >> $(KERNEL_OUT)/.config; \
+ 			$(MAKE) -C kernel O=../$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) oldconfig; fi
+ 
+-$(TARGET_PREBUILT_INT_KERNEL): $(KERNEL_OUT) $(KERNEL_HEADERS_INSTALL)
++$(TARGET_PREBUILT_INT_KERNEL): $(KERNEL_OUT) $(KERNEL_CONFIG) $(KERNEL_HEADERS_INSTALL)
+ 	$(hide) echo "Building kernel..."
+ 	$(hide) rm -rf $(KERNEL_OUT)/arch/$(KERNEL_ARCH)/boot/dts
+ 	$(MAKE) -C kernel O=../$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_CFLAGS)
+@@ -112,15 +118,15 @@ $(TARGET_PREBUILT_INT_KERNEL): $(KERNEL_OUT) $(KERNEL_HEADERS_INSTALL)
+ 	$(mv-modules)
+ 	$(clean-module-folder)
+ 
+-$(KERNEL_HEADERS_INSTALL): $(KERNEL_OUT)
++$(KERNEL_HEADERS_INSTALL): $(KERNEL_OUT) $(KERNEL_CONFIG)
+ 	$(hide) if [ ! -z "$(KERNEL_HEADER_DEFCONFIG)" ]; then \
+ 			$(hide) rm -f ../$(KERNEL_CONFIG); \
+-			$(MAKE) -C kernel O=../$(KERNEL_OUT) ARCH=$(KERNEL_HEADER_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_HEADER_DEFCONFIG); \
++			$(call do-kernel-config,../$(KERNEL_OUT),$(KERNEL_CONFIG),$(KERNEL_HEADER_DEFCONFIG),kernel,$(KERNEL_HEADER_ARCH),$(KERNEL_CROSS_COMPILE),$(MAKE)); \
+ 			$(MAKE) -C kernel O=../$(KERNEL_OUT) ARCH=$(KERNEL_HEADER_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) headers_install; fi
+ 	$(hide) if [ "$(KERNEL_HEADER_DEFCONFIG)" != "$(KERNEL_DEFCONFIG)" ]; then \
+ 			echo "Used a different defconfig for header generation"; \
+ 			$(hide) rm -f ../$(KERNEL_CONFIG); \
+-			$(MAKE) -C kernel O=../$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_DEFCONFIG); fi
++			$(call do-kernel-config,../$(KERNEL_OUT),$(KERNEL_CONFIG),$(TARGET_DEFCONFIG),kernel,$(KERNEL_ARCH),$(KERNEL_CROSS_COMPILE),$(MAKE)); fi
+ 	$(hide) if [ ! -z "$(KERNEL_CONFIG_OVERRIDE)" ]; then \
+ 			echo "Overriding kernel config with '$(KERNEL_CONFIG_OVERRIDE)'"; \
+ 			echo $(KERNEL_CONFIG_OVERRIDE) >> $(KERNEL_OUT)/.config; \
+diff --git a/defconfig.mk b/defconfig.mk
+new file mode 100644
+index 00000000000..977dd3da6a3
+--- /dev/null
++++ b/defconfig.mk
+@@ -0,0 +1,23 @@
++DEFCONFIGSRC			:= kernel/arch/arm/configs
++LJAPDEFCONFIGSRC		:= ${DEFCONFIGSRC}/ext_config
++PRODUCT_SPECIFIC_DEFCONFIGS	:= $(DEFCONFIGSRC)/$(KERNEL_DEFCONFIG)
++TARGET_DEFCONFIG		:= $(KERNEL_OUT)/mapphone_defconfig
++
++# build eng kernel for eng and userdebug Android variants
++ifneq ($(TARGET_BUILD_VARIANT), user)
++PRODUCT_SPECIFIC_DEFCONFIGS += ${LJAPDEFCONFIGSRC}/eng_bld.config
++endif
++
++define do-make-defconfig
++	$(hide) mkdir -p $(dir $(1))
++	( perl -le 'print "# This file was automatically generated from:\n#\t" . join("\n#\t", @ARGV) . "\n"' $(2) && cat $(2) ) > $(1) || ( rm -f $(1) && false )
++endef
++
++#
++# make combined defconfig file
++#---------------------------------------
++$(TARGET_DEFCONFIG): FORCE $(PRODUCT_SPECIFIC_DEFCONFIGS)
++	$(call do-make-defconfig,$@,$(PRODUCT_SPECIFIC_DEFCONFIGS))
++
++.PHONY: FORCE
++FORCE:
+-- 
+2.11.0
+

@@ -1,0 +1,128 @@
+From d3d5016d805be7f816068b38ad7635d66dfcfedd Mon Sep 17 00:00:00 2001
+From: Steven Fan <w20191@motorola.com>
+Date: Wed, 18 Nov 2015 16:53:19 -0600
+Subject: [PATCH 511/959] IKSWM-11457: add dropbox event for some sensorhub
+ failure update
+
+this is for track some sensor hub issue
+
+Change-Id: If3e980e5f2cae3606df70bd0378b2d75c7cafbfe
+Signed-off-by: Steven Fan <w20191@motorola.com>
+Reviewed-on: http://gerrit.mot.com/801258
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c  | 19 +++++++++++++++++++
+ drivers/misc/stml0xx/stml0xx_queue.c | 13 +++++++++++++
+ 2 files changed, 32 insertions(+)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index b6d8158f188..a26f88037f2 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -40,6 +40,8 @@
+ #include <linux/uaccess.h>
+ #include <linux/wakelock.h>
+ #include <linux/workqueue.h>
++#include <linux/dropbox.h>
++#include <linux/string.h>
+ 
+ #include <linux/stml0xx.h>
+ 
+@@ -53,6 +55,8 @@
+ #define STML0XX_BUSY_SUSPEND_COUNT 6
+ #define STML0XX_SPI_FAIL_LIMIT     10
+ 
++#define DROPBOX_SENSORHUB_POWERON_ISSUE "sensorhub_poweron_issue"
++
+ long stml0xx_time_delta;
+ unsigned int stml0xx_irq_disable;
+ module_param_named(irq_disable, stml0xx_irq_disable, uint, 0644);
+@@ -242,6 +246,17 @@ static void stml0xx_device_power_off(struct stml0xx_data *ps_stml0xx)
+ 	}
+ }
+ 
++static void stml0xx_device_power_on_fail_dropbox(void)
++{
++	char dropbox_entry[256];
++
++	memset(dropbox_entry, 0, sizeof(dropbox_entry));
++	snprintf(dropbox_entry, sizeof(dropbox_entry),
++		"Sensor Hub Power on failure");
++	dropbox_queue_event_text(DROPBOX_SENSORHUB_POWERON_ISSUE,
++		dropbox_entry, strlen(dropbox_entry));
++}
++
+ static int stml0xx_device_power_on(struct stml0xx_data *ps_stml0xx)
+ {
+ 	int err = 0;
+@@ -251,6 +266,8 @@ static int stml0xx_device_power_on(struct stml0xx_data *ps_stml0xx)
+ 		if (err < 0) {
+ 			dev_err(&ps_stml0xx->spi->dev,
+ 				"power_on failed: %d", err);
++			/* Send dropbox event to trigger bug2go report */
++			stml0xx_device_power_on_fail_dropbox();
+ 			return err;
+ 		}
+ 	}
+@@ -258,6 +275,8 @@ static int stml0xx_device_power_on(struct stml0xx_data *ps_stml0xx)
+ 		err = stml0xx_hw_init(ps_stml0xx);
+ 		if (err < 0) {
+ 			stml0xx_device_power_off(ps_stml0xx);
++			/* Send dropbox event to trigger bug2go report */
++			stml0xx_device_power_on_fail_dropbox();
+ 			return err;
+ 		}
+ 	}
+diff --git a/drivers/misc/stml0xx/stml0xx_queue.c b/drivers/misc/stml0xx/stml0xx_queue.c
+index e418b18551f..c93bbf2474c 100644
+--- a/drivers/misc/stml0xx/stml0xx_queue.c
++++ b/drivers/misc/stml0xx/stml0xx_queue.c
+@@ -43,6 +43,8 @@
+ #include <linux/wakelock.h>
+ #include <linux/workqueue.h>
+ 
++#include <linux/dropbox.h>
++#include <linux/string.h>
+ #include <linux/stml0xx.h>
+ 
+ static int maxBufFill = -1;
+@@ -51,6 +53,7 @@ static long long int as_queue_numadded;
+ #define AS_QUEUE_SIZE_ESTIMATE (as_queue_numadded - as_queue_numremoved)
+ #define AS_QUEUE_MAX_SIZE (1024)
+ 
++#define DROPBOX_QUEDROP_ISSUE "queuedrop_issue"
+ /**
+  * stml0xx_as_data_buffer_write() - put a sensor event on the as queue
+  *
+@@ -75,6 +78,7 @@ int stml0xx_as_data_buffer_write(struct stml0xx_data *ps_stml0xx,
+ 	long long int queue_size;
+ 	struct as_node *new_tail;
+ 	struct stml0xx_android_sensor_data *buffer;
++	char dropbox_entry[256];
+ 
+ 	/* Get current queue size */
+ 	queue_size = AS_QUEUE_SIZE_ESTIMATE;
+@@ -92,6 +96,15 @@ int stml0xx_as_data_buffer_write(struct stml0xx_data *ps_stml0xx,
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+ 					"as data buffer full\n");
+ 			full_reported = true;
++			/*
++			* Send buffer queue full dropbox,
++			* avoid to send many bug2go event
++			*/
++			memset(dropbox_entry, 0, sizeof(dropbox_entry));
++			snprintf(dropbox_entry, sizeof(dropbox_entry),
++				"DT QUEUE drop for %d", type);
++			dropbox_queue_event_text(DROPBOX_QUEDROP_ISSUE,
++				dropbox_entry, strlen(dropbox_entry));
+ 		}
+ 		wake_up(&ps_stml0xx->stml0xx_as_data_wq);
+ 		return 0;
+-- 
+2.11.0
+

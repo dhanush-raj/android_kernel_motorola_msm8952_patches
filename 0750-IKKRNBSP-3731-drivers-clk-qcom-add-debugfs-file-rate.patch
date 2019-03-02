@@ -1,0 +1,279 @@
+From ca408711d253c0d6c697520166984255a69dc901 Mon Sep 17 00:00:00 2001
+From: Fred Fettinger <fettinge@motorola.com>
+Date: Fri, 21 Aug 2015 15:04:27 -0500
+Subject: [PATCH 750/959] IKKRNBSP-3731: drivers: clk: qcom: add debugfs file
+ rate_stats
+
+When read, rate_stats shows how much time a clock spends at each
+frequency. This must be enabled for each clock by writing to the
+rate_stats debugfs file. Additional writes to rate_stats will reset
+the rate_stats counters.
+
+Change-Id: I40255b1dce143970950711a960f5df467cde9133
+Signed-off-by: Fred Fettinger <fred.fettinger@motorola.com>
+Reviewed-on: http://gerrit.mot.com/760734
+(cherry picked from 29cf7dc9b076b012e46c6f9f41e62c3aa49fc1d8)
+Reviewed-on: http://gerrit.mot.com/830120
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Reviewed-by: Jared Suttles <jsuttles@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/clk/qcom/clock-debug.c       | 149 +++++++++++++++++++++++++++++++++++
+ drivers/clk/qcom/clock.c             |   3 +
+ drivers/clk/qcom/clock.h             |   2 +
+ include/linux/clk/msm-clk-provider.h |  15 ++++
+ 4 files changed, 169 insertions(+)
+
+diff --git a/drivers/clk/qcom/clock-debug.c b/drivers/clk/qcom/clock-debug.c
+index d0ff821eb20..57cc0e85298 100644
+--- a/drivers/clk/qcom/clock-debug.c
++++ b/drivers/clk/qcom/clock-debug.c
+@@ -522,6 +522,151 @@ static const struct file_operations clock_print_hw_fops = {
+ };
+ 
+ 
++static struct clk_rate_stats_entry *rate_stats_entry_find(
++	struct clk_rate_stats *stats, unsigned long rate)
++{
++	struct clk_rate_stats_entry *entry_end = stats->entries + stats->size;
++	struct clk_rate_stats_entry *entry;
++
++	for (entry = stats->entries; entry < entry_end; entry++)
++		if (entry->rate >= rate)
++			break;
++
++	if (entry < entry_end && entry->rate == rate)
++		return entry;
++
++	if (stats->size >= CLOCK_RATE_STATE_SIZE_MAX)
++		return NULL;
++
++	/* Shift existing entries to maintain sort by clock rate */
++	while (entry_end > entry) {
++		struct clk_rate_stats_entry *prev = entry_end - 1;
++		*entry_end = *prev;
++		entry_end = prev;
++	}
++
++	entry->rate = rate;
++	entry->time = 0;
++	stats->size++;
++
++	return entry;
++}
++
++static void clock_debug_update_rate_stats_locked(struct clk *c)
++{
++	struct clk_rate_stats *rate_stats = c->rate_stats;
++	unsigned long rate = c->count ? clk_get_rate(c) : 0;
++	struct clk_rate_stats_entry *entry =
++		rate_stats_entry_find(rate_stats, rate);
++	struct timespec cur_time;
++
++	get_monotonic_boottime(&cur_time);
++	if (entry) {
++		struct timespec delta = timespec_sub(cur_time,
++			rate_stats->last_updated);
++		entry->time += delta.tv_sec * MSEC_PER_SEC +
++			       delta.tv_nsec / NSEC_PER_MSEC;
++	}
++	rate_stats->last_updated = cur_time;
++}
++
++void clock_debug_update_rate_stats(struct clk *c)
++{
++	struct clk_rate_stats *rate_stats = c->rate_stats;
++
++	if (unlikely(rate_stats)) {
++		unsigned long flags;
++
++		spin_lock_irqsave(&rate_stats->lock, flags);
++		clock_debug_update_rate_stats_locked(c);
++		spin_unlock_irqrestore(&rate_stats->lock, flags);
++	}
++}
++
++static DEFINE_MUTEX(rate_stats_lock);
++
++static ssize_t rate_stats_write(struct file *file, const char __user *buf,
++			    size_t len, loff_t *offset)
++{
++	struct clk *c = ((struct seq_file *)file->private_data)->private;
++	struct clk_rate_stats *rate_stats = c->rate_stats;
++	int ret = len;
++
++	mutex_lock(&rate_stats_lock);
++
++	if (!rate_stats) {
++		rate_stats = kzalloc(sizeof(struct clk_rate_stats),
++					GFP_KERNEL);
++		if (rate_stats) {
++			spin_lock_init(&rate_stats->lock);
++			c->rate_stats = rate_stats;
++		} else {
++			pr_err("clock: %s: failed to allocate memory for rate stats",
++				c->dbg_name);
++			ret = -ENOMEM;
++		}
++	}
++
++	mutex_unlock(&rate_stats_lock);
++
++	if (rate_stats) {
++		unsigned long flags;
++
++		spin_lock_irqsave(&rate_stats->lock, flags);
++		rate_stats->size = 0;
++		get_monotonic_boottime(&rate_stats->last_updated);
++		spin_unlock_irqrestore(&rate_stats->lock, flags);
++	}
++
++	return ret;
++}
++
++static const struct timespec TIMESPEC_NONE;
++
++static int rate_stats_show(struct seq_file *m, void *unused)
++{
++	struct clk *c = m->private;
++	struct clk_rate_stats *rate_stats_ptr = c->rate_stats;
++	struct clk_rate_stats rate_stats = {.last_updated = TIMESPEC_NONE};
++
++	if (rate_stats_ptr) {
++		unsigned long flags;
++
++		spin_lock_irqsave(&rate_stats_ptr->lock, flags);
++		clock_debug_update_rate_stats_locked(c);
++		rate_stats = *rate_stats_ptr;
++		spin_unlock_irqrestore(&rate_stats_ptr->lock, flags);
++	}
++
++	if (!timespec_equal(&rate_stats.last_updated, &TIMESPEC_NONE)) {
++		struct clk_rate_stats_entry *entry, *entry_end;
++
++		seq_printf(m, "%10s %11s\n", "rate", "time(ms)");
++		entry_end = rate_stats.entries + rate_stats.size;
++		for (entry = rate_stats.entries; entry < entry_end; entry++)
++			seq_printf(m, "%10lu %11lu\n",
++				   entry->rate, entry->time);
++	} else {
++		seq_puts(m, "enable first by writing to rate_stats\n");
++	}
++
++	return 0;
++}
++
++static int rate_stats_open(struct inode *inode, struct file *file)
++{
++	return single_open(file, rate_stats_show, inode->i_private);
++}
++
++static const struct file_operations clock_rate_stats_fops = {
++	.open		= rate_stats_open,
++	.read		= seq_read,
++	.write		= rate_stats_write,
++	.llseek		= seq_lseek,
++	.release	= seq_release,
++};
++
++
+ static void clock_measure_add(struct clk *clock)
+ {
+ 	if (IS_ERR_OR_NULL(measure))
+@@ -585,6 +730,10 @@ static int clock_debug_add(struct clk *clock)
+ 				&clock_print_hw_fops))
+ 			goto error;
+ 
++	if (!debugfs_create_file("rate_stats", S_IRUGO | S_IWUSR, clk_dir,
++				clock, &clock_rate_stats_fops))
++			goto error;
++
+ 	clock_measure_add(clock);
+ 
+ 	return 0;
+diff --git a/drivers/clk/qcom/clock.c b/drivers/clk/qcom/clock.c
+index 66a209c5553..e98c23a36d2 100644
+--- a/drivers/clk/qcom/clock.c
++++ b/drivers/clk/qcom/clock.c
+@@ -383,6 +383,7 @@ int clk_enable(struct clk *clk)
+ 			goto err_enable_depends;
+ 
+ 		trace_clock_enable(name, 1, smp_processor_id());
++		clock_debug_update_rate_stats(clk);
+ 		if (clk->ops->enable)
+ 			ret = clk->ops->enable(clk);
+ 		if (ret)
+@@ -422,6 +423,7 @@ void clk_disable(struct clk *clk)
+ 		struct clk *parent = clk->parent;
+ 
+ 		trace_clock_disable(name, 0, smp_processor_id());
++		clock_debug_update_rate_stats(clk);
+ 		if (clk->ops->disable)
+ 			clk->ops->disable(clk);
+ 		clk_disable(clk->depends);
+@@ -669,6 +671,7 @@ int clk_set_rate(struct clk *clk, unsigned long rate)
+ 	}
+ 
+ 	trace_clock_set_rate(name, rate, raw_smp_processor_id());
++	clock_debug_update_rate_stats(clk);
+ 
+ 	start_rate = clk->rate;
+ 
+diff --git a/drivers/clk/qcom/clock.h b/drivers/clk/qcom/clock.h
+index bee769921ff..159e523660a 100644
+--- a/drivers/clk/qcom/clock.h
++++ b/drivers/clk/qcom/clock.h
+@@ -41,12 +41,14 @@ extern struct list_head orphan_clk_list;
+ #ifdef CONFIG_DEBUG_FS
+ int clock_debug_register(struct clk *clk);
+ void clock_debug_print_enabled(void);
++void clock_debug_update_rate_stats(struct clk *c);
+ #else
+ static inline int clock_debug_register(struct clk *unused)
+ {
+ 	return 0;
+ }
+ static inline void clock_debug_print_enabled(void) { return; }
++static inline void clock_debug_update_rate_stats(struct clk *c) {}
+ #endif
+ 
+ #endif
+diff --git a/include/linux/clk/msm-clk-provider.h b/include/linux/clk/msm-clk-provider.h
+index dab472b91a5..b372e66f348 100644
+--- a/include/linux/clk/msm-clk-provider.h
++++ b/include/linux/clk/msm-clk-provider.h
+@@ -157,6 +157,20 @@ struct clk_ops {
+ 				struct clk_register_data **regs, u32 *size);
+ };
+ 
++struct clk_rate_stats_entry {
++	unsigned long rate;
++	unsigned long time;
++};
++
++#define CLOCK_RATE_STATE_SIZE_MAX 16
++
++struct clk_rate_stats {
++	spinlock_t lock;
++	struct timespec last_updated;
++	size_t size;
++	struct clk_rate_stats_entry entries[CLOCK_RATE_STATE_SIZE_MAX];
++};
++
+ /**
+  * struct clk
+  * @prepare_count: prepare refcount
+@@ -195,6 +209,7 @@ struct clk {
+ 	bool always_on;
+ 
+ 	struct dentry *clk_dir;
++	struct clk_rate_stats *rate_stats;
+ };
+ 
+ #define CLK_INIT(name) \
+-- 
+2.11.0
+

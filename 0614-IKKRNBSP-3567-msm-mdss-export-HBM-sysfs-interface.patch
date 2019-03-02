@@ -1,0 +1,113 @@
+From 542bbc2c632e88c523b88580b4575fd757db187d Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Wed, 13 Jan 2016 11:47:48 -0800
+Subject: [PATCH 614/959] IKKRNBSP-3567: msm: mdss: export HBM sysfs interface
+
+Panel's HBM state is able to be turned on or off by sysfs
+
+Change-Id: I4f187aa7382c612d5016280210bd75d6659c7e43
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/807246
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 10 +++++++++-
+ drivers/video/msm/mdss/mdss_fb.c        | 25 ++++++++++++++++++++++++-
+ drivers/video/msm/mdss/mdss_panel.h     |  9 ++++++++-
+ 3 files changed, 41 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index 44f247f14b6..7e046ef216c 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -998,6 +998,9 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
+ 			goto end;
+ 	}
+ 
++	mdss_dsi_panel_set_param(pdata,
++		PARAM_HBM_ID, HBM_OFF_STATE, true);
++
+ 	if (ctrl->off_cmds.cmd_cnt)
+ 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->off_cmds, CMD_REQ_COMMIT);
+ 
+@@ -1145,8 +1148,13 @@ exit_free:
+ 	return -ENOMEM;
+ }
+ 
++static struct panel_param_val_map hbm_map[HBM_STATE_NUM] = {
++	{"0", "qcom,mdss-dsi-hbm-off-command"},
++	{"1", "qcom,mdss-dsi-hbm-on-command"},
++};
++
+ static struct panel_param mdss_dsi_panel_param[PARAM_ID_NUM] = {
+-	/* parameters to be added */
++	{"HBM", hbm_map, HBM_STATE_NUM, HBM_OFF_STATE, false},
+ };
+ 
+ static int mdss_panel_parse_param_prop(struct device_node *np,
+diff --git a/drivers/video/msm/mdss/mdss_fb.c b/drivers/video/msm/mdss/mdss_fb.c
+index 9f15dfc38b5..006ea3403df 100644
+--- a/drivers/video/msm/mdss/mdss_fb.c
++++ b/drivers/video/msm/mdss/mdss_fb.c
+@@ -979,8 +979,31 @@ static int __maybe_unused mdss_fb_get_param(struct device *dev,
+ 	return 0;
+ }
+ 
++static ssize_t hbm_show(struct device *dev,
++		struct device_attribute *attr, char *buf)
++{
++	const char *name;
++	ssize_t ret;
++
++	ret = mdss_fb_get_param(dev, PARAM_HBM_ID, &name);
++	if (ret < 0)
++		return ret;
++
++	return snprintf(buf, PAGE_SIZE, "%s\n", name);
++}
++
++static ssize_t hbm_store(struct device *dev,
++		struct device_attribute *attr,
++		const char *buf, size_t count)
++{
++	ssize_t ret;
++
++	ret = mdss_fb_set_param(dev, PARAM_HBM_ID, buf);
++	return ret ? ret : count;
++}
++
+ static struct device_attribute param_attrs[PARAM_ID_NUM] = {
+-	/* attributes to be added */
++	__ATTR(hbm, S_IWUSR | S_IWGRP | S_IRUSR | S_IRGRP, hbm_show, hbm_store),
+ };
+ 
+ static int mdss_fb_create_param_sysfs(struct msm_fb_data_type *mfd)
+diff --git a/drivers/video/msm/mdss/mdss_panel.h b/drivers/video/msm/mdss/mdss_panel.h
+index a1eacf43041..edd54b6d537 100644
+--- a/drivers/video/msm/mdss/mdss_panel.h
++++ b/drivers/video/msm/mdss/mdss_panel.h
+@@ -32,8 +32,15 @@ struct panel_id {
+ /* worst case prefill lines for all chipsets including all vertical blank */
+ #define MDSS_MDP_MAX_PREFILL_FETCH 25
+ 
++enum hbm_state {
++	HBM_OFF_STATE = 0,
++	HBM_ON_STATE,
++	HBM_STATE_NUM
++};
++
+ enum panel_param_id {
+-	PARAM_ID_NUM = 0,
++	PARAM_HBM_ID = 0,
++	PARAM_ID_NUM
+ };
+ 
+ struct panel_param_val_map {
+-- 
+2.11.0
+

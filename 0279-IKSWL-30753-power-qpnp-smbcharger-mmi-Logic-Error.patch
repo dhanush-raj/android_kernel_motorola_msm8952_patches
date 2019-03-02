@@ -1,0 +1,41 @@
+From 06e0c1d3a2ae5d9f495c33780c64179a6c6dcbd9 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Thu, 16 Jul 2015 17:32:53 -0500
+Subject: [PATCH 279/959] IKSWL-30753: power: qpnp-smbcharger-mmi: Logic Error
+
+Fix the Logic error that is forcing 15W mode from
+any HVDCP.  This occurred because the HVDCP starts in
+DCP mode which had the limit less then the threshold
+and the check was less then or equal rather then equal.
+Changing to an equal check allows both 15W and 25 W
+mode to operate as expected.
+
+Change-Id: Ie27b20eb42620db12026d97529c254d7780bab9d
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/767742
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Vidyadhar Gurram <rnh786@motorola.com>
+Reviewed-by: Andrew Wheeler <awheeler@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 383538e1bcd..b1880bf9873 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -3548,7 +3548,7 @@ static void smbchg_external_power_changed(struct power_supply *psy)
+ 	if (smbchg_hvdcp_det_check(chip)) {
+ 		if ((chip->stepchg_state == STEP_TAPER) ||
+ 		    (chip->stepchg_state == STEP_FULL) ||
+-		    (chip->usb_target_current_ma <= HVDCP_ICL_TAPER) ||
++		    (chip->usb_target_current_ma == HVDCP_ICL_TAPER) ||
+ 		    (chip->demo_mode))
+ 			current_limit = HVDCP_ICL_TAPER;
+ 		else
+-- 
+2.11.0
+

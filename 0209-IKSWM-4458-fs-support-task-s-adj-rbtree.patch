@@ -1,0 +1,61 @@
+From 1337e8f2723611c20227521a362d5402855e7220 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Fri, 6 Mar 2015 16:46:06 -0600
+Subject: [PATCH 209/959] IKSWM-4458 fs: support task's adj rbtree
+
+Add (or del) a task to (or from) task's adj rbtree
+when its oom_score_adj is modified.
+
+Change-Id: I998fdee33dd83c1bf67d6797de3a41de19ccd511
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ fs/exec.c      | 7 +++++++
+ fs/proc/base.c | 5 +++++
+ 2 files changed, 12 insertions(+)
+
+diff --git a/fs/exec.c b/fs/exec.c
+index 60a7b4e309c..1a5a7fdbcad 100644
+--- a/fs/exec.c
++++ b/fs/exec.c
+@@ -952,6 +952,13 @@ static int de_thread(struct task_struct *tsk)
+ 		transfer_pid(leader, tsk, PIDTYPE_SID);
+ 
+ 		list_replace_rcu(&leader->tasks, &tsk->tasks);
++		/*
++		 * need to delete leader from adj tree, because it will not be
++		 * group leader (exit_signal = -1) soon. release_task(leader)
++		 * can't delete it.
++		 */
++		delete_from_adj_tree(leader);
++		add_2_adj_tree(tsk);
+ 		list_replace_init(&leader->sibling, &tsk->sibling);
+ 
+ 		tsk->group_leader = tsk;
+diff --git a/fs/proc/base.c b/fs/proc/base.c
+index 7046b5ec120..816a5477092 100644
+--- a/fs/proc/base.c
++++ b/fs/proc/base.c
+@@ -995,7 +995,9 @@ static ssize_t oom_adj_write(struct file *file, const char __user *buf,
+ 		  current->comm, task_pid_nr(current), task_pid_nr(task),
+ 		  task_pid_nr(task));
+ 
++	delete_from_adj_tree(task);
+ 	task->signal->oom_score_adj = oom_adj;
++	add_2_adj_tree(task);
+ 	trace_oom_score_adj_update(task);
+ err_sighand:
+ 	unlock_task_sighand(task, &flags);
+@@ -1081,7 +1083,10 @@ static ssize_t oom_score_adj_write(struct file *file, const char __user *buf,
+ 		goto err_sighand;
+ 	}
+ 
++	delete_from_adj_tree(task);
+ 	task->signal->oom_score_adj = (short)oom_score_adj;
++	add_2_adj_tree(task);
++
+ 	if (has_capability_noaudit(current, CAP_SYS_RESOURCE))
+ 		task->signal->oom_score_adj_min = (short)oom_score_adj;
+ 	trace_oom_score_adj_update(task);
+-- 
+2.11.0
+

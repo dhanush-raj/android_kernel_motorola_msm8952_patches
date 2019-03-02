@@ -1,0 +1,48 @@
+From 4b79b66d075b11effefbc55cf8a59bed5185977d Mon Sep 17 00:00:00 2001
+From: Mark Reed <mreed1@motorola.com>
+Date: Thu, 10 Mar 2016 16:28:21 -0600
+Subject: [PATCH 782/959] IKSECURITY-760 msm: add verity reset support.
+
+This change notifies boot loader to switch to verity logging mode.
+
+Change-Id: Ie95b6cc353873186b39ec74f86b6f60fa2e7ad8e
+Signed-off-by: Mark Reed <mreed@motorola.com>
+Reviewed-on: http://gerrit.mot.com/832432
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/reset/msm-poweroff.c | 2 ++
+ include/linux/qpnp/power-on.h      | 1 +
+ 2 files changed, 3 insertions(+)
+
+diff --git a/drivers/power/reset/msm-poweroff.c b/drivers/power/reset/msm-poweroff.c
+index 6fcf0c5ed0b..e00e523d098 100644
+--- a/drivers/power/reset/msm-poweroff.c
++++ b/drivers/power/reset/msm-poweroff.c
+@@ -274,6 +274,8 @@ static void msm_restart_prepare(const char *cmd)
+ 				PON_RESTART_REASON_RTC);
+ 			__raw_writel(0x77665503, restart_reason);
+ 		} else if (!strcmp(cmd, "dm-verity device corrupted")) {
++			qpnp_pon_set_restart_reason(
++				PON_RESTART_REASON_DMVERITY_CORRUPTED);
+ 			__raw_writel(0x77665508, restart_reason);
+ 		} else if (!strcmp(cmd, "dm-verity enforcing")) {
+ 			__raw_writel(0x77665509, restart_reason);
+diff --git a/include/linux/qpnp/power-on.h b/include/linux/qpnp/power-on.h
+index 6077149c87d..59e6f9585af 100644
+--- a/include/linux/qpnp/power-on.h
++++ b/include/linux/qpnp/power-on.h
+@@ -52,6 +52,7 @@ enum pon_restart_reason {
+ 	PON_RESTART_REASON_RECOVERY	= 0x01,
+ 	PON_RESTART_REASON_BOOTLOADER	= 0x02,
+ 	PON_RESTART_REASON_RTC		= 0x03,
++	PON_RESTART_REASON_DMVERITY_CORRUPTED	= 0x04,
+ };
+ 
+ #define RESET_EXTRA_POST_PANIC_REASON	(BIT(4) | BIT(5))
+-- 
+2.11.0
+

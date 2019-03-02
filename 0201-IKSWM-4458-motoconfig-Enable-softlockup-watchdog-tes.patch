@@ -1,0 +1,24 @@
+From dd93ec3f3abb15b94b8aa755d4ed75e2f39d066c Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Thu, 24 Sep 2015 23:03:59 -0700
+Subject: [PATCH 201/959] IKSWM-4458 motoconfig: Enable softlockup/watchdog
+ test interface
+
+Change-Id: Ia821b58978f8f12a77ce918965056cbb2572fba4
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index bc60d895c34..cd8039c948e 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -33,3 +33,4 @@ CONFIG_PSTORE_RAM_ANNOTATION_APPEND=y
+ CONFIG_BOOTINFO=y
+ CONFIG_MMI_SOC_INFO=y
+ CONFIG_MMI_RAM_INFO=y
++CONFIG_SOFTLOCKUP_WATCHDOG_TEST=y
+-- 
+2.11.0
+

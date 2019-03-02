@@ -1,0 +1,165 @@
+From 1a430c19987de70f72ab6073fb0c1804c3b3d605 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Tue, 27 Oct 2015 17:18:03 -0700
+Subject: [PATCH 783/959] IKSWM-25387 perf: Fix deadlock when cpu hotplug
+
+Qcom commit adcd5a5662b79bc1392c5f7f69cbf891f4f9cf34 induced a deadlock issue.
+
+perf_release
+	perf_event_release_kernel
+		mutex_lock_nested(&ctx->mutex, SINGLE_DEPTH_NESTING); // locked here!!
+			perf_retry_remove(&re);
+				cpu_up(event->cpu);
+					cpu_hotplug_begin
+						perf_cpu_notify
+							perf_event_exit_cpu(cpu);
+								mutex_lock(&ctx->mutex); // stuck for dead lock
+Fix the issue by revert perf_retry_remove code, instead we can simply detatch siblings when the CPU
+goes down in the first place.
+
+Please refer to commit 226424eee809251ec23bd4b09d8efba09c10fc3c for details.
+
+Change-Id: I4ec9a78601e91ff5b4c1eea397048c563a44e522
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+Reviewed-on: http://gerrit.mot.com/785543
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: Yi-Wei Zhao <gbjc64@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/833025
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+---
+ arch/arm/kernel/perf_event.c   |  2 +-
+ arch/arm64/kernel/perf_event.c |  1 +
+ kernel/events/core.c           | 39 +++++++++++++++++++++++++++++++++++----
+ 3 files changed, 37 insertions(+), 5 deletions(-)
+
+diff --git a/arch/arm/kernel/perf_event.c b/arch/arm/kernel/perf_event.c
+index 2914c69f2fa..e988ca38929 100644
+--- a/arch/arm/kernel/perf_event.c
++++ b/arch/arm/kernel/perf_event.c
+@@ -602,7 +602,7 @@ static void armpmu_init(struct arm_pmu *armpmu)
+ 	armpmu->pmu.start = armpmu_start;
+ 	armpmu->pmu.stop = armpmu_stop;
+ 	armpmu->pmu.read = armpmu_read;
+-	armpmu->pmu.events_across_hotplug = 1;
++	armpmu->pmu.events_across_hotplug = 0;
+ }
+ 
+ int armpmu_register(struct arm_pmu *armpmu, int type)
+diff --git a/arch/arm64/kernel/perf_event.c b/arch/arm64/kernel/perf_event.c
+index 21f3b11136b..7571e62cfed 100644
+--- a/arch/arm64/kernel/perf_event.c
++++ b/arch/arm64/kernel/perf_event.c
+@@ -618,6 +618,7 @@ static void __init armpmu_init(struct arm_pmu *armpmu)
+ 		.start		= armpmu_start,
+ 		.stop		= armpmu_stop,
+ 		.read		= armpmu_read,
++		.events_across_hotplug = 0,
+ 	};
+ }
+ 
+diff --git a/kernel/events/core.c b/kernel/events/core.c
+index a8bf970e8f6..c9b3bc5ee07 100644
+--- a/kernel/events/core.c
++++ b/kernel/events/core.c
+@@ -1489,6 +1489,31 @@ static int __perf_remove_from_context(void *info)
+ 	return 0;
+ }
+ 
++#if 0
++#ifdef CONFIG_SMP
++static void perf_retry_remove(struct remove_event *rep)
++{
++	int up_ret;
++	struct perf_event *event = rep->event;
++	/*
++	 * CPU was offline. Bring it online so we can
++	 * gracefully exit a perf context.
++	 */
++	up_ret = cpu_up(event->cpu);
++	if (!up_ret)
++		/* Try the remove call once again. */
++		cpu_function_call(event->cpu, __perf_remove_from_context, rep);
++	else
++		pr_err("Failed to bring up CPU: %d, ret: %d\n",
++		       event->cpu, up_ret);
++}
++#else
++static void perf_retry_remove(struct remove_event *rep)
++{
++}
++#endif
++#endif
++
+ /*
+  * Remove the event from a task's (or a CPU's) list of events.
+  *
+@@ -1506,7 +1531,6 @@ static void __ref perf_remove_from_context(struct perf_event *event, bool detach
+ {
+ 	struct perf_event_context *ctx = event->ctx;
+ 	struct task_struct *task = ctx->task;
+-	int ret;
+ 	struct remove_event re = {
+ 		.event = event,
+ 		.detach_group = detach_group,
+@@ -1516,9 +1540,12 @@ static void __ref perf_remove_from_context(struct perf_event *event, bool detach
+ 
+ 	if (!task) {
+ 		/*
+-		 * Per cpu events are removed via an smp call
++		 * Per cpu events are removed via an smp call. The removal can
++		 * fail if the CPU is currently offline, but in that case we
++		 * already called __perf_remove_from_context from
++		 * perf_event_exit_cpu.
+ 		 */
+-		ret = cpu_function_call(event->cpu, __perf_remove_from_context,
++		cpu_function_call(event->cpu, __perf_remove_from_context,
+ 					&re);
+ 		return;
+ 	}
+@@ -5881,6 +5908,7 @@ static struct pmu perf_swevent = {
+ 	.read		= perf_swevent_read,
+ 
+ 	.event_idx	= perf_swevent_event_idx,
++	.events_across_hotplug = 0,
+ };
+ 
+ #ifdef CONFIG_EVENT_TRACING
+@@ -6000,6 +6028,7 @@ static struct pmu perf_tracepoint = {
+ 	.read		= perf_swevent_read,
+ 
+ 	.event_idx	= perf_swevent_event_idx,
++	.events_across_hotplug = 0,
+ };
+ 
+ static inline void perf_tp_register(void)
+@@ -6227,6 +6256,7 @@ static struct pmu perf_cpu_clock = {
+ 	.read		= cpu_clock_event_read,
+ 
+ 	.event_idx	= perf_swevent_event_idx,
++	.events_across_hotplug = 0,
+ };
+ 
+ /*
+@@ -6307,6 +6337,7 @@ static struct pmu perf_task_clock = {
+ 	.read		= task_clock_event_read,
+ 
+ 	.event_idx	= perf_swevent_event_idx,
++	.events_across_hotplug = 0,
+ };
+ 
+ static void perf_pmu_nop_void(struct pmu *pmu)
+@@ -7881,7 +7912,7 @@ static void perf_pmu_rotate_stop(struct pmu *pmu)
+ 
+ static void __perf_event_exit_context(void *__info)
+ {
+-	struct remove_event re = { .detach_group = false };
++	struct remove_event re = { .detach_group = true };
+ 	struct perf_event_context *ctx = __info;
+ 
+ 	perf_pmu_rotate_stop(ctx->pmu);
+-- 
+2.11.0
+

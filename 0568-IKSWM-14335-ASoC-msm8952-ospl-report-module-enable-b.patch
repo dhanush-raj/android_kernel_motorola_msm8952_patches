@@ -1,0 +1,88 @@
+From 908afe41bc96131d9547c13e9caac470d8bf63b9 Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Tue, 15 Dec 2015 11:15:56 -0600
+Subject: [PATCH 568/959] IKSWM-14335 ASoC: msm8952: ospl: report module enable
+ bit
+
+Add get_param handler of AFE_PARAM_ID_ENABLE to read
+Opalum Rx/Tx modules enable bit correctly.
+
+Change-Id: I93bb7caa9fd337e10fb21c3bf1a115654cad2f98
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/807456
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/msm/ospl2xx.c | 18 +++++++++++++++---
+ 1 file changed, 15 insertions(+), 3 deletions(-)
+
+diff --git a/sound/soc/msm/ospl2xx.c b/sound/soc/msm/ospl2xx.c
+index 573fa58f9ea..65e3ed4e5b0 100644
+--- a/sound/soc/msm/ospl2xx.c
++++ b/sound/soc/msm/ospl2xx.c
+@@ -364,6 +364,10 @@ int ospl2xx_afe_get_param(uint32_t param_id)
+ 		pr_err("%s: unsupported paramID[0x%08X]\n", __func__, param_id);
+ 		return -EINVAL;
+ 	}
++	if (param_id == AFE_CUSTOM_OPALUM_RX_MODULE ||
++	    param_id == AFE_CUSTOM_OPALUM_TX_MODULE) {
++		param_id = AFE_PARAM_ID_ENABLE;
++	}
+ 
+ 	index = afe_get_port_index(port_id);
+ 
+@@ -436,6 +440,7 @@ static int32_t ospl2xx_afe_callback(struct apr_client_data *data)
+ 		if (payload32[1] == AFE_CUSTOM_OPALUM_RX_MODULE ||
+ 		    payload32[1] == AFE_CUSTOM_OPALUM_TX_MODULE) {
+ 			switch (payload32[2]) {
++			case AFE_PARAM_ID_ENABLE:
+ 			case PARAM_ID_OPALUM_RX_EXC_MODEL:
+ 			case PARAM_ID_OPLAUM_RX_TEMPERATURE:
+ 			case PARAM_ID_OPALUM_TX_F0_CALIBRATION_VALUE:
+@@ -480,6 +485,10 @@ static int ospl2xx_rx_enable_put(struct snd_kcontrol *kcontrol,
+ static int ospl2xx_rx_enable_get(struct snd_kcontrol *kcontrol,
+ 			struct snd_ctl_elem_value *ucontrol)
+ {
++	ospl2xx_afe_set_callback(ospl2xx_afe_callback);
++	ospl2xx_afe_get_param(AFE_CUSTOM_OPALUM_RX_MODULE);
++
++	ucontrol->value.integer.value[0] = afe_cb_payload32_data[0];
+ 	return 0;
+ }
+ static const char *const ospl2xx_rx_enable_text[] = {"Disable", "Enable"};
+@@ -646,7 +655,10 @@ static int ospl2xx_tx_enable_put(struct snd_kcontrol *kcontrol,
+ static int ospl2xx_tx_enable_get(struct snd_kcontrol *kcontrol,
+ 			struct snd_ctl_elem_value *ucontrol)
+ {
+-	/* not implemented yet */
++	ospl2xx_afe_set_callback(ospl2xx_afe_callback);
++	ospl2xx_afe_get_param(AFE_CUSTOM_OPALUM_TX_MODULE);
++
++	ucontrol->value.integer.value[0] = afe_cb_payload32_data[0];
+ 	return 0;
+ }
+ static const char *const ospl2xx_tx_enable_text[] = {"Disable", "Enable"};
+@@ -770,7 +782,7 @@ static const struct soc_enum ospl2xx_reload_ext_enum[] = {
+ 
+ 
+ static const struct snd_kcontrol_new ospl2xx_params_controls[] = {
+-	/* PUT */ SOC_ENUM_EXT("OSPL Rx",
++	/* GET,PUT */ SOC_ENUM_EXT("OSPL Rx",
+ 		ospl2xx_rx_enable_enum[0],
+ 		ospl2xx_rx_enable_get, ospl2xx_rx_enable_put),
+ 	/* PUT */ SOC_ENUM_EXT("OSPL Int RxConfig",
+@@ -792,7 +804,7 @@ static const struct snd_kcontrol_new ospl2xx_params_controls[] = {
+ 		SND_SOC_NOPM, 0, 0xFFFF, 0, 3,
+ 		NULL, ospl2xx_rx_put_temp_cal),
+ 
+-	/* PUT */ SOC_ENUM_EXT("OSPL Tx",
++	/* GET,PUT */ SOC_ENUM_EXT("OSPL Tx",
+ 		ospl2xx_tx_enable_enum[0],
+ 		ospl2xx_tx_enable_get, ospl2xx_tx_enable_put),
+ 	/* PUT */ SOC_ENUM_EXT("OSPL Tx diagnostic",
+-- 
+2.11.0
+

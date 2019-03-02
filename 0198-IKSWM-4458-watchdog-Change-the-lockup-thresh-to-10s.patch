@@ -1,0 +1,41 @@
+From 11e85163bcd9c304259b19c18b3c5766e88a2d15 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Fri, 17 May 2013 19:36:04 +0800
+Subject: [PATCH 198/959] IKSWM-4458: watchdog: Change the lockup thresh to 10s
+
+Set watchdog_thresh = 5, so to report soft lockup bug when CPU stuck for 10s.
+
+Change-Id: I71842f4ca1ae7e8798c04be72341362279e3406e
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/539515
+SLT-Approved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Yi-Wei Zhao <gbjc64@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+(cherry picked from commit 878a62bbe1d230b68ad241a213c079562c102380)
+Reviewed-on: http://gerrit.pcs.mot.com/621441
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Reviewed-by: Jason Hrycay <jason.hrycay@motorola.com>
+SLTApproved: Jason Hrycay <jason.hrycay@motorola.com>
+Submit-Approved: Jason Hrycay <jason.hrycay@motorola.com>
+Tested-by: Jason Hrycay <jason.hrycay@motorola.com>
+---
+ kernel/watchdog.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/kernel/watchdog.c b/kernel/watchdog.c
+index e092e5a6cdd..d19d1d7c460 100644
+--- a/kernel/watchdog.c
++++ b/kernel/watchdog.c
+@@ -30,7 +30,7 @@
+ #include <linux/perf_event.h>
+ 
+ int watchdog_enabled = 1;
+-int __read_mostly watchdog_thresh = 10;
++int __read_mostly watchdog_thresh = 5;
+ static int __read_mostly watchdog_disabled;
+ static u64 __read_mostly sample_period;
+ 
+-- 
+2.11.0
+

@@ -1,0 +1,52 @@
+From 3d456ae0b1f8a769cf685ca8dbad2ff36a8aa4d9 Mon Sep 17 00:00:00 2001
+From: Luis Junior <lfjunior@motorola.com>
+Date: Mon, 28 Mar 2016 14:17:30 -0300
+Subject: [PATCH 864/959] IKFX-2925 - Quick Capture Launch
+
+Removed camera button key report in order to
+avoid the camera key being sent together with
+the intent from SystemUI camera gesture
+
+Change-Id: I3527e3c5854fe993dae4c06399a3e766cc9ff017
+Signed-off-by: Luis Fernando Junior <lfjunior@motorola.com>
+Reviewed-on: http://gerrit.mot.com/837945
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c     | 1 -
+ drivers/misc/stml0xx/stml0xx_wake_irq.c | 3 ---
+ 2 files changed, 4 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index e2bda86a67e..5772667d29f 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -976,7 +976,6 @@ static int stml0xx_probe(struct spi_device *spi)
+ 	}
+ 	input_set_drvdata(ps_stml0xx->input_dev, ps_stml0xx);
+ 	input_set_capability(ps_stml0xx->input_dev, EV_KEY, KEY_POWER);
+-	input_set_capability(ps_stml0xx->input_dev, EV_KEY, KEY_CAMERA);
+ 	input_set_capability(ps_stml0xx->input_dev, EV_SW, SW_LID);
+ 	if (pdata->headset_button_1_keycode > 0)
+ 		input_set_capability(ps_stml0xx->input_dev, EV_KEY, pdata->headset_button_1_keycode);
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index c8ae7247f93..b855e052932 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -366,9 +366,6 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 			"Sending Camera: %d",
+ 			SH_TO_H16(buf + WAKE_IRQ_IDX_CAMERA));
+ 
+-		input_report_key(ps_stml0xx->input_dev, KEY_CAMERA, 1);
+-		input_report_key(ps_stml0xx->input_dev, KEY_CAMERA, 0);
+-		input_sync(ps_stml0xx->input_dev);
+ 		dev_dbg(&stml0xx_misc_data->spi->dev, "Report camkey toggle");
+ 	}
+ 	if (irq_status & M_CHOPCHOP) {
+-- 
+2.11.0
+

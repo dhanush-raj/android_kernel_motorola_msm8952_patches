@@ -1,0 +1,81 @@
+From 5fc879442c9daf75a9e7b1a801eeda433dfc26e0 Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Sun, 25 Oct 2015 09:18:19 -0500
+Subject: [PATCH 419/959] IKSWM-8884: arm/dt: 8952: Add laser focus device i2c
+ config
+
+changes for laser sensor  p1 hw and afterward, the connection
+moving from cci to i2c
+Change-Id: I80c38b39bf4d64fcea471c441b8f0d113fde3ac4
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/794308
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Dmitry Ornatsky <ornatsky@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 39 +++++++++++++++++++++++++
+ 1 file changed, 39 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index aa87417a498..a6c7554dc00 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -253,6 +253,31 @@
+ 				bias-disable;
+ 			};
+ 		};
++
++	laser_active {
++		/* reset, interrupt */
++		qcom,pins = <&gp 86>,<&gp 43>;
++		qcom,num-grp-pins = <2>;
++		qcom,pin-func = <0>;
++		label = "laser-active";
++		/* active state */
++		laser_active: laser_active {
++			drive-strength = <2>; /* 2 MA */
++			bias-disable; /* No PULL */
++		};
++	};
++	laser_suspend {
++		/* reset,interrupt  */
++		qcom,pins = <&gp 86>,<&gp 43> ;
++		qcom,num-grp-pins = <2>;
++		qcom,pin-func = <1>;
++		label = "laser-suspend";
++		/*suspended state */
++		laser_suspend: laser_suspend {
++			drive-strength = <2>; /* 2 MA */
++			bias-disable; /* No PULL */
++		};
++	};
+ };
+ 
+ &pmi8950_charger {
+@@ -735,6 +760,20 @@
+ 		pinctrl-names = "default";
+ 		pinctrl-0 = <&tfa9890_reset_default &tfa9890_earpiece_default>;
+ 	};
++	stmvl53l0@29 {
++		compatible = "st,stmvl53l0_i2c";
++		reg = <0x29>;
++		vdd-supply = <&pm8950_l22>;
++		gpios = <&msm_gpio 86 0>, <&msm_gpio 43 0>;
++		qcom,gpio-reset = <0>;
++		qcom,gpio-req-tbl-num = <0 1>;
++		qcom,gpio-req-tbl-flags = <0 1>;
++		qcom,gpio-req-tbl-label ="TOF_XSHUTDOWN","TOF_INT";
++		pinctrl-names = "laser_default", "laser_suspend";
++		pinctrl-0 = <&laser_active >;
++		pinctrl-1 = <&laser_suspend >;
++		st,sensorthreshold = <40 45>;
++	};
+ };
+ 
+ &other_ext_mem {
+-- 
+2.11.0
+

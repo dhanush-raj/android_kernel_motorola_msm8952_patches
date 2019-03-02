@@ -1,0 +1,46 @@
+From bbb171998780cd90a0f5ea823d628924746c5067 Mon Sep 17 00:00:00 2001
+From: Colin Cross <ccross@android.com>
+Date: Tue, 4 Feb 2014 02:15:32 +0000
+Subject: [PATCH 804/959] Mot-CRs-fixed: IKSECURITY-766 security: select
+ correct default LSM_MMAP_MIN_ADDR on arm on arm64
+
+Binaries compiled for arm may run on arm64 if CONFIG_COMPAT is
+selected.  Set LSM_MMAP_MIN_ADDR to 32768 if ARM64 && COMPAT to
+prevent selinux failures launching 32-bit static executables that
+are mapped at 0x8000.
+
+Signed-off-by: Colin Cross <ccross@android.com>
+Acked-by: Will Deacon <will.deacon@arm.com>
+Acked-by: Eric Paris <eparis@redhat.com>
+Acked-by: James Morris <james.l.morris@oracle.com>
+Signed-off-by: Catalin Marinas <catalin.marinas@arm.com>
+Signed-off-by: Joel Voss <jvoss@motorola.com>
+Change-Id: Ifbd72e1a3eb48d8ee0b7232e5701fd97d6853e69
+Reviewed-on: http://gerrit.mot.com/735770
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.mot.com/834113
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+---
+ security/Kconfig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/security/Kconfig b/security/Kconfig
+index 66a5f808297..1e30f2c3b1b 100644
+--- a/security/Kconfig
++++ b/security/Kconfig
+@@ -122,7 +122,7 @@ config INTEL_TXT
+ config LSM_MMAP_MIN_ADDR
+ 	int "Low address space for LSM to protect from user allocation"
+ 	depends on SECURITY && SECURITY_SELINUX
+-	default 32768 if ARM
++	default 32768 if ARM || (ARM64 && COMPAT)
+ 	default 65536
+ 	help
+ 	  This is the portion of low virtual memory which should be protected
+-- 
+2.11.0
+

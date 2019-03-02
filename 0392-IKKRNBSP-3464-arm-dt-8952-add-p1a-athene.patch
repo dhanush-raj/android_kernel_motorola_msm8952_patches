@@ -1,0 +1,141 @@
+From 0d8383529786474e8069c17f275ce987da7c4fa8 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Wed, 21 Oct 2015 11:59:03 -0500
+Subject: [PATCH 392/959] IKKRNBSP-3464 arm/dt: 8952: add p1a athene
+
+Add athene p1a dts file and add it to Makefile
+
+Change-Id: I1ec2a6dfb6be7028ca8384ca4e1becca5e3d3774
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/793289
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Qing Chang <qing@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/Makefile                    |  5 ++++-
+ arch/arm/boot/dts/qcom/msm8952-athene_13mp-p1.dts  | 26 ++++++++++++++++++++++
+ arch/arm/boot/dts/qcom/msm8952-athene_16mp-p1.dts  | 26 ++++++++++++++++++++++
+ arch/arm/boot/dts/qcom/msm8952-athene_power-p1.dts | 26 ++++++++++++++++++++++
+ 4 files changed, 82 insertions(+), 1 deletion(-)
+ create mode 100644 arch/arm/boot/dts/qcom/msm8952-athene_13mp-p1.dts
+ create mode 100644 arch/arm/boot/dts/qcom/msm8952-athene_16mp-p1.dts
+ create mode 100644 arch/arm/boot/dts/qcom/msm8952-athene_power-p1.dts
+
+diff --git a/arch/arm/boot/dts/qcom/Makefile b/arch/arm/boot/dts/qcom/Makefile
+index 5055da44ace..a50faa4fab1 100644
+--- a/arch/arm/boot/dts/qcom/Makefile
++++ b/arch/arm/boot/dts/qcom/Makefile
+@@ -168,7 +168,10 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
+ 	msm8929-cdp-jdi.dtb
+ endif # CONFIG_MMI_DEVICE_DTBS
+ 
+-dtb-$(CONFIG_ARCH_MSM8916) += msm8952-athene-p0.dtb
++dtb-$(CONFIG_ARCH_MSM8916) += msm8952-athene-p0.dtb \
++	msm8952-athene_16mp-p1.dtb \
++	msm8952-athene_13mp-p1.dtb \
++	msm8952-athene_power-p1.dtb
+ 
+ dtb-$(CONFIG_ARCH_MSM8226) += msm8226-sim.dtb \
+ 	msm8226-fluid.dtb \
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene_13mp-p1.dts b/arch/arm/boot/dts/qcom/msm8952-athene_13mp-p1.dts
+new file mode 100644
+index 00000000000..5caaa152998
+--- /dev/null
++++ b/arch/arm/boot/dts/qcom/msm8952-athene_13mp-p1.dts
+@@ -0,0 +1,26 @@
++/* Copyright (c) 2015, Motorola Mobility Inc. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++
++/dts-v1/;
++
++#include "msm8952-athene.dtsi"
++#include "dsi-panel-mot-tdi-546-1080p-cmd.dtsi"
++
++/ {
++	model = "Athene_13MP";
++	qcom,board-id = <0x42 0x81a0>, <0x42 0x81ad>;
++};
++
++&mdss_dsi0 {
++	qcom,dsi-pref-prim-pan = <&mot_tdi_546_1080p_cmd_v0>;
++};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene_16mp-p1.dts b/arch/arm/boot/dts/qcom/msm8952-athene_16mp-p1.dts
+new file mode 100644
+index 00000000000..0560a142866
+--- /dev/null
++++ b/arch/arm/boot/dts/qcom/msm8952-athene_16mp-p1.dts
+@@ -0,0 +1,26 @@
++/* Copyright (c) 2015, Motorola Mobility Inc. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++
++/dts-v1/;
++
++#include "msm8952-athene.dtsi"
++#include "dsi-panel-mot-tdi-546-1080p-cmd.dtsi"
++
++/ {
++	model = "Athene_16MP";
++	qcom,board-id = <0x41 0x81a0>, <0x41 0x81ad>;
++};
++
++&mdss_dsi0 {
++	qcom,dsi-pref-prim-pan = <&mot_tdi_546_1080p_cmd_v0>;
++};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene_power-p1.dts b/arch/arm/boot/dts/qcom/msm8952-athene_power-p1.dts
+new file mode 100644
+index 00000000000..ba2746e068e
+--- /dev/null
++++ b/arch/arm/boot/dts/qcom/msm8952-athene_power-p1.dts
+@@ -0,0 +1,26 @@
++/* Copyright (c) 2015, Motorola Mobility Inc. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++
++/dts-v1/;
++
++#include "msm8952-athene.dtsi"
++#include "dsi-panel-mot-tdi-546-1080p-cmd.dtsi"
++
++/ {
++	model = "Athene_Power";
++	qcom,board-id = <0x43 0x81a0>;
++};
++
++&mdss_dsi0 {
++	qcom,dsi-pref-prim-pan = <&mot_tdi_546_1080p_cmd_v0>;
++};
+-- 
+2.11.0
+

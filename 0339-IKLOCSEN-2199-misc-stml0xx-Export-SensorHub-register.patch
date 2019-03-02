@@ -1,0 +1,880 @@
+From f1fabb21fe7385a4f12a2650041b993e6e8e015e Mon Sep 17 00:00:00 2001
+From: Gabriel Burca <Gabriel.Burca@motorola.com>
+Date: Wed, 23 Sep 2015 15:45:39 -0500
+Subject: [PATCH 339/959] IKLOCSEN-2199 misc: stml0xx: Export SensorHub
+ registers
+
+- The SensorHub firmware flasher needs access to additional SensorHub
+  registers to determine if the hub FW is up-to-date. Rather than
+  maintaining the list of registers in 3 places, a single copy is now
+  maintained in the new motosh_vmm.h file and used from the kernel,
+  SensorHub firmware, and user-space flasher.
+
+Change-Id: I2a3683153a85e124f8c3dca929075aeaae9db38b
+Signed-off-by: Gabriel Burca <Gabriel.Burca@motorola.com>
+Reviewed-on: http://gerrit.mot.com/787512
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Submit-Approved: Yun Ma <yunma@motorola.com>
+SME-Granted: SME Approvals Granted
+---
+ drivers/misc/stml0xx/stml0xx_core.c     |   6 +-
+ drivers/misc/stml0xx/stml0xx_ioctl.c    |  94 +------
+ drivers/misc/stml0xx/stml0xx_reset.c    |   6 +-
+ drivers/misc/stml0xx/stml0xx_wake_irq.c |   2 +-
+ include/linux/stml0xx.h                 | 119 +-------
+ include/uapi/linux/Kbuild               |   1 +
+ include/uapi/linux/motosh_vmm.h         | 468 ++++++++++++++++++++++++++++++++
+ include/uapi/linux/stml0xx.h            |   1 +
+ 8 files changed, 485 insertions(+), 212 deletions(-)
+ create mode 100644 include/uapi/linux/motosh_vmm.h
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index ddf266477d5..ff05bc1c1f2 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -87,11 +87,11 @@ unsigned char *stml0xx_boot_readbuff;
+ const struct stml0xx_algo_info_t stml0xx_algo_info[STML0XX_NUM_ALGOS] = {
+ 	{M_ALGO_MODALITY, 0, ALGO_REQ_MODALITY,
+ 	 ALGO_EVT_MODALITY, STML0XX_EVT_SZ_TRANSITION},
+-	{M_ALGO_ORIENTATION, 0, ALGO_REQ_ORIENTATION,
+-	 ALGO_EVT_ORIENTATION, STML0XX_EVT_SZ_TRANSITION},
++	{M_ALGO_ORIENTATION, 0, ALGO_REQ_ORIENT,
++	 ALGO_EVT_ORIENT, STML0XX_EVT_SZ_TRANSITION},
+ 	{M_ALGO_STOWED, 0, ALGO_REQ_STOWED,
+ 	 ALGO_EVT_STOWED, STML0XX_EVT_SZ_TRANSITION},
+-	{M_ALGO_ACCUM_MODALITY, ALGO_CFG_ACCUM_MODALITY,
++	{M_ALGO_ACCUM_MODALITY, ALGO_ACCUM_ALL_MODALITY,
+ 	 ALGO_REQ_ACCUM_MODALITY, ALGO_EVT_ACCUM_MODALITY,
+ 	 STML0XX_EVT_SZ_ACCUM_STATE},
+ 	{M_ALGO_ACCUM_MVMT, 0, ALGO_REQ_ACCUM_MVMT,
+diff --git a/drivers/misc/stml0xx/stml0xx_ioctl.c b/drivers/misc/stml0xx/stml0xx_ioctl.c
+index 05f72251bc2..96ec4df6f1a 100644
+--- a/drivers/misc/stml0xx/stml0xx_ioctl.c
++++ b/drivers/misc/stml0xx/stml0xx_ioctl.c
+@@ -56,7 +56,6 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 	unsigned int data_size = 0;
+ 	unsigned char buf[MAX_LOCAL_BUF_SIZE];
+ 	unsigned char len;
+-	unsigned long current_posix_time;
+ 	unsigned int handle;
+ 	struct timespec current_time;
+ 	bool cmd_handled;
+@@ -191,23 +190,6 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 							buf, 1);
+ 		}
+ 		break;
+-	case STML0XX_IOCTL_SET_MAG_DELAY:
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"STML0XX_IOCTL_SET_MAG_DELAY");
+-		delay = 0;
+-		if (copy_from_user(&delay, argp, sizeof(delay))) {
+-			dev_dbg(&stml0xx_misc_data->spi->dev,
+-				"Copy mag delay returned error");
+-			err = -EFAULT;
+-			break;
+-		}
+-		stml0xx_g_mag_delay = delay;
+-		if (stml0xx_g_booted) {
+-			buf[0] = delay;
+-			err = stml0xx_spi_send_write_reg(MAG_UPDATE_RATE,
+-							buf, 1);
+-		}
+-		break;
+ 	case STML0XX_IOCTL_SET_GYRO_DELAY:
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"STML0XX_IOCTL_SET_GYRO_DELAY");
+@@ -225,23 +207,6 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 							buf, 1);
+ 		}
+ 		break;
+-	case STML0XX_IOCTL_SET_PRES_DELAY:
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"STML0XX_IOCTL_SET_PRES_DELAY");
+-		delay = 0;
+-		if (copy_from_user(&delay, argp, sizeof(delay))) {
+-			dev_dbg(&stml0xx_misc_data->spi->dev,
+-				"Copy pres delay returned error");
+-			err = -EFAULT;
+-			break;
+-		}
+-		stml0xx_g_baro_delay = delay;
+-		if (stml0xx_g_booted) {
+-			buf[0] = delay;
+-			err = stml0xx_spi_send_write_reg(PRESSURE_UPDATE_RATE,
+-							buf, 1);
+-		}
+-		break;
+ 	case STML0XX_IOCTL_SET_SENSORS:
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"STML0XX_IOCTL_SET_SENSORS");
+@@ -350,24 +315,6 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		if (copy_to_user(argp, buf, 2 * sizeof(unsigned char)))
+ 			err = -EFAULT;
+ 		break;
+-	case STML0XX_IOCTL_GET_MAG_CAL:
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"STML0XX_IOCTL_GET_MAG_CAL");
+-		if (stml0xx_g_booted) {
+-			err = stml0xx_spi_send_read_reg(MAG_CAL, buf,
+-					      STML0XX_MAG_CAL_SIZE);
+-			if (err < 0) {
+-				dev_err(&stml0xx_misc_data->spi->dev,
+-					"Reading get mag cal failed");
+-				break;
+-			}
+-		} else {
+-			memcpy(buf, stml0xx_g_mag_cal,
+-				STML0XX_MAG_CAL_SIZE);
+-		}
+-		if (copy_to_user(argp, buf, STML0XX_MAG_CAL_SIZE))
+-			err = -EFAULT;
+-		break;
+ 	case STML0XX_IOCTL_SET_ALS_DELAY:
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"STML0XX_IOCTL_SET_ALS_DELAY");
+@@ -385,20 +332,6 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 							buf, 2);
+ 		}
+ 		break;
+-	case STML0XX_IOCTL_SET_MAG_CAL:
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"STML0XX_IOCTL_SET_MAG_CAL");
+-		if (copy_from_user(buf, argp, STML0XX_MAG_CAL_SIZE)) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Copy set mag cal returned error");
+-			err = -EFAULT;
+-			break;
+-		}
+-		memcpy(stml0xx_g_mag_cal, buf, STML0XX_MAG_CAL_SIZE);
+-		if (stml0xx_g_booted)
+-			err = stml0xx_spi_send_write_reg(MAG_CAL, buf,
+-					       STML0XX_MAG_CAL_SIZE);
+-		break;
+ 	case STML0XX_IOCTL_SET_MOTION_DUR:
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"STML0XX_IOCTL_SET_MOTION_DUR");
+@@ -426,14 +359,14 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		buf[0] = duration & 0xFF;
+ 		stml0xx_g_zmotion_dur = buf[0];
+ 		if (stml0xx_g_booted)
+-			err = stml0xx_spi_send_write_reg(ZRMOTION_DUR,
++			err = stml0xx_spi_send_write_reg(ZMOTION_DUR,
+ 							 buf, 1);
+ 		break;
+ 	case STML0XX_IOCTL_GET_DOCK_STATUS:
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"STML0XX_IOCTL_GET_DOCK_STATUS");
+ 		if (stml0xx_g_booted)
+-			err = stml0xx_spi_send_read_reg(DOCK_DATA,
++			err = stml0xx_spi_send_read_reg(DOCKED_DATA,
+ 							buf, 1);
+ 		else
+ 			buf[0] = 0;
+@@ -466,29 +399,6 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		}
+ 		err = stml0xx_spi_write(buf, 1);
+ 		break;
+-	case STML0XX_IOCTL_SET_POSIX_TIME:
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"STML0XX_IOCTL_SET_POSIX_TIME");
+-		if (!stml0xx_g_booted) {
+-			err = -EBUSY;
+-			break;
+-		}
+-		if (copy_from_user(&current_posix_time, argp,
+-				   sizeof(current_posix_time))) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Copy from user returned error");
+-			err = -EFAULT;
+-			break;
+-		}
+-		getnstimeofday(&current_time);
+-		stml0xx_time_delta = current_posix_time - current_time.tv_sec;
+-		buf[0] = (unsigned char)(current_posix_time >> 24);
+-		buf[1] = (unsigned char)((current_posix_time >> 16) & 0xff);
+-		buf[2] = (unsigned char)((current_posix_time >> 8) & 0xff);
+-		buf[3] = (unsigned char)((current_posix_time) & 0xff);
+-		err = stml0xx_spi_send_write_reg(AP_POSIX_TIME,
+-				buf, 4);
+-		break;
+ 	case STML0XX_IOCTL_SET_ALGO_REQ:
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"STML0XX_IOCTL_SET_ALGO_REQ");
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index 49f181410d9..d823174fef8 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -158,7 +158,7 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 		ret_err = err;
+ 
+ 	buf[0] = stml0xx_g_zmotion_dur;
+-	err = stml0xx_spi_send_write_reg_reset(ZRMOTION_DUR, buf,
++	err = stml0xx_spi_send_write_reg_reset(ZMOTION_DUR, buf,
+ 			1, RESET_NOT_ALLOWED);
+ 	if (err < 0)
+ 		ret_err = err;
+@@ -200,7 +200,7 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 	buf[17] = pdata->ct406_als_lux2_c1_mult & 0xff;
+ 	buf[18] = (pdata->ct406_als_lux2_div >> 8) & 0xff;
+ 	buf[19] = pdata->ct406_als_lux2_div & 0xff;
+-	err = stml0xx_spi_send_write_reg_reset(PROX_SETTINGS, buf,
++	err = stml0xx_spi_send_write_reg_reset(PROX_ALS_SETTINGS, buf,
+ 			20, RESET_NOT_ALLOWED);
+ 	if (err < 0) {
+ 		dev_err(&ps_stml0xx->spi->dev,
+@@ -262,7 +262,7 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 
+ #ifdef CONFIG_SENSORHUB_DEBUG_LOGGING
+ 	buf[0] = SH_LOG_DEBUG;
+-	err = stml0xx_spi_send_write_reg_reset(SH_LOG_LEVEL_REG, buf,
++	err = stml0xx_spi_send_write_reg_reset(SH_LOG_LEVEL, buf,
+ 		1, RESET_NOT_ALLOWED);
+ 	if (err < 0) {
+ 		dev_err(&ps_stml0xx->spi->dev,
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index 907114c667f..0310a043bf1 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -480,7 +480,7 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 		/* set the init complete register, */
+ 		/* to let the hub know it was received */
+ 		buf[0] = 0x01;
+-		err = stml0xx_spi_send_write_reg(INIT_COMPLETE_REG, buf, 1);
++		err = stml0xx_spi_send_write_reg(INIT_COMPLETE, buf, 1);
+ 
+ 		queue_work(ps_stml0xx->irq_work_queue,
+ 			&ps_stml0xx->initialize_work);
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 4a358f4c7e4..2d0d6171c8a 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -67,119 +67,12 @@ enum sh_spi_msg {
+ #include <linux/spi/spi.h>
+ 
+ /* STML0XX memory map */
+-#define ID                              0x00
+-#define REV_ID                          0x01
+-#define LOG_MSG_STATUS                  0x02
+-#define LOWPOWER_REG                    0x03
+-#define INIT_COMPLETE_REG               0x04
+-#define ACCEL_ORIENTATION		0x06
+-#define ACCEL_SWAP                      0x07
+-
+-#define STML0XX_PEEKDATA_REG             0x09
+-#define STML0XX_PEEKSTATUS_REG           0x0A
+-#define STML0XX_STATUS_REG               0x0B
+-#define STML0XX_TOUCH_REG                0x0C
+-#define STML0XX_CONTROL_REG              0x0D
+-
+-#define AP_POSIX_TIME                   0x10
+-
+-#define LED_NOTIF_CONTROL               0X11
+-
+-#define ACCEL2_UPDATE_RATE		0x13
+-
+-#define ACCEL_UPDATE_RATE               0x16
+-#define MAG_UPDATE_RATE                 0x17
+-#define PRESSURE_UPDATE_RATE            0x18
+-#define GYRO_UPDATE_RATE                0x19
+-
+-#define NONWAKESENSOR_CONFIG            0x1A
+-#define WAKESENSOR_CONFIG               0x1B
+-
+-#define MOTION_DUR                      0x20
+-#define ZRMOTION_DUR                    0x22
+-
+-#define BYPASS_MODE                     0x24
+-#define SLAVE_ADDRESS                   0x25
+-
+-#define ALGO_CONFIG                     0x26
+-#define ALGO_INT_STATUS                 0x27
+-#define GENERIC_INT_STATUS              0x28
+-
+-#define HEADSET_HW_VER                  0x2B
+-#define HEADSET_CONTROL                 0x2C
+-
+-#define MOTION_DATA                     0x2D
+-
+-#define HEADSET_DATA                    0x2F
+-
+-#define HEADSET_SETTINGS                0x2E
+-
+-#define PROX_SETTINGS                   0x33
+-
+-#define LUX_TABLE_VALUES                0x34
+-#define BRIGHTNESS_TABLE_VALUES         0x35
+-
+-#define INTERRUPT_MASK                  0x37
+-#define WAKESENSOR_STATUS               0x39
+-#define INTERRUPT_STATUS                0x3A
+-
+-#define ACCEL_X                         0x3B
+-#define LIN_ACCEL_X                     0x3C
+-#define GRAVITY_X                       0x3D
+-#define ACCEL2_X			0x3E
+-
+-#define DOCK_DATA                       0x3F
+-
+-#define COVER_DATA                      0x40
+-
+-#define TEMPERATURE_DATA                0x41
+-
+-#define GYRO_X                          0x43
+-#define UNCALIB_GYRO_X			0x45
+-#define UNCALIB_MAG_X			0x46
+-
+-#define MAG_CAL                         0x48
+-#define MAG_HX                          0x49
+-
+-#define DISP_ROTATE_DATA                0x4A
+-#define FLAT_DATA                       0x4B
+-#define CAMERA                          0x4C
+-#define NFC                             0x4D
+-#define SIM                             0x4E
+-#define CHOPCHOP                        0x4F
+-#define LIFT                            0x51
+-
+-#define SH_LOG_LEVEL_REG                0x55
+-
+-#define DSP_CONTROL                     0x58
+-
+-#define ALGO_CFG_ACCUM_MODALITY         0x5D
+-#define ALGO_REQ_ACCUM_MODALITY         0x60
+-#define ALGO_EVT_ACCUM_MODALITY         0x63
+-
+-#define CURRENT_PRESSURE                0x66
+-
+-#define ALS_LUX                         0x6A
+-
+-#define DISPLAY_BRIGHTNESS              0x6B
+-
+-#define PROXIMITY                       0x6C
+-
+-#define STOWED                          0x6D
+-
+-#define ALS_UPDATE_RATE                 0x6F
+-
+-#define ALGO_REQ_MODALITY               0x72
+-#define ALGO_REQ_ORIENTATION            0x73
+-#define ALGO_REQ_STOWED                 0x74
+-#define ALGO_REQ_ACCUM_MVMT             0x75
+-
+-#define ALGO_EVT_MODALITY               0x76
+-#define ALGO_EVT_ORIENTATION            0x77
+-#define ALGO_EVT_STOWED                 0x78
+-#define ALGO_EVT_ACCUM_MVMT             0x79
+-
+-#define RESET                           0x7F
++#define VMM_ENTRY(reg, id, writable, addr, size) id,
++#define DSP
++enum vmm_ids {
++#include <linux/motosh_vmm.h>
++};
++#undef VMM_ENTRY
+ /* STML0XX memory map end */
+ 
+ #define LIGHTING_TABLE_SIZE 32
+diff --git a/include/uapi/linux/Kbuild b/include/uapi/linux/Kbuild
+index fd170cc87dc..2e02c029df9 100644
+--- a/include/uapi/linux/Kbuild
++++ b/include/uapi/linux/Kbuild
+@@ -421,6 +421,7 @@ header-y += soundcard.h
+ header-y += stat.h
+ header-y += stddef.h
+ header-y += stml0xx.h
++header-y += motosh_vmm.h
+ header-y += string.h
+ header-y += suspend_ioctls.h
+ header-y += swab.h
+diff --git a/include/uapi/linux/motosh_vmm.h b/include/uapi/linux/motosh_vmm.h
+new file mode 100644
+index 00000000000..81fb76eb060
+--- /dev/null
++++ b/include/uapi/linux/motosh_vmm.h
+@@ -0,0 +1,468 @@
++/* vim: set ts=8 sw=8 tw=80 cc=+1 noet: */
++
++/*********************************************************************
++*
++*   Copyright (C) 2015 Motorola, Inc.
++*
++*********************************************************************/
++
++/*
++No #ifdef guard here on purposes, since this file is not a true header file
++and may be included multiple times in the same c file.
++
++The contents of this file constitute the list that will be used by an X-macro
++expansion. Look up X-macros for more details on the technique, and see the end
++of this file for some example expansions.
++
++The intent is to maintain a single file describing the SensorHub registers and
++make it usable from the SensorHub FW, the kernel, the HAL, etc...
++
++Each VMM entry below consists of:
++	- Register number
++	- Name of the register
++	- A flag indicating if the register is writable (TRUE/FALSE)
++	- Memory location of the register contents
++	- Length of the register contents, AKA the read/write size. A value of 0
++	  could mean either that the register is unused, or that the size is
++	  not a constant (ex: firmware string).
++*/
++
++/* A write to the first register is valid to unlock test command interface */
++VMM_ENTRY(0x00, ID,							TRUE,
++		&vmm_id,
++		sizeof(vmm_id))
++VMM_ENTRY(0x01, REV_ID,							FALSE,
++		vmm_rev_id,
++		sizeof(vmm_rev_id))
++VMM_ENTRY(0x02, ERROR_STATUS,						FALSE,
++		vmm_error_status,
++		sizeof(vmm_error_status))
++VMM_ENTRY(0x03, LOWPOWER_REG,						TRUE,
++		vmm_lowpower_reg,
++		sizeof(vmm_lowpower_reg))
++VMM_ENTRY(0x04, INIT_COMPLETE,						TRUE,
++		&vmm_init_complete,
++		sizeof(vmm_init_complete))
++VMM_ENTRY(0x05, UNUSED_05,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x06, ACCEL_ORIENTATION,					TRUE,
++		vmm_accel_orientation,
++		sizeof(vmm_accel_orientation))
++VMM_ENTRY(0x07, ACCEL_SWAP,						TRUE,
++		&vmm_accel_swap,
++		sizeof(vmm_accel_swap))
++VMM_ENTRY(0x08, UNUSED_08,						FALSE,
++		0, /* &pd_cycle_counter */
++		0)
++VMM_ENTRY(0x09, UNUSED_09,						FALSE,
++		0, /* pd_quick_peek */
++		0)
++VMM_ENTRY(0x0A, UNUSED_0A,						FALSE,
++		0, /* pd_peek_response */
++		0)
++VMM_ENTRY(0x0B, UNUSED_0B,						FALSE,
++		0, /* vmm_p_display_status */
++		0)
++VMM_ENTRY(0x0C, UNUSED_0C,						FALSE,
++		0, /* vmm_touch_info */
++		0)
++VMM_ENTRY(0x0D, UNUSED_0D,						FALSE,
++		0, /*vmm_p_display_config */
++		0)
++VMM_ENTRY(0x0E, UNUSED_0E,						FALSE,
++		0, /* &vmm_pdl.data_valid */
++		0)
++VMM_ENTRY(0x0F, UNUSED_0F,						FALSE,
++		0, /* vmm_p_display_color */
++		0)
++VMM_ENTRY(0x10, UNUSED_10,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x11, LED_NOTIF_DATA,						TRUE,
++		vmm_led_notif_data,
++		sizeof(vmm_led_notif_data))
++VMM_ENTRY(0x12, HS_DETECT_TEST,						FALSE,
++		vmm_hs_detect_test,
++		sizeof(vmm_hs_detect_test))
++VMM_ENTRY(0x13, ACCEL2_UPDATE_RATE,					TRUE,
++		&vmm_accel2_update_rate,
++		sizeof(vmm_accel2_update_rate))
++VMM_ENTRY(0x14, DISP_ROTATE_UPDATE_RATE,				TRUE,
++		&vmm_disp_rotate_update_rate,
++		sizeof(vmm_disp_rotate_update_rate))
++VMM_ENTRY(0x15, UNUSED_15,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x16, ACCEL_UPDATE_RATE,					TRUE,
++		&vmm_accel_update_rate,
++		sizeof(vmm_accel_update_rate))
++VMM_ENTRY(0x17, UNUSED_17,						FALSE,
++		0, /* &vmm_mag_update_rate */
++		0)
++VMM_ENTRY(0x18, UNUSED_18,						FALSE,
++		0, /* vmm_pressure_update_rate */
++		0)
++VMM_ENTRY(0x19, GYRO_UPDATE_RATE,					TRUE,
++		&vmm_gyro_update_rate,
++		sizeof(vmm_gyro_update_rate))
++VMM_ENTRY(0x1A, NONWAKESENSOR_CONFIG,					TRUE,
++		vmm_module_config,
++		sizeof(vmm_module_config))
++VMM_ENTRY(0x1B, WAKESENSOR_CONFIG,					TRUE,
++		vmm_wakesensor_config,
++		sizeof(vmm_wakesensor_config))
++VMM_ENTRY(0x1C, UNUSED_1C,						FALSE,
++		0, /* vmm_ir_gesture */
++		0)
++VMM_ENTRY(0x1D, UNUSED_1D,						FALSE,
++		0, /* vmm_ir_data */
++		0)
++VMM_ENTRY(0x1E, UNUSED_1E,						FALSE,
++		0, /* vmm_ir_config */
++		0)
++VMM_ENTRY(0x1F, SENSOR_TEST_CONFIG,					TRUE,
++		&vmm_sensor_test_config,
++		sizeof(vmm_sensor_test_config))
++VMM_ENTRY(0x20, MOTION_DUR,						TRUE,
++		&vmm_motion_dur0,
++		sizeof(vmm_motion_dur0))
++VMM_ENTRY(0x21, UNUSED_21,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x22, ZMOTION_DUR,						TRUE,
++		&vmm_zmotion_dur0,
++		sizeof(vmm_zmotion_dur0))
++VMM_ENTRY(0x23, UNUSED_23,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x24, UNUSED_24,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x25, UNUSED_25,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x26, ALGO_CONFIG,						TRUE,
++		vmm_algo_config,
++		sizeof(vmm_algo_config))
++VMM_ENTRY(0x27, ALGO_INT_STATUS,					TRUE,
++		vmm_algo_int_status,
++		sizeof(vmm_algo_int_status))
++VMM_ENTRY(0x28, GENERIC_INT,						FALSE,
++		vmm_generic_int,
++		sizeof(vmm_generic_int))
++VMM_ENTRY(0x29, GENERIC_LISTENERS,					TRUE,
++		vmm_generic_listeners,
++		sizeof(vmm_generic_listeners))
++VMM_ENTRY(0x2A, UNUSED_2A,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x2B, HEADSET_HW_VER,						TRUE,
++		&vmm_headset_hw_ver,
++		sizeof(vmm_headset_hw_ver))
++VMM_ENTRY(0x2C, HEADSET_CONTROL,					TRUE,
++		&vmm_headset_control,
++		sizeof(vmm_headset_control))
++VMM_ENTRY(0x2D, MOTION_DATA,						FALSE,
++		vmm_motion_data,
++		sizeof(vmm_motion_data))
++VMM_ENTRY(0x2E, HEADSET_SETTINGS,					TRUE,
++		vmm_headset_settings,
++		sizeof(vmm_headset_settings))
++VMM_ENTRY(0x2F, HEADSET_STATE,						FALSE,
++		&vmm_headset_state,
++		sizeof(vmm_headset_state))
++VMM_ENTRY(0x30, SWI_COUNTER_SIZE,					FALSE,
++		&vmm_swi_counter_size,
++		sizeof(vmm_swi_counter_size))
++VMM_ENTRY(0x31, SWI_COUNTER,						FALSE,
++		vmm_swi_counter,
++		sizeof(vmm_swi_counter))
++VMM_ENTRY(0x32, UNUSED_32,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x33, PROX_ALS_SETTINGS,					TRUE,
++		vmm_prox_als_settings,
++		sizeof(vmm_prox_als_settings))
++VMM_ENTRY(0x34, LUX_TABLE,						TRUE,
++		vmm_lux_table,
++		sizeof(vmm_lux_table))
++VMM_ENTRY(0x35, BRIGHTNESS_TABLE,					TRUE,
++		vmm_brightness_table,
++		sizeof(vmm_brightness_table))
++VMM_ENTRY(0x36, FW_CRC,							FALSE,
++		&vmm_fw_crc,
++		sizeof(vmm_fw_crc))
++VMM_ENTRY(0x37, FW_VERSION_LEN,						FALSE,
++		&vmm_fw_version_len,
++		sizeof(vmm_fw_version_len))
++VMM_ENTRY(0x38, FW_VERSION_STR,						FALSE,
++		fw_version_str,
++		0)
++VMM_ENTRY(0x39, WAKESENSOR_STATUS,					FALSE,
++		vmm_wakesensor_status,
++		sizeof(vmm_wakesensor_status))
++VMM_ENTRY(0x3A, INTERRUPT_STATUS,					FALSE,
++		vmm_interrupt_status,
++		sizeof(vmm_interrupt_status))
++VMM_ENTRY(0x3B, ACCEL_DATA,						FALSE,
++		vmm_accel_data,
++		sizeof(vmm_accel_data))
++VMM_ENTRY(0x3C, I2C_PASSTHROUGH_COMMAND,				TRUE,
++		vmm_i2c_passthrough_command,
++		sizeof(vmm_i2c_passthrough_command))
++VMM_ENTRY(0x3D, I2C_PASSTHROUGH_RESPONSE,				FALSE,
++		vmm_i2c_passthrough_response,
++		sizeof(vmm_i2c_passthrough_response))
++VMM_ENTRY(0x3E, ACCEL2_DATA,						FALSE,
++		vmm_accel2_data,
++		sizeof(vmm_accel2_data))
++VMM_ENTRY(0x3F, DOCKED_DATA,						FALSE,
++		&vmm_docked_data,
++		sizeof(vmm_docked_data))
++VMM_ENTRY(0x40, COVER_DATA,						FALSE,
++		&vmm_cover_data,
++		sizeof(vmm_cover_data))
++VMM_ENTRY(0x41, UNUSED_41,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x42, GYRO_CAL,						TRUE,
++		vmm_gyro_cal,
++		sizeof(vmm_gyro_cal))
++VMM_ENTRY(0x43, GYRO_DATA,						FALSE,
++		vmm_gyro_data,
++		sizeof(vmm_gyro_data))
++VMM_ENTRY(0x44, UNUSED_44,						FALSE,
++		0, /* vmm_quaterion */
++		0)
++VMM_ENTRY(0x45, UNCALIB_GYRO_DATA,					FALSE,
++		vmm_uncalib_gyro_data,
++		sizeof(vmm_uncalib_gyro_data))
++VMM_ENTRY(0x46, UNUSED_46,						FALSE,
++		0, /* vmm_uncalib_mag_data */
++		0)
++VMM_ENTRY(0x47, UNUSED_47,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x48, UNUSED_48,						FALSE,
++		0, /* vmm_mag_calibration */
++		0)
++VMM_ENTRY(0x49, UNUSED_49,						FALSE,
++		0, /* vmm_mag_data */
++		0)
++VMM_ENTRY(0x4A, DROTATE,						FALSE,
++		&vmm_drotate,
++		sizeof(vmm_drotate))
++VMM_ENTRY(0x4B, FLAT_DATA,						FALSE,
++		&vmm_flat_data,
++		sizeof(vmm_flat_data))
++VMM_ENTRY(0x4C, CAMERA_GESTURE,						FALSE,
++		vmm_camera_gesture,
++		sizeof(vmm_camera_gesture))
++VMM_ENTRY(0x4D, CAMERA_CONFIG,						TRUE,
++		vmm_camera_config,
++		sizeof(vmm_camera_config))
++VMM_ENTRY(0x4E, SIM_DATA,						FALSE,
++		vmm_sim_data,
++		sizeof(vmm_sim_data))
++VMM_ENTRY(0x4F, CHOPCHOP_DATA,						FALSE,
++		vmm_chopchop_data,
++		sizeof(vmm_chopchop_data))
++VMM_ENTRY(0x50, CHOPCHOP_CONFIG,					TRUE,
++		vmm_chopchop_config,
++		sizeof(vmm_chopchop_config))
++VMM_ENTRY(0x51, LIFT_DATA,						FALSE,
++		vmm_lift_data,
++		sizeof(vmm_lift_data))
++VMM_ENTRY(0x52, LIFT_CONFIG,						TRUE,
++		vmm_lift_config,
++		sizeof(vmm_lift_config))
++VMM_ENTRY(0x53, UNUSED_53,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x54, LOG_TAG_ENABLED,					TRUE,
++		&vmm_log_tag_enabled,
++		sizeof(vmm_log_tag_enabled))
++VMM_ENTRY(0x55, SH_LOG_LEVEL,						TRUE,
++		&vmm_log_level,
++		sizeof(vmm_log_level))
++VMM_ENTRY(0x56, UNUSED_56,						FALSE,
++		0, /* &s_sensor_data */
++		0)
++VMM_ENTRY(0x57, UNUSED_57,						FALSE,
++		0,
++		0)
++
++#ifdef DSP
++	VMM_ENTRY(0x58, DSP_CONTROL,					TRUE,
++			&vmm_dsp_control,
++			sizeof(vmm_dsp_control))
++	VMM_ENTRY(0x59, DSP_ALGO_CONFIG_A,				TRUE,
++			vmm_dsp_algo_config_a,
++			DSP_ALGO_CONFIG_LEN)
++	VMM_ENTRY(0x5A, DSP_ALGO_STATUS_A,				FALSE,
++			vmm_dsp_algo_status_a,
++			sizeof(vmm_dsp_algo_status_a))
++#else
++	VMM_ENTRY(0x58, UNUSED_58,					FALSE,
++			0,
++			0)
++	VMM_ENTRY(0x59, UNUSED_59,					FALSE,
++			0,
++			0)
++	VMM_ENTRY(0x5A, UNUSED_5A,					FALSE,
++			0,
++			0)
++#endif
++
++VMM_ENTRY(0x5B, UNUSED_5B,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x5C, UNUSED_5C,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x5D, ALGO_ACCUM_ALL_MODALITY,				FALSE,
++		vmm_algo_accum_all_modality,
++		sizeof(vmm_algo_accum_all_modality))
++VMM_ENTRY(0x5E, UNUSED_5E,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x5F, UNUSED_5F,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x60, ALGO_REQ_ACCUM_MODALITY,				TRUE,
++		vmm_algo_req_accum_modality,
++		sizeof(vmm_algo_req_accum_modality))
++VMM_ENTRY(0x61, UNUSED_61,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x62, UNUSED_62,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x63, ALGO_EVT_ACCUM_MODALITY,				FALSE,
++		vmm_algo_evt_accum_modality,
++		sizeof(vmm_algo_evt_accum_modality))
++VMM_ENTRY(0x64, UNUSED_64,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x65, UNUSED_65,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x66, UNUSED_66,						FALSE,
++		0, /* vmm_pressure_data */
++		0)
++VMM_ENTRY(0x67, PROX_TEST,						FALSE,
++		vmm_prox_test,
++		sizeof(vmm_prox_test))
++VMM_ENTRY(0x68, ALS_TEST,						FALSE,
++		vmm_als_test,
++		sizeof(vmm_als_test))
++VMM_ENTRY(0x69, PROX_NOISE_FLOOR,					FALSE,
++		&vmm_prox_noise_floor,
++		sizeof(vmm_prox_noise_floor))
++VMM_ENTRY(0x6A, ALS_LUX,						FALSE,
++		vmm_als_lux,
++		sizeof(vmm_als_lux))
++VMM_ENTRY(0x6B, DISP_BRIGHTNESS_DATA,					FALSE,
++		&vmm_disp_brightness_data,
++		sizeof(vmm_disp_brightness_data))
++VMM_ENTRY(0x6C, PROXIMITY_DATA,						FALSE,
++		&vmm_proximity_data,
++		sizeof(vmm_proximity_data))
++VMM_ENTRY(0x6D, STOWED_DATA,						FALSE,
++		&vmm_stowed_data,
++		sizeof(vmm_stowed_data))
++VMM_ENTRY(0x6E, UNUSED_6E,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x6F, ALS_UPDATE_RATE,					TRUE,
++		vmm_als_update_rate,
++		sizeof(vmm_als_update_rate))
++VMM_ENTRY(0x70, CHIP_ID,						FALSE,
++		vmm_chip_id,
++		sizeof(vmm_chip_id))
++VMM_ENTRY(0x71, UNUSED_71,						FALSE,
++		0, /* &mm_last_message1 */
++		0)
++VMM_ENTRY(0x72, ALGO_REQ_MODALITY,					TRUE,
++		vmm_algo_req_modality,
++		sizeof(vmm_algo_req_modality))
++VMM_ENTRY(0x73, ALGO_REQ_ORIENT,					TRUE,
++		vmm_algo_req_orient,
++		sizeof(vmm_algo_req_orient))
++VMM_ENTRY(0x74, ALGO_REQ_STOWED,					TRUE,
++		vmm_algo_req_stowed,
++		sizeof(vmm_algo_req_stowed))
++VMM_ENTRY(0x75, ALGO_REQ_ACCUM_MVMT,					TRUE,
++		vmm_algo_req_accum_mvmt,
++		sizeof(vmm_algo_req_accum_mvmt))
++VMM_ENTRY(0x76, ALGO_EVT_MODALITY,					FALSE,
++		vmm_algo_evt_modality,
++		sizeof(vmm_algo_evt_modality))
++VMM_ENTRY(0x77, ALGO_EVT_ORIENT,					FALSE,
++		vmm_algo_evt_orient,
++		sizeof(vmm_algo_evt_orient))
++VMM_ENTRY(0x78, ALGO_EVT_STOWED,					FALSE,
++		vmm_algo_evt_stowed,
++		sizeof(vmm_algo_evt_stowed))
++VMM_ENTRY(0x79, ALGO_EVT_ACCUM_MVMT,					FALSE,
++		vmm_algo_evt_accum_mvmt,
++		sizeof(vmm_algo_evt_accum_mvmt))
++VMM_ENTRY(0x7A, UNUSED_7A,						FALSE,
++		0,
++		0)
++VMM_ENTRY(0x7B, PORT_H,							TRUE,
++		0x50001C00,
++		0x25)
++VMM_ENTRY(0x7C, PORT_D,							TRUE,
++		0x50000C00,
++		0x25)
++VMM_ENTRY(0x7D, PORT_C,							TRUE,
++		0x50000800,
++		0x25)
++VMM_ENTRY(0x7E, PORT_B,							TRUE,
++		0x50000400,
++		0x25)
++VMM_ENTRY(0x7F, PORT_A,							TRUE,
++		0x50000000,
++		0x25)
++
++
++/* Here are a few example expansions:
++
++
++- If the registers are numbered sequentially, we can simply:
++#define VMM_ENTRY(reg, id, writable, addr, size) VMM_##id,
++- If they're not sequential, or we want to map them to a different base:
++#define VMM_BASE 0x0100
++#define VMM_ENTRY(reg, id, writable, addr, size) VMM_##id = VMM_BASE + reg,
++- Now we expand the table per the definition above:
++typedef enum {
++	#include "VmmTable.h"
++} vmm_ids_t;
++#undef VMM_ENTRY
++
++
++- This expansion creates a table of write sizes:
++#define VMM_ENTRY(reg, id, writable, addr, size) (writable ? 1 : 0) * (size),
++- Or better yet:
++#define VMM_ENTRY(reg, id, writable, addr, size) (writable ? 1 : -1) * (size),
++const unsigned short a_vmm_size[VMM_MAP_SIZE] = {
++	#include "VmmTable.h"
++};
++#undef VMM_ENTRY
++
++
++- This contrived example clears all the registers:
++void zero_all_registers(void) {
++#define VMM_ENTRY(reg, id, writable, addr, size) \
++	if (writable) { \
++		printf("Clearing " #id " (" #reg ", %d bytes)\n", size); \
++		memset(addr, 0, size); \
++	} else { printf("Register " #id " is not writable\n"); }
++#include "VmmTable.h"
++#undef VMM_ENTRY
++}
++
++*/
++
+diff --git a/include/uapi/linux/stml0xx.h b/include/uapi/linux/stml0xx.h
+index cfe8c75b4fe..ec034e5d2b6 100644
+--- a/include/uapi/linux/stml0xx.h
++++ b/include/uapi/linux/stml0xx.h
+@@ -134,6 +134,7 @@
+ 
+ 
+ #define FW_VERSION_SIZE 12
++#define FW_VERSION_STR_MAX_LEN 256u
+ #define STML0XX_CONTROL_REG_SIZE 200
+ #define STML0XX_STATUS_REG_SIZE 8
+ #define STML0XX_TOUCH_REG_SIZE  8
+-- 
+2.11.0
+

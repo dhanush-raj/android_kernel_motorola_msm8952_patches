@@ -1,0 +1,48 @@
+From f04da311af1f051434170934264de32bce55d737 Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <abhinavk@codeaurora.org>
+Date: Fri, 17 Jun 2016 14:38:24 +0800
+Subject: [PATCH 910/959] msm: mdss: Add support for dumping registers using
+ GFP_ATOMIC
+
+Add support for dumping registers using GFP_ATOMIC
+in case of ISR and also skip call to mdss_mdp_clk_ctrl()
+when XLOG fault handler is called from ISR routine to avoid
+BUG_ON()
+
+Mot-CRs-fixed: IKSWM-45739
+QC SR# 02466310
+
+Change-Id: Ic76abaf87025f0d60482fd82bc9a25b187371a27
+Signed-off-by: Weilong Wu <wuwl10@motorola.com>
+Reviewed-on: http://gerrit.mot.com/868622
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Patrick Auchter <auchter@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_mdp_intf_video.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_mdp_intf_video.c b/drivers/video/msm/mdss/mdss_mdp_intf_video.c
+index d83db239074..27737f081e8 100644
+--- a/drivers/video/msm/mdss/mdss_mdp_intf_video.c
++++ b/drivers/video/msm/mdss/mdss_mdp_intf_video.c
+@@ -680,9 +680,10 @@ static void mdss_mdp_video_underrun_intr_done(void *arg)
+ 	ctl->underrun_cnt++;
+ 	MDSS_XLOG(ctl->num, ctl->underrun_cnt);
+ 	trace_mdp_video_underrun_done(ctl->num, ctl->underrun_cnt);
+-	pr_debug("display underrun detected for ctl=%d count=%d\n", ctl->num,
++	pr_err("display underrun detected for ctl=%d count=%d\n", ctl->num,
+ 			ctl->underrun_cnt);
+-
++	MDSS_XLOG_TOUT_HANDLER_FATAL_DUMP("vbif", "mdp",
++			"mdp_dbg_bus", "panic", "atomic_context");
+ 	if (ctl->opmode & MDSS_MDP_CTL_OP_PACK_3D_ENABLE)
+ 		schedule_work(&ctl->recover_work);
+ }
+-- 
+2.11.0
+

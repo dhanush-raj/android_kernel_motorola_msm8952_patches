@@ -1,0 +1,57 @@
+From 7bf79a9c39c3541310966cca6a9e12abe9790cd4 Mon Sep 17 00:00:00 2001
+From: Jason Knopsnyder <jasonk@motorola.com>
+Date: Wed, 20 May 2015 10:26:23 -0500
+Subject: [PATCH 257/959] IKSWL-17290: qpnp-smbcharger-mmi: Disable batt therm
+ workaround
+
+Add support to enable/disable the batt therm workaround using a
+DTS entry.
+
+Change-Id: I1e20bd2273827b5f3d794d4a3b2982790d9a5d24
+Signed-off-by: Jason Knopsnyder <jasonk@motorola.com>
+Reviewed-on: http://gerrit.mot.com/749886
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Hrycay <jason.hrycay@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 1d7a77aa36b..d1b6f9c0cd6 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -281,6 +281,7 @@ struct smbchg_chip {
+ 	int				charger_rate;
+ 	bool				usbid_disabled;
+ 	bool				demo_mode;
++	bool				batt_therm_wa;
+ 	struct notifier_block		smb_reboot;
+ };
+ 
+@@ -968,7 +969,7 @@ static int get_prop_batt_temp(struct smbchg_chip *chip)
+ 		temp = DEFAULT_BATT_TEMP;
+ 	}
+ 
+-	if (temp > GLITCH_BATT_TEMP) {
++	if ((chip->batt_therm_wa) && (temp > GLITCH_BATT_TEMP)) {
+ 		dev_err(chip->dev, "GLITCH: Temperature Read %d \n", temp);
+ 		temp = ERROR_BATT_TEMP;
+ 	}
+@@ -5593,6 +5594,10 @@ static int smb_parse_dt(struct smbchg_chip *chip)
+ 					"qcom,low-volt-dcin");
+ 	chip->usbid_disabled = of_property_read_bool(node,
+ 						"qcom,usbid-disabled");
++	chip->batt_therm_wa = of_property_read_bool(node,
++					       "qcom,batt-therm-wa-enabled");
++	if (chip->batt_therm_wa)
++		dev_info(chip->dev, "batt_therm workaround is enabled!\n");
+ 
+ 	/* parse the battery missing detection pin source */
+ 	rc = of_property_read_string(chip->spmi->dev.of_node,
+-- 
+2.11.0
+

@@ -1,0 +1,67 @@
+From 0658509a1dbc3c20930e0d636ad107291c78e99b Mon Sep 17 00:00:00 2001
+From: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Date: Mon, 17 Mar 2014 19:31:50 -0500
+Subject: [PATCH 047/959] IKDREL3KK-166 utags: update private data passing
+ method
+
+Between 3.4 and 3.10 the behavior of proc_get_parent_data has changed
+such that it no longer works the way the author of this driver intended.
+It appears that the behavior intended by the author can be achieved by
+using PDE_DATA. Update this driver thusly.
+
+Change-Id: I79ab8b6b8262ebf385bee0ba4c834d71c25ab564
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/618808
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/utag/utags.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/misc/utag/utags.c b/drivers/misc/utag/utags.c
+index 8b7d90f5592..f23e5318a1c 100644
+--- a/drivers/misc/utag/utags.c
++++ b/drivers/misc/utag/utags.c
+@@ -681,7 +681,7 @@ write_utag(struct file *file, const char __user *buffer,
+ 	struct utag *tags = NULL;
+ 	enum utag_error status;
+ 	struct inode *inode = file->f_dentry->d_inode;
+-	struct proc_node *proc = proc_get_parent_data(inode);
++	struct proc_node *proc = PDE_DATA(inode);
+ 
+ 	if (OUT_TYPE == proc->mode) {
+ 		return count;
+@@ -732,7 +732,7 @@ new_utag(struct file *file, const char __user *buffer,
+ 	struct utag *tags, *cur;
+ 	enum utag_error status;
+ 	struct inode *inode = file->f_dentry->d_inode;
+-	struct proc_node *proc = proc_get_parent_data(inode);
++	struct proc_node *proc = PDE_DATA(inode);
+ 	char uname[MAX_UTAG_NAME];
+ 	char utype[MAX_UTAG_NAME];
+ 	struct dir_node *dnode;
+@@ -865,17 +865,17 @@ out:
+ 
+ static int config_read(struct inode *inode, struct file *file)
+ {
+-	return single_open(file, read_tag, proc_get_parent_data(inode));
++	return single_open(file, read_tag, PDE_DATA(inode));
+ }
+ 
+ static int config_dump(struct inode *inode, struct file *file)
+ {
+-	return single_open(file, dump_all, proc_get_parent_data(inode));
++	return single_open(file, dump_all, PDE_DATA(inode));
+ }
+ 
+ static int reload_open(struct inode *inode, struct file *file)
+ {
+-	return single_open(file, reload_show, proc_get_parent_data(inode));
++	return single_open(file, reload_show, PDE_DATA(inode));
+ }
+ 
+ static const struct file_operations utag_fops = {
+-- 
+2.11.0
+

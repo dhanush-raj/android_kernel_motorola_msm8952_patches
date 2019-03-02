@@ -1,0 +1,53 @@
+From bd98ea36ebc54ffc85a73a2292f166fe0238c2f7 Mon Sep 17 00:00:00 2001
+From: Xiaofei Ma <xiaofei@motorola.com>
+Date: Fri, 20 Nov 2015 13:29:48 -0600
+Subject: [PATCH 498/959] IKQCOMSD1-3074: arm/dts: 8952: Change max brigheness
+ for display
+
+In LED driver, the max brightness is set to 4095. So
+need to set the correct max value to get a correct
+scale.
+
+Change-Id: Ie41df8b72931e73f2dd78c2bd0a7e08934ff89b8
+Signed-off-by: Xiaofei Ma <xiaofei@motorola.com>
+Reviewed-on: http://gerrit.mot.com/801850
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi | 2 +-
+ arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+index 5bb8f0d1789..a5a38a4a3ea 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+@@ -83,7 +83,7 @@ qcom,mdss-dsi-panel-timings = [d6 32 22 00 60 66 26 36 28 03 04 00];
+ qcom,mdss-dsi-t-clk-post = <0x3>;
+ qcom,mdss-dsi-t-clk-pre = <0x28>;
+ qcom,mdss-dsi-bl-min-level = <1>;
+-qcom,mdss-dsi-bl-max-level = <255>;
++qcom,mdss-dsi-bl-max-level = <4095>;
+ qcom,mdss-dsi-bl-on-defer-delay = <30>;
+ qcom,mdss-dsi-dma-trigger = "trigger_sw";
+ qcom,mdss-dsi-mdp-trigger = "none";
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+index 9db857541e2..78e6040129e 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -80,7 +80,7 @@ qcom,mdss-dsi-panel-timings = [d6 32 22 00 60 66 26 36 28 03 04 00];
+ qcom,mdss-dsi-t-clk-post = <0x3>;
+ qcom,mdss-dsi-t-clk-pre = <0x28>;
+ qcom,mdss-dsi-bl-min-level = <1>;
+-qcom,mdss-dsi-bl-max-level = <255>;
++qcom,mdss-dsi-bl-max-level = <4095>;
+ qcom,mdss-dsi-bl-on-defer-delay = <30>;
+ qcom,mdss-dsi-dma-trigger = "trigger_sw";
+ qcom,mdss-dsi-mdp-trigger = "none";
+-- 
+2.11.0
+

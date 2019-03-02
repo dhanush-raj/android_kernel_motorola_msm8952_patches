@@ -1,0 +1,61 @@
+From 6a99f4596d532bc795089b7b40b63370010ef6eb Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Fri, 24 Jun 2016 21:01:40 -0500
+Subject: [PATCH 915/959] esdfs: support lower's own hash
+
+Check if the lower filesystem might want to use
+its own hash.
+
+Mot-CRs-fixed: IKSWN-2255
+
+Change-Id: I95d301401bca0169d5c39c5c9dc3d46ccaf159ab
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/891990
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sheng-Zhe Zhao <a18689@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/esdfs/derive.c | 5 +++++
+ fs/esdfs/lookup.c | 7 +++++++
+ 2 files changed, 12 insertions(+)
+
+diff --git a/fs/esdfs/derive.c b/fs/esdfs/derive.c
+index a15224b57e2..95ba9395d0e 100644
+--- a/fs/esdfs/derive.c
++++ b/fs/esdfs/derive.c
+@@ -633,6 +633,11 @@ int esdfs_derive_mkdir_contents(struct dentry *dir_dentry)
+ 
+ 	esdfs_get_lower_path(dir_dentry, &lower_dir_path);
+ 
++	/* check if lower has its own hash */
++	if (lower_dir_path.dentry->d_flags & DCACHE_OP_HASH)
++		lower_dir_path.dentry->d_op->d_hash(lower_dir_path.dentry,
++				lower_dir_path.dentry->d_inode, &nomedia);
++
+ 	/* See if the lower file is there already. */
+ 	err = vfs_path_lookup(lower_dir_path.dentry, lower_dir_path.mnt,
+ 			      nomedia.name, 0, &lower_path);
+diff --git a/fs/esdfs/lookup.c b/fs/esdfs/lookup.c
+index ccf2b8bbf6f..e7141fa8630 100644
+--- a/fs/esdfs/lookup.c
++++ b/fs/esdfs/lookup.c
+@@ -275,6 +275,13 @@ static struct dentry *__esdfs_lookup(struct dentry *dentry,
+ 	this.name = name;
+ 	this.len = strlen(name);
+ 	this.hash = full_name_hash(this.name, this.len);
++
++	/* See if the low-level filesystem might want
++	 * to use its own hash */
++	if (lower_dir_dentry->d_flags & DCACHE_OP_HASH)
++		lower_dir_dentry->d_op->d_hash(lower_dir_dentry,
++					lower_dir_dentry->d_inode, &this);
++
+ 	lower_dentry = d_lookup(lower_dir_dentry, &this);
+ 	if (lower_dentry)
+ 		goto setup_lower;
+-- 
+2.11.0
+

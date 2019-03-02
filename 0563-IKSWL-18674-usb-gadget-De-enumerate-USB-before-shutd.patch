@@ -1,0 +1,122 @@
+From de7ec3a8af76b1d8d4df853cd01038761fbb7bc8 Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Tue, 26 May 2015 15:52:42 -0500
+Subject: [PATCH 563/959] IKSWL-18674: usb: gadget: De-enumerate USB before
+ shutdown/reboot.
+
+Factory requires USB de-enumeration to occur consistently during
+a shutdown/reboot. Implement a reboot notifier that disables
+the android functions and the controller.
+
+Change-Id: I65e540f56f4421c0988b5b7936d9405f181e7b30
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/751540
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/807742
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Christopher Fries <cfries@motorola.com>
+Tested-by: Christopher Fries <cfries@motorola.com>
+---
+ drivers/usb/gadget/android.c | 38 +++++++++++++++++++++++++++++++++-----
+ 1 file changed, 33 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/usb/gadget/android.c b/drivers/usb/gadget/android.c
+index e0d1630b157..54f61bccea1 100644
+--- a/drivers/usb/gadget/android.c
++++ b/drivers/usb/gadget/android.c
+@@ -25,6 +25,7 @@
+ #include <linux/utsname.h>
+ #include <linux/platform_device.h>
+ #include <linux/pm_qos.h>
++#include <linux/reboot.h>
+ #include <linux/of.h>
+ 
+ #include <linux/usb/ch9.h>
+@@ -217,6 +218,9 @@ struct android_dev {
+ 
+ 	/* A list node inside the android_dev_list */
+ 	struct list_head list_item;
++
++	/* reboot notifier */
++	 struct notifier_block android_reboot;
+ };
+ 
+ struct android_configuration {
+@@ -4005,19 +4009,23 @@ static int usb_diag_update_pid_and_serial_num(u32 pid, const char *snum)
+ 	return 0;
+ }
+ 
+-static void check_mmi_factory(struct platform_device *pdev,
+-		struct android_usb_platform_data *pdata)
++static bool is_mmi_factory(void)
+ {
+ 	struct device_node *np = of_find_node_by_path("/chosen");
+ 	bool fact_cable = false;
+-	int prop_len = 0;
+ 
+ 	if (np)
+ 		fact_cable = of_property_read_bool(np, "mmi,factory-cable");
+ 
+ 	of_node_put(np);
++	return fact_cable;
++}
+ 
+-	if (fact_cable) {
++static void configure_mmi_factory(struct platform_device *pdev,
++		struct android_usb_platform_data *pdata)
++{
++	int prop_len = 0;
++	if (is_mmi_factory()) {
+ 		of_get_property(pdev->dev.of_node,
+ 				"mmi,pm-qos-latency-factory",
+ 				&prop_len);
+@@ -4033,6 +4041,17 @@ static void check_mmi_factory(struct platform_device *pdev,
+ 	}
+ }
+ 
++static int android_reboot_notifier(struct notifier_block *nb,
++				unsigned long event,
++				void *unused)
++{
++	struct android_dev *dev =
++		container_of(nb, struct android_dev, android_reboot);
++	pr_err("Android reboot  - de-enumerate\n");
++	android_disable(dev);
++	return NOTIFY_DONE;
++}
++
+ static int android_probe(struct platform_device *pdev)
+ {
+ 	struct android_usb_platform_data *pdata;
+@@ -4059,7 +4078,7 @@ static int android_probe(struct platform_device *pdev)
+ 			pr_info("pm_qos latency not specified %d\n", prop_len);
+ 		}
+ 
+-		check_mmi_factory(pdev, pdata);
++		configure_mmi_factory(pdev, pdata);
+ 
+ 		ret = of_property_read_u32(pdev->dev.of_node,
+ 					"qcom,usb-core-id",
+@@ -4182,6 +4201,15 @@ static int android_probe(struct platform_device *pdev)
+ 	}
+ 	strlcpy(android_dev->pm_qos, "high", sizeof(android_dev->pm_qos));
+ 
++	if (is_mmi_factory()) {
++		android_dev->android_reboot.notifier_call =
++						android_reboot_notifier;
++		android_dev->android_reboot.next = NULL;
++		android_dev->android_reboot.priority = 2;
++		ret = register_reboot_notifier(&android_dev->android_reboot);
++		if (ret)
++			dev_err(&pdev->dev, "register for reboot failed\n");
++	}
+ 	return ret;
+ err_probe:
+ 	android_destroy_device(android_dev);
+-- 
+2.11.0
+

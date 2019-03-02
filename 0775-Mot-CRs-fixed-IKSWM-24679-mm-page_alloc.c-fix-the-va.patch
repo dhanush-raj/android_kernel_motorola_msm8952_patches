@@ -1,0 +1,103 @@
+From 3f57ed4fd50138ccbe4850e40d787de4fe9c98f3 Mon Sep 17 00:00:00 2001
+From: "Srivatsa S. Bhat" <srivatsa.bhat@linux.vnet.ibm.com>
+Date: Wed, 11 Sep 2013 14:20:36 -0700
+Subject: [PATCH 775/959] Mot-CRs-fixed:IKSWM-24679:mm/page_alloc.c:fix the
+ value of fallback_migratetype
+
+In the current code, the value of fallback_migratetype that is printed
+using the mm_page_alloc_extfrag tracepoint, is the value of the
+migratetype *after* it has been set to the preferred migratetype (if the
+ownership was changed).  Obviously that wouldn't have been the original
+intent.  (We already have a separate 'change_ownership' field to tell
+whether the ownership of the pageblock was changed from the
+fallback_migratetype to the preferred type.)
+
+The intent of the fallback_migratetype field is to show the migratetype
+from which we borrowed pages in order to satisfy the allocation request.
+So fix the code to print that value correctly.
+
+Signed-off-by: Srivatsa S. Bhat <srivatsa.bhat@linux.vnet.ibm.com>
+Cc: Mel Gorman <mel@csn.ul.ie>
+Cc: Minchan Kim <minchan@kernel.org>
+Cc: Cody P Schafer <cody@linux.vnet.ibm.com>
+Signed-off-by: Andrew Morton <akpm@linux-foundation.org>
+Signed-off-by: Linus Torvalds <torvalds@linux-foundation.org>
+(cherry picked from commit f92310c1877fc73470bdcd9228758fa3713c191b)
+Change-Id: I97cf999d55a96ff8485be3af4155ed3036d56349
+Reviewed-on: http://gerrit.mot.com/750536
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.mot.com/831642
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ include/trace/events/kmem.h | 10 +++++++---
+ mm/page_alloc.c             |  5 +++--
+ 2 files changed, 10 insertions(+), 5 deletions(-)
+
+diff --git a/include/trace/events/kmem.h b/include/trace/events/kmem.h
+index fd6dbdf967d..054d9430f2b 100644
+--- a/include/trace/events/kmem.h
++++ b/include/trace/events/kmem.h
+@@ -268,11 +268,13 @@ TRACE_EVENT(mm_page_alloc_extfrag,
+ 
+ 	TP_PROTO(struct page *page,
+ 			int alloc_order, int fallback_order,
+-			int alloc_migratetype, int fallback_migratetype),
++			int alloc_migratetype, int fallback_migratetype,
++			int change_ownership),
+ 
+ 	TP_ARGS(page,
+ 		alloc_order, fallback_order,
+-		alloc_migratetype, fallback_migratetype),
++		alloc_migratetype, fallback_migratetype,
++		change_ownership),
+ 
+ 	TP_STRUCT__entry(
+ 		__field(	struct page *,	page			)
+@@ -280,6 +282,7 @@ TRACE_EVENT(mm_page_alloc_extfrag,
+ 		__field(	int,		fallback_order		)
+ 		__field(	int,		alloc_migratetype	)
+ 		__field(	int,		fallback_migratetype	)
++		__field(	int,		change_ownership	)
+ 	),
+ 
+ 	TP_fast_assign(
+@@ -288,6 +291,7 @@ TRACE_EVENT(mm_page_alloc_extfrag,
+ 		__entry->fallback_order		= fallback_order;
+ 		__entry->alloc_migratetype	= alloc_migratetype;
+ 		__entry->fallback_migratetype	= fallback_migratetype;
++		__entry->change_ownership	= change_ownership;
+ 	),
+ 
+ 	TP_printk("page=%p pfn=%lu alloc_order=%d fallback_order=%d pageblock_order=%d alloc_migratetype=%d fallback_migratetype=%d fragmenting=%d change_ownership=%d",
+@@ -299,7 +303,7 @@ TRACE_EVENT(mm_page_alloc_extfrag,
+ 		__entry->alloc_migratetype,
+ 		__entry->fallback_migratetype,
+ 		__entry->fallback_order < pageblock_order,
+-		__entry->alloc_migratetype == __entry->fallback_migratetype)
++		__entry->change_ownership)
+ );
+ 
+ 
+diff --git a/mm/page_alloc.c b/mm/page_alloc.c
+index 020c9009b4f..ac6a18a1cc8 100644
+--- a/mm/page_alloc.c
++++ b/mm/page_alloc.c
+@@ -1176,8 +1176,9 @@ __rmqueue_fallback(struct zone *zone, int order, int start_migratetype)
+ 			       is_migrate_cma(migratetype)
+ 			     ? migratetype : start_migratetype);
+ 
+-			trace_mm_page_alloc_extfrag(page, order, current_order,
+-				start_migratetype, new_type);
++			trace_mm_page_alloc_extfrag(page, order,
++				current_order, start_migratetype, migratetype,
++				new_type == start_migratetype);
+ 
+ 			return page;
+ 		}
+-- 
+2.11.0
+

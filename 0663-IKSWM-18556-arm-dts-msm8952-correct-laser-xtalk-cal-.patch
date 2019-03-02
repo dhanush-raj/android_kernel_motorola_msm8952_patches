@@ -1,0 +1,36 @@
+From 86edc207a9790300ac891d95ae6106dc938eebe1 Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Fri, 29 Jan 2016 13:30:21 -0600
+Subject: [PATCH 663/959] IKSWM-18556: arm/dts: msm8952: correct laser xtalk
+ cal value
+
+xtalk value need to be changed to 19
+Change-Id: I8467c21244068b4130fb3aa1af5fb51c04ebb201
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/817354
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Hideki Yoshino <hideki.yoshino@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index fbf04509b09..f18bf61f348 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -951,7 +951,7 @@
+ 		pinctrl-0 = <&laser_active >;
+ 		pinctrl-1 = <&laser_suspend >;
+ 		st,sensorthreshold = <40 50>;
+-		st,xtalkval = <26214>;
++		st,xtalkval = <19>;
+ 	};
+ 
+ 	elan@49 {
+-- 
+2.11.0
+

@@ -1,0 +1,51 @@
+From e6e0f5277ee87e04a44e8d2d066de545a142c147 Mon Sep 17 00:00:00 2001
+From: Yi-wei Zhao <gbjc64@motorola.com>
+Date: Mon, 19 Oct 2015 18:43:19 -0700
+Subject: [PATCH 817/959] IKSWL-41288 arm: idle: add missing need_resched check
+
+Propagate from IKSWM-7306.
+
+Add missing need_resched check before calling cpu_do_idle, else
+the cpu will sleep in idle with resched flag is set, and it can
+not be woken up by resched request anymore.
+
+Change-Id: I4568796b3ad665e2dc381dcaa824ed553e2febf4
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Signed-off-by: Yi-wei Zhao <gbjc64@motorola.com>
+Reviewed-on: http://gerrit.mot.com/792800
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Signed-off-by: chenyb1 <chenyb1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/834114
+Reviewed-by: Lian-Wei Wang <lian-wei.wang@motorola.com>
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+---
+ arch/arm/kernel/process.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/arch/arm/kernel/process.c b/arch/arm/kernel/process.c
+index ae54845e487..e80286f7454 100644
+--- a/arch/arm/kernel/process.c
++++ b/arch/arm/kernel/process.c
+@@ -173,10 +173,12 @@ void (*arm_pm_idle)(void);
+ 
+ static void default_idle(void)
+ {
+-	if (arm_pm_idle)
+-		arm_pm_idle();
+-	else
+-		cpu_do_idle();
++	if (!need_resched()) {
++		if (arm_pm_idle)
++			arm_pm_idle();
++		else
++			cpu_do_idle();
++	}
+ 	local_irq_enable();
+ }
+ 
+-- 
+2.11.0
+

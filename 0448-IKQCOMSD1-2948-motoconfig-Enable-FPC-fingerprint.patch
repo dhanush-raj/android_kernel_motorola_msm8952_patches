@@ -1,0 +1,32 @@
+From 5cbc6b3b9ac89678f785672dd9195982503932ab Mon Sep 17 00:00:00 2001
+From: Xiaofei Ma <xiaofei@motorola.com>
+Date: Thu, 29 Oct 2015 15:24:23 -0500
+Subject: [PATCH 448/959] IKQCOMSD1-2948: motoconfig: Enable FPC fingerprint
+
+Support the fingerprint sensor from FPC.
+
+Change-Id: I7fdd71418f8abe55e5801b5f24a64e7fbee9f431
+Signed-off-by: Xiaofei Ma <xiaofei@motorola.com>
+Reviewed-on: http://gerrit.mot.com/788091
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Thomas Merrell <thomasmerrell@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index be91fd5c238..2bcf3bca6dd 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -53,3 +53,4 @@ CONFIG_MSM_TZ_LOG_WDOG_DUMP=y
+ CONFIG_LEDS_ATC=y
+ CONFIG_INPUT_KEYCHORD=y
+ CONFIG_STMVL53L0=y
++CONFIG_SENSORS_FPC_1020=y
+-- 
+2.11.0
+

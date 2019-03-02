@@ -1,0 +1,84 @@
+From d5ecbaa74c36cd31da036018a7738a911feaff18 Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Mon, 25 Jan 2016 23:28:45 -0600
+Subject: [PATCH 646/959] IKSWM-18182 ASoC: msm8952: update EC_REF interfaces
+
+EC Ref signal mixer control was added on P1.0 HW with
+initial NXP configuration which had MI2S Tx route for EC Ref.
+Opalum logic replaced that. the processed signal is at AFE output.
+
+update EC Ref interfaces with removal of previous adding on Voice EC
+and replacing of Audio EC Ref port.
+
+Change-Id: I660cb28feb94b85be3bf8be8b02b4446f58cd3fa
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/816079
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Joseph Dwyer <josephdwyer@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-by: Harini Peddibhotla <hpeddib1@motorola.com>
+---
+ sound/soc/msm/qdsp6v2/msm-pcm-routing-v2.c | 14 ++++----------
+ 1 file changed, 4 insertions(+), 10 deletions(-)
+
+diff --git a/sound/soc/msm/qdsp6v2/msm-pcm-routing-v2.c b/sound/soc/msm/qdsp6v2/msm-pcm-routing-v2.c
+index f5fbfc77cff..0b200c71394 100644
+--- a/sound/soc/msm/qdsp6v2/msm-pcm-routing-v2.c
++++ b/sound/soc/msm/qdsp6v2/msm-pcm-routing-v2.c
+@@ -52,7 +52,6 @@ static int get_cal_path(int path_type);
+ #define EC_PORT_ID_TERTIARY_MI2S_TX   3
+ #define EC_PORT_ID_QUATERNARY_MI2S_TX 4
+ #define EC_PORT_ID_SLIMBUS_1_TX       5
+-#define EC_PORT_ID_QUINARY_MI2S_TX    6
+ 
+ static struct mutex routing_lock;
+ 
+@@ -1612,7 +1611,7 @@ static int msm_routing_ec_ref_rx_put(struct snd_kcontrol *kcontrol,
+ 		break;
+ 	case 11:
+ 		msm_route_ec_ref_rx = 11;
+-		ec_ref_port_id = AFE_PORT_ID_QUINARY_MI2S_TX;
++		ec_ref_port_id = AFE_PORT_ID_QUINARY_MI2S_RX;
+ 		break;
+ 	default:
+ 		msm_route_ec_ref_rx = 0; /* NONE */
+@@ -1632,7 +1631,7 @@ static int msm_routing_ec_ref_rx_put(struct snd_kcontrol *kcontrol,
+ static const char *const ec_ref_rx[] = { "None", "SLIM_RX", "I2S_RX",
+ 	"PRI_MI2S_TX", "SEC_MI2S_TX",
+ 	"TERT_MI2S_TX", "QUAT_MI2S_TX", "SEC_I2S_RX", "PROXY_RX",
+-	"SLIM_5_RX", "SLIM_1_TX", "QUIN_MI2S_TX"};
++	"SLIM_5_RX", "SLIM_1_TX", "QUIN_MI2S_RX"};
+ static const struct soc_enum msm_route_ec_ref_rx_enum[] = {
+ 	SOC_ENUM_SINGLE_EXT(12, ec_ref_rx),
+ };
+@@ -1724,10 +1723,6 @@ static int msm_routing_ext_ec_put(struct snd_kcontrol *kcontrol,
+ 		msm_route_ext_ec_ref = SLIMBUS_1_TX;
+ 		state = true;
+ 		break;
+-	case EC_PORT_ID_QUINARY_MI2S_TX:
+-		msm_route_ext_ec_ref = AFE_PORT_ID_QUINARY_MI2S_TX;
+-		state = true;
+-		break;
+ 	default:
+ 		msm_route_ext_ec_ref = AFE_PORT_INVALID;
+ 		break;
+@@ -1744,11 +1739,10 @@ static int msm_routing_ext_ec_put(struct snd_kcontrol *kcontrol,
+ 
+ static const char * const ext_ec_ref_rx[] = {"NONE", "PRI_MI2S_TX",
+ 					     "SEC_MI2S_TX", "TERT_MI2S_TX",
+-					     "QUAT_MI2S_TX", "SLIM_1_TX",
+-					     "QUIN_MI2S_TX"};
++					     "QUAT_MI2S_TX", "SLIM_1_TX"};
+ 
+ static const struct soc_enum msm_route_ext_ec_ref_rx_enum[] = {
+-	SOC_ENUM_SINGLE_EXT(6, ext_ec_ref_rx),
++	SOC_ENUM_SINGLE_EXT(5, ext_ec_ref_rx),
+ };
+ 
+ static const struct snd_kcontrol_new voc_ext_ec_mux =
+-- 
+2.11.0
+

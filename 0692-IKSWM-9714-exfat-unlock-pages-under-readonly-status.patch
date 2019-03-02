@@ -1,0 +1,60 @@
+From d33788e1280e14960624b6f62a306bf70a39e855 Mon Sep 17 00:00:00 2001
+From: Jaegeuk Kim <jaegeuk@motorola.com>
+Date: Mon, 2 Nov 2015 11:00:46 -0800
+Subject: [PATCH 692/959] IKSWM-9714 - exfat: unlock pages under readonly
+ status
+
+The ->writepage should unlock its page before returning the results.
+Otherwise, evict_inode can be hanged while truncating pages.
+
+- Backtrace -
+
+(__schedule+0x3dc/0x908) from [<c0b67854>] (io_schedule+0x6c/0x94)
+(io_schedule+0x6c/0x94) from [<c01ce2dc>] (sleep_on_page+0x8/0x10)
+(sleep_on_page+0x8/0x10) from [<c0b64e70>] (__wait_on_bit_lock+0x6c/0xb8)
+(__wait_on_bit_lock+0x6c/0xb8) from [<c01ce418>] (__lock_page+0x90/0x98)
+(__lock_page+0x90/0x98) from [<c01dcae8>] (truncate_inode_pages_range+0x360/0x37c)
+(truncate_inode_pages_range+0x360/0x37c) from [<c01dcb1c>] (truncate_inode_pages+0x18/0x20)
+(truncate_inode_pages+0x18/0x20) from [<c0304618>] (exfat_evict_inode+0x18/0xb0)
+(exfat_evict_inode+0x18/0xb0) from [<c0228590>] (evict+0x94/0x178)
+(evict+0x94/0x178) from [<c02286a4>] (dispose_list+0x30/0x40)
+(dispose_list+0x30/0x40) from [<c022924c>] (evict_inodes+0xc8/0xd0)
+(evict_inodes+0xc8/0xd0) from [<c0212964>] (generic_shutdown_super+0x44/0xc4)
+(generic_shutdown_super+0x44/0xc4) from [<c0212bd4>] (kill_block_super+0x18/0x68)
+(kill_block_super+0x18/0x68) from [<c0212f3c>] (deactivate_locked_super+0x48/0x64)
+(deactivate_locked_super+0x48/0x64) from [<c022d660>] (SyS_umount+0x90/0x390)
+
+Change-Id: Idf185a1263b0f0030b481896dbfac856506ab23f
+Signed-off-by: Jaegeuk Kim <jaegeuk@motorola.com>
+Reviewed-on: http://gerrit.mot.com/796552
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sheng-Zhe Zhao <a18689@motorola.com>
+Reviewed-by: Russell Knize <rknize@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/exfat/exfat_super.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/fs/exfat/exfat_super.c b/fs/exfat/exfat_super.c
+index 4bea104ba44..69373c13ae9 100644
+--- a/fs/exfat/exfat_super.c
++++ b/fs/exfat/exfat_super.c
+@@ -1517,8 +1517,11 @@ static void exfat_end_buffer_async_write(struct buffer_head *bh, int uptodate)
+ 
+ static int exfat_writepage(struct page *page, struct writeback_control *wbc)
+ {
+-	if (exfat_readonly(page->mapping->host->i_sb))
+-		return -EROFS;
++	if (exfat_readonly(page->mapping->host->i_sb)) {
++		unlock_page(page);
++		SetPageError(page);
++		return 0;
++	}
+ 	return block_write_full_page_endio(page, exfat_get_block, wbc,
+ 					   exfat_end_buffer_async_write);
+ }
+-- 
+2.11.0
+

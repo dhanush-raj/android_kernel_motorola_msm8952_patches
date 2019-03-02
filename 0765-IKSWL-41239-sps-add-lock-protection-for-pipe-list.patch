@@ -1,0 +1,78 @@
+From feda39b7df5388a5d9095da0d6522ab0e1c08fd0 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Wed, 4 Mar 2015 13:46:55 -0800
+Subject: [PATCH 765/959] IKSWL-41239 : sps: add lock protection for pipe list
+
+ There is some race condition between iteration over pipe list and
+ list_del. Adding list lock protection to avoid kernel panic.
+
+Change-Id: Ia493a221a01cd41d8b828bbf166da1388d161d71
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/721057
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sheng-Zhe Zhao <a18689@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830283
+SME-Granted: SME Approvals Granted
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+---
+ drivers/platform/msm/sps/sps_bam.c | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/platform/msm/sps/sps_bam.c b/drivers/platform/msm/sps/sps_bam.c
+index e76e79521ce..bc039f98f4b 100644
+--- a/drivers/platform/msm/sps/sps_bam.c
++++ b/drivers/platform/msm/sps/sps_bam.c
+@@ -799,6 +799,7 @@ int sps_bam_pipe_connect(struct sps_pipe *bam_pipe,
+ 	void *desc_buf = NULL;
+ 	u32 pipe_index;
+ 	int result;
++	unsigned long flags = 0;
+ 
+ 	/* Clear the client pipe state and hw init struct */
+ 	pipe_clear(bam_pipe);
+@@ -1031,8 +1032,9 @@ int sps_bam_pipe_connect(struct sps_pipe *bam_pipe,
+ 	/* Indicate initialization is complete */
+ 	dev->pipes[pipe_index] = bam_pipe;
+ 	dev->pipe_active_mask |= 1UL << pipe_index;
++	spin_lock_irqsave(&dev->isr_lock, flags);
+ 	list_add_tail(&bam_pipe->list, &dev->pipes_q);
+-
++	spin_unlock_irqrestore(&dev->isr_lock, flags);
+ 	bam_pipe->state |= BAM_STATE_INIT;
+ 	result = 0;
+ exit_err:
+@@ -1071,7 +1073,10 @@ int sps_bam_pipe_disconnect(struct sps_bam *dev, u32 pipe_index)
+ 	pipe = dev->pipes[pipe_index];
+ 	if (BAM_PIPE_IS_ASSIGNED(pipe)) {
+ 		if ((dev->pipe_active_mask & (1UL << pipe_index))) {
++			unsigned long flags = 0;
++			spin_lock_irqsave(&dev->isr_lock, flags);
+ 			list_del(&pipe->list);
++			spin_unlock_irqrestore(&dev->isr_lock, flags);
+ 			dev->pipe_active_mask &= ~(1UL << pipe_index);
+ 		}
+ 		dev->pipe_remote_mask &= ~(1UL << pipe_index);
+@@ -2277,6 +2282,7 @@ int sps_bam_get_free_count(struct sps_bam *dev, u32 pipe_index,
+ int sps_bam_set_satellite(struct sps_bam *dev, u32 pipe_index)
+ {
+ 	struct sps_pipe *pipe = dev->pipes[pipe_index];
++	unsigned long flags = 0;
+ 
+ 	/*
+ 	 * Switch to satellite control is only supported on processor
+@@ -2318,7 +2324,9 @@ int sps_bam_set_satellite(struct sps_bam *dev, u32 pipe_index)
+ 	}
+ 
+ 	/* Indicate satellite control */
++	spin_lock_irqsave(&dev->isr_lock, flags);
+ 	list_del(&pipe->list);
++	spin_unlock_irqrestore(&dev->isr_lock, flags);
+ 	dev->pipe_active_mask &= ~(1UL << pipe_index);
+ 	dev->pipe_remote_mask |= pipe->pipe_index_mask;
+ 	pipe->state |= BAM_STATE_REMOTE;
+-- 
+2.11.0
+

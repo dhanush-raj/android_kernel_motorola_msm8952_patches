@@ -1,0 +1,67 @@
+From 1c6a26efb11a0e1df41c3d6d7961edeef0855354 Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Tue, 6 Jan 2015 15:10:35 -0600
+Subject: [PATCH 111/959] IKXLUPGRD-10395: Increase SPI buffer so DMA can be
+ used
+
+Increase the SPI buffer so the SPI driver will decide
+to use DMA.
+
+Use #define for CRC calculation, so SPI buffer size
+can be changed easier.
+
+Change-Id: I60bd97dc3932fcc2372a652ef0d4fee8a51346ef
+Signed-off-by: Dan Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/701686
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Philip Lee <pglee@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_spi.c | 3 ++-
+ include/linux/stml0xx.h            | 5 +++--
+ 2 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_spi.c b/drivers/misc/stml0xx/stml0xx_spi.c
+index 98d362099cd..2b20da53757 100644
+--- a/drivers/misc/stml0xx/stml0xx_spi.c
++++ b/drivers/misc/stml0xx/stml0xx_spi.c
+@@ -575,7 +575,8 @@ static int stml0xx_spi_send_read_reg_no_retries(unsigned char reg_type,
+ 			goto EXIT;
+ 
+ 		/* Validate CRC */
+-		recv_crc = (read_buff[30] << 8) | read_buff[31];
++		recv_crc = (read_buff[SPI_MSG_SIZE - 2] << 8) |
++				read_buff[SPI_MSG_SIZE - 1];
+ 		calc_crc = stml0xx_spi_calculate_crc(read_buff,
+ 						     SPI_MSG_SIZE -
+ 						     SPI_CRC_LEN);
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 870ffea1c60..3fdbc7a8f1e 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -43,15 +43,16 @@
+ #define SPI_BARKER_2            0xAE
+ #define SPI_HEADER_SIZE         6
+ #define SPI_CRC_SIZE            2
+-#define SPI_MAX_PAYLOAD_LEN     24
+ #define SPI_MSG_TYPE_READ_REG       0x01
+ #define SPI_MSG_TYPE_WRITE_REG      0x02
+ #define SPI_MSG_TYPE_READ_SENSORS   0x03
+ #define SPI_WRITE_REG_HDR_SIZE      6
+ #define SPI_READ_REG_HDR_SIZE       6
+-#define SPI_MSG_SIZE                32
+ #define SPI_CRC_LEN                 2
+ #define SPI_READ_SENSORS_HDR_SIZE   3
++#define SPI_MAX_PAYLOAD_LEN        88
++#define SPI_MSG_SIZE	\
++	(SPI_MAX_PAYLOAD_LEN+SPI_HEADER_SIZE+SPI_CRC_SIZE)
+ 
+ /** The following define the IOCTL command values via the ioctl macros */
+ #define STML0XX_IOCTL_BASE		77
+-- 
+2.11.0
+

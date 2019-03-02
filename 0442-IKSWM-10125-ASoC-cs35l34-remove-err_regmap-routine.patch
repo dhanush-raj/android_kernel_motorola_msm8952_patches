@@ -1,0 +1,61 @@
+From b4cf04c2ce45b6450f95696c8a772109c8d2a3d6 Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Tue, 3 Nov 2015 13:41:45 -0600
+Subject: [PATCH 442/959] IKSWM-10125 ASoC: cs35l34: remove err_regmap routine
+
+current Cirrus driver for watson amps doesn't handle
+err_regmap clearly, remove that for now before getting
+whole new vamped driver.
+
+Change-Id: Ida3225414165f2072ffa4b80b89b596710c67356
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/797058
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/codecs/cs35l34.c | 10 +++-------
+ 1 file changed, 3 insertions(+), 7 deletions(-)
+
+diff --git a/sound/soc/codecs/cs35l34.c b/sound/soc/codecs/cs35l34.c
+index 752ecf6bc5f..a22d6ddb6a9 100644
+--- a/sound/soc/codecs/cs35l34.c
++++ b/sound/soc/codecs/cs35l34.c
+@@ -818,13 +818,13 @@ static int cs35l34_i2c_probe(struct i2c_client *i2c_client,
+ 		dev_err(&i2c_client->dev,
+ 			"CS35l34 Device ID (%X). Expected ID %X\n",
+ 			devid, CS35L34_CHIP_ID);
+-		goto err_regmap;
++		return -EINVAL;
+ 	}
+ 
+ 	ret = regmap_read(cs35l34->regmap, CS35L34_REV_ID, &reg);
+ 	if (ret < 0) {
+ 		dev_err(&i2c_client->dev, "Get Revision ID failed\n");
+-		goto err_regmap;
++		return -EINVAL;
+ 	}
+ 
+ 	dev_info(&i2c_client->dev,
+@@ -982,15 +982,11 @@ static int cs35l34_i2c_probe(struct i2c_client *i2c_client,
+ 	if (ret < 0) {
+ 		dev_err(&i2c_client->dev,
+ 			"%s: Register codec failed\n", __func__);
+-		goto err_regmap;
++		return -EINVAL;
+ 	}
+ 
+ 	return 0;
+ 
+-err_regmap:
+-	if (cs35l34->regmap > 0)
+-		regmap_exit(cs35l34->regmap);
+-
+ err:
+ 	return ret;
+ }
+-- 
+2.11.0
+

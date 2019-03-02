@@ -1,0 +1,43 @@
+From 4a964e730aa08bcaf70325ebb733d4e51783ed8c Mon Sep 17 00:00:00 2001
+From: Paul Handrigan <Paul.Handrigan@cirrus.com>
+Date: Mon, 2 Nov 2015 16:39:04 -0600
+Subject: [PATCH 477/959] ASoC: msm8952: Change MI2S5 capture to hostless
+
+Change MI2S5 dai to a hostless dai.
+
+Change-Id: I6cf8b5b7d06d327654bdff9def3191dcc06fa891
+Signed-off-by: Paul Handrigan <Paul.Handrigan@cirrus.com>
+Reviewed-on: http://gerrit.mot.com/797649
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ sound/soc/msm/msm8952.c | 7 ++-----
+ 1 file changed, 2 insertions(+), 5 deletions(-)
+
+diff --git a/sound/soc/msm/msm8952.c b/sound/soc/msm/msm8952.c
+index 1729f6250bf..4474ed1f866 100644
+--- a/sound/soc/msm/msm8952.c
++++ b/sound/soc/msm/msm8952.c
+@@ -2692,14 +2692,11 @@ static struct snd_soc_dai_link msm8952_dai[] = {
+ 		.name = LPASS_BE_QUIN_MI2S_TX,
+ 		.stream_name = "Quinary MI2S Capture",
+ 		.cpu_dai_name = "msm-dai-q6-mi2s.5",
+-		.platform_name = "msm-pcm-routing",
++		.platform_name = "msm-pcm-hostless",
+ 		.codec_dai_name = "cs35l34",
+ 		.codec_name = "cs35l34.2-0040",
+-		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
+-			SND_SOC_DAIFMT_CBS_CFS,
+-		.no_pcm = 1,
+-		.be_id = MSM_BACKEND_DAI_QUINARY_MI2S_TX,
+ 		.be_hw_params_fixup = msm_be_hw_params_fixup,
++		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+ 		.ops = &msm8952_quin_mi2s_be_ops,
+ 		.ignore_suspend = 1,
+ 	},
+-- 
+2.11.0
+

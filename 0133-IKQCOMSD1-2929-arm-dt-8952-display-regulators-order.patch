@@ -1,0 +1,37 @@
+From fbd424a82abf7f74533ea8b1ff60fec055b61fa4 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Thu, 3 Sep 2015 09:47:07 -0500
+Subject: [PATCH 133/959] IKQCOMSD1-2929 arm/dt: 8952: display regulators order
+
+As it turns out qcom SW works only with certain order
+of regulators in this node - ibb first and lab later.
+
+Change-Id: I5dd2e4c72a824fead09ff69244114c83b26945dc
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/781224
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm-pmi8950.dtsi | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi b/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi
+index bc4d93acb1a..a18f13f1203 100644
+--- a/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi
++++ b/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi
+@@ -481,8 +481,7 @@
+ 
+ 				qcom,qpnp-lab-full-pull-down;
+ 				qcom,qpnp-lab-pull-down-enable;
+-				qcom,qpnp-lab-switching-clock-frequency =
+-									<1600>;
++				qcom,qpnp-lab-switching-clock-frequency = <1600>;
+ 				qcom,qpnp-lab-limit-maximum-current = <800>;
+ 				qcom,qpnp-lab-limit-max-current-enable;
+ 				qcom,qpnp-lab-ps-threshold = <40>;
+-- 
+2.11.0
+

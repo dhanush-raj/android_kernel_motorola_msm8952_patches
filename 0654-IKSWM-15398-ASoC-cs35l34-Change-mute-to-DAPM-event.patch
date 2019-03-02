@@ -1,0 +1,45 @@
+From bb97424e3e9fd323685e2d4d53c6aeaf4a2f52ac Mon Sep 17 00:00:00 2001
+From: Paul Handrigan <Paul.Handrigan@cirrus.com>
+Date: Fri, 22 Jan 2016 11:42:01 -0600
+Subject: [PATCH 654/959] IKSWM-15398: ASoC: cs35l34: Change mute to DAPM
+ event.
+
+Remove the digital and enable/disable the mute bit.
+
+Change-Id: Id01894c3904854c1bbff6440e79d8a86eaf41843
+Signed-off-by: Paul Handrigan <Paul.Handrigan@cirrus.com>
+Reviewed-on: http://gerrit.mot.com/816719
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/codecs/cs35l34.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/sound/soc/codecs/cs35l34.c b/sound/soc/codecs/cs35l34.c
+index 4a49a5db6ea..3da7c27cc01 100644
+--- a/sound/soc/codecs/cs35l34.c
++++ b/sound/soc/codecs/cs35l34.c
+@@ -279,11 +279,17 @@ static int cs35l34_main_amp_event(struct snd_soc_dapm_widget *w,
+ 			CS35L34_BST_CTL_MASK,
+ 			0x30);
+ 		msleep(5);
++		regmap_update_bits(priv->regmap, CS35L34_PROTECT_CTL,
++			AMP_MUTE,
++			0);
+ 		break;
+ 	case SND_SOC_DAPM_POST_PMD:
+ 		regmap_update_bits(priv->regmap, CS35L34_BST_CVTR_V_CTL,
+ 			CS35L34_BST_CTL_MASK,
+ 			0x00);
++		regmap_update_bits(priv->regmap, CS35L34_PROTECT_CTL,
++			AMP_MUTE,
++			AMP_MUTE);
+ 		msleep(5);
+ 		break;
+ 	default:
+-- 
+2.11.0
+

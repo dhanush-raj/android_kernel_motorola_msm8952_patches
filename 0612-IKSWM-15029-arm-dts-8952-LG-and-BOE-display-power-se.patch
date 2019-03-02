@@ -1,0 +1,76 @@
+From 2515f0049154d88a94b7da07bbaf58e80666ef7d Mon Sep 17 00:00:00 2001
+From: houdz1 <houdz1@motorola.com>
+Date: Tue, 29 Dec 2015 14:06:40 +0800
+Subject: [PATCH 612/959] IKSWM-15029 arm/dts: 8952:LG and BOE display power
+ sequence updates.
+
+- Modfiy "reset" sequence: "reset" low -> delay 11ms ->"reset"
+  high -> delay 21ms
+- Add 2 ms delay between vsn and vsp
+
+Change-Id: If058b460c864c5929177eb992e190832f94fced5
+Signed-off-by: houdz1 <houdz1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/809544
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi | 6 +++---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi | 6 +++---
+ 2 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+index 94df437424a..c15b361a825 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+@@ -89,7 +89,7 @@ qcom,mdss-dsi-bl-on-defer-delay = <30>;
+ qcom,mdss-dsi-dma-trigger = "trigger_sw";
+ qcom,mdss-dsi-mdp-trigger = "none";
+ qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+-qcom,mdss-dsi-reset-sequence = <1 11>;
++qcom,mdss-dsi-reset-sequence = <0 11>, <1 21>;
+ qcom,mdss-dsi-lp11-init;
+ qcom,mdss-dsi-tx-eot-append;
+ 
+@@ -145,8 +145,8 @@ qcom,panel-supply-entries {
+ 		qcom,supply-max-voltage = <6000000>;
+ 		qcom,supply-enable-load = <100000>;
+ 		qcom,supply-disable-load = <100>;
+-		qcom,supply-pre-on-sleep = <0>;
+-		qcom,supply-post-on-sleep = <2>;
++		qcom,supply-pre-on-sleep = <2>;
++		qcom,supply-post-on-sleep = <0>;
+ 		qcom,supply-pre-off-sleep = <5>;
+ 		qcom,supply-post-off-sleep = <0>;
+ 	};
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+index 3903ff4a323..cbc1c47ee81 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -86,7 +86,7 @@ qcom,mdss-dsi-bl-on-defer-delay = <30>;
+ qcom,mdss-dsi-dma-trigger = "trigger_sw";
+ qcom,mdss-dsi-mdp-trigger = "none";
+ qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+-qcom,mdss-dsi-reset-sequence = <1 11>;
++qcom,mdss-dsi-reset-sequence = <0 11>, <1 21>;
+ qcom,mdss-dsi-lp11-init;
+ qcom,mdss-dsi-tx-eot-append;
+ 
+@@ -142,8 +142,8 @@ qcom,panel-supply-entries {
+ 		qcom,supply-max-voltage = <6000000>;
+ 		qcom,supply-enable-load = <100000>;
+ 		qcom,supply-disable-load = <100>;
+-		qcom,supply-pre-on-sleep = <0>;
+-		qcom,supply-post-on-sleep = <2>;
++		qcom,supply-pre-on-sleep = <2>;
++		qcom,supply-post-on-sleep = <0>;
+ 		qcom,supply-pre-off-sleep = <5>;
+ 		qcom,supply-post-off-sleep = <0>;
+ 	};
+-- 
+2.11.0
+

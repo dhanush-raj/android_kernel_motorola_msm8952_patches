@@ -1,0 +1,47 @@
+From adf8c83df96d51f237404f728ade2b09327c6393 Mon Sep 17 00:00:00 2001
+From: Ravi Chebolu <arc095@motorola.com>
+Date: Mon, 16 Nov 2015 16:47:20 -0600
+Subject: [PATCH 484/959] IKSWM-11247 ARM: dts: msm: Add blsp2_qup1 bam IRQ to
+ MPM bypass list for 8952
+
+BLSP2 QUP1 (SPI) IRQ is preventing XO shutdown in idle path.
+Add this IRQ to MPM bypass list as it is not wakeup capable.
+
+Change-Id: I2cd66d73b6ee3be8f8479a488e92c6ef0002e0dd
+Signed-off-by: Ravi Chebolu <arc095@motorola.com>
+Reviewed-on: http://gerrit.mot.com/800432
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Reviewed-by: Jianqi Yang <yangj@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-pm.dtsi | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-pm.dtsi b/arch/arm/boot/dts/qcom/msm8952-pm.dtsi
+index 33c5c7dd10b..b980720fb0e 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-pm.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-pm.dtsi
+@@ -349,6 +349,7 @@
+ 			<0xff 262>, /* ipa_bam_irq[2] */
+ 			<0xff 269>, /* rpm_wdog_expired_irq */
+ 			<0xff 270>, /* blsp1_bam_irq[0] */
++			<0xff 271>, /* blsp2_bam_irq */
+ 			<0xff 272>, /* smmu_intr_bus[17] */
+ 			<0xff 273>, /* smmu_bus_intr[18] */
+ 			<0xff 274>, /* smmu_bus_intr[19] */
+@@ -358,7 +359,8 @@
+ 			<0xff 321>, /* q6ss_irq_out(4) */
+ 			<0xff 322>, /* q6ss_irq_out(5) */
+ 			<0xff 323>, /* q6ss_irq_out(6) */
+-			<0xff 325>; /* q6ss_wdog_exp_irq */
++			<0xff 325>, /* q6ss_wdog_exp_irq */
++			<0xff 331>; /* blsp2_qup1 */
+ 
+ 		qcom,gpio-parent = <&msm_gpio>;
+ 		qcom,gpio-map = <3  38 >,
+-- 
+2.11.0
+

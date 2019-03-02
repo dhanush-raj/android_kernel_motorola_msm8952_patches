@@ -1,0 +1,39 @@
+From f9fc8cf1fa214906ae993bbf8547833976dd0b53 Mon Sep 17 00:00:00 2001
+From: Weilong Wu <wuwl10@motorola.com>
+Date: Tue, 2 Feb 2016 16:05:51 +0800
+Subject: [PATCH 677/959] IKKRNBSP-3644: msm: mdss: fixed the disp_util blocked
+ issue
+
+The disp_util gets blocked while running 60 FPS Gears APP.
+It does not need to wait for mdp idle.
+
+Change-Id: I4c9ad76502784f8dd72b091ba98fc632f88330d1
+Signed-off-by: Weilong Wu <wuwl10@motorola.com>
+Reviewed-on: http://gerrit.mot.com/817875
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_fb.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/video/msm/mdss/mdss_fb.c b/drivers/video/msm/mdss/mdss_fb.c
+index cb02523b59a..03a446211a3 100644
+--- a/drivers/video/msm/mdss/mdss_fb.c
++++ b/drivers/video/msm/mdss/mdss_fb.c
+@@ -4179,6 +4179,8 @@ static int __ioctl_wait_idle(struct msm_fb_data_type *mfd, u32 cmd)
+ 		(cmd != MSMFB_HISTOGRAM_START) &&
+ 		(cmd != MSMFB_HISTOGRAM_STOP) &&
+ 		(cmd != MSMFB_HISTOGRAM) &&
++		(cmd != MSMFB_REG_READ) &&
++		(cmd != MSMFB_REG_WRITE) &&
+ 		(cmd != MSMFB_OVERLAY_PREPARE)) {
+ 		ret = mdss_fb_pan_idle(mfd);
+ 	}
+-- 
+2.11.0
+

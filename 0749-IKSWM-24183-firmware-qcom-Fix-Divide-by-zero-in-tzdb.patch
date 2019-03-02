@@ -1,0 +1,41 @@
+From 3a083f9522ebae16f903f0dbd7b6ddc6faa6ae91 Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Tue, 2 Dec 2014 14:42:52 -0600
+Subject: [PATCH 749/959] IKSWM-24183: firmware: qcom: Fix Divide by zero in
+ tzdbgs read
+
+cat /sys/kernel/debug/tzdbg/interrupt causes oops due to divide by
+zero in the dbgfs handler for interrupt stats. Check for zero before
+attempting to divide.
+
+Change-Id: I4914ccadc183b8861aafc38854292cf09ddad5d6
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/694121
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Hrycay <jason.hrycay@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830754
+SME-Granted: SME Approvals Granted
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+---
+ drivers/firmware/qcom/tz_log.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/firmware/qcom/tz_log.c b/drivers/firmware/qcom/tz_log.c
+index 093f319b4a2..8b776b210c6 100644
+--- a/drivers/firmware/qcom/tz_log.c
++++ b/drivers/firmware/qcom/tz_log.c
+@@ -395,7 +395,8 @@ static int _disp_tz_interrupt_stats(void)
+ 			(tzdbg.diag_buf->int_info_off - sizeof(uint32_t)));
+ 	ptr = ((unsigned char *)tzdbg.diag_buf +
+ 					tzdbg.diag_buf->int_info_off);
+-	int_info_size = ((tzdbg.diag_buf->ring_off -
++	if (*num_int)
++		int_info_size = ((tzdbg.diag_buf->ring_off -
+ 				tzdbg.diag_buf->int_info_off)/(*num_int));
+ 
+ 	for (i = 0; i < (*num_int); i++) {
+-- 
+2.11.0
+

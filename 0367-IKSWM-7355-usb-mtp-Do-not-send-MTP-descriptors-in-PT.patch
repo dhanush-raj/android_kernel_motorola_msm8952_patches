@@ -1,0 +1,59 @@
+From fdfafb73f45710995ee91a09a3490a0b1e621546 Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Thu, 19 Feb 2015 15:45:47 -0600
+Subject: [PATCH 367/959] IKSWM-7355: usb: mtp: Do not send MTP descriptors in
+ PTP mode.
+
+Fix side effect of commit "a77d07ebf1d04e9d8fff0ac003a40ebffe0029ff".
+MTP OS and MTP Extended String descriptors should not be sent in PTP  mode.
+Otherwise Windows loads the WPD driver instead of Still Image Class
+(Camera) driver when connected in PTP mode.
+
+Change-Id: I64fae2afe616be300dfe98fdce2ca947393e24d4
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/717097
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/791459
+SME-Granted: SME Approvals Granted
+---
+ drivers/usb/gadget/f_mtp.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/usb/gadget/f_mtp.c b/drivers/usb/gadget/f_mtp.c
+index 9e261a6aa15..74ae426fc2f 100644
+--- a/drivers/usb/gadget/f_mtp.c
++++ b/drivers/usb/gadget/f_mtp.c
+@@ -1285,14 +1285,18 @@ static int mtp_ctrlrequest(struct usb_composite_dev *cdev,
+ 	u16	w_value = le16_to_cpu(ctrl->wValue);
+ 	u16	w_length = le16_to_cpu(ctrl->wLength);
+ 	unsigned long	flags;
++	bool	ptp_mode = false;
+ 
+ 	VDBG(cdev, "mtp_ctrlrequest "
+ 			"%02x.%02x v%04x i%04x l%u\n",
+ 			ctrl->bRequestType, ctrl->bRequest,
+ 			w_value, w_index, w_length);
+ 
++	if (dev->function.hs_descriptors == hs_ptp_descs)
++		ptp_mode = true;
++
+ 	/* Handle MTP OS string */
+-	if (ctrl->bRequestType ==
++	if (!ptp_mode && ctrl->bRequestType ==
+ 			(USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_DEVICE)
+ 			&& ctrl->bRequest == USB_REQ_GET_DESCRIPTOR
+ 			&& (w_value >> 8) == USB_DT_STRING
+@@ -1305,7 +1309,7 @@ static int mtp_ctrlrequest(struct usb_composite_dev *cdev,
+ 		DBG(cdev, "vendor request: %d index: %d value: %d length: %d\n",
+ 			ctrl->bRequest, w_index, w_value, w_length);
+ 
+-		if (ctrl->bRequest == 1
++		if (!ptp_mode && ctrl->bRequest == 1
+ 				&& (ctrl->bRequestType & USB_DIR_IN)
+ 				&& (w_index == 4 || w_index == 5)) {
+ 			if (!dev->is_ptp) {
+-- 
+2.11.0
+

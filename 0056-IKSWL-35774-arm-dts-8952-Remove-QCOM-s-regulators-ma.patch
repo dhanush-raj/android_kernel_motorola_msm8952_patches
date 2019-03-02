@@ -1,0 +1,43 @@
+From 13cd4fc00b0d19198f94981c6bbf41151f88ccff Mon Sep 17 00:00:00 2001
+From: Bang Nguyen <bangnguyen@motorola.com>
+Date: Wed, 26 Aug 2015 11:00:34 -0500
+Subject: [PATCH 056/959] IKSWL-35774: arm/dts: 8952: Remove QCOM's regulators
+ mapping properties
+
+Remove QCOM's regulator mapping properties of QCOM's panel power
+supplies in the mdss_dsi0 node
+
+Change-Id: I27ce7ca7551e8835954a1436f711400c3fb460eb
+Signed-off-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-on: http://gerrit.mot.com/779406
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Xiaofei Ma <xiaofei@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 0ab9220db18..09630b68cef 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -171,6 +171,11 @@
+ 
+ 	qcom,platform-reset-gpio = <&msm_gpio 0 0>;
+ 	qcom,platform-te-gpio = <&msm_gpio 24 0>;
++
++	/delete-property/ vdd-supply;
++	/delete-property/ vddio-supply;
++	/delete-property/ lab-supply;
++	/delete-property/ ibb-supply;
+ };
+ 
+ &i2c_3 { /* BLSP1 QUP3 */
+-- 
+2.11.0
+

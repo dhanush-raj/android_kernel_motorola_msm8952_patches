@@ -1,0 +1,38 @@
+From 6bb57ce88e67bcde676842ce7338402eb711bc04 Mon Sep 17 00:00:00 2001
+From: Bang Nguyen <bangnguyen@motorola.com>
+Date: Wed, 26 Aug 2015 10:54:25 -0500
+Subject: [PATCH 055/959] IKSWL-35774: arm/dts: 8952: Removed including QCOM's
+ panel dts file
+
+QCOM's panel dts file msm8952-mdss-panels.dtsi has all QCOM's panel
+display support so this file should not be included in MOT's
+dts file. QCOM case#02137521 is opened to request QCOM remove this
+file msm8952-mdss-panels.dtsi from msm8952-mdss.dtsi
+
+Change-Id: Ia467e94eb3586c294ea92c1709f1ac31e6daa20d
+Signed-off-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-on: http://gerrit.mot.com/779405
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-mdss.dtsi | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-mdss.dtsi b/arch/arm/boot/dts/qcom/msm8952-mdss.dtsi
+index e87fd19c326..e8c755fcfac 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-mdss.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-mdss.dtsi
+@@ -267,5 +267,3 @@
+ 		qcom,mdss-fb-map = <&mdss_fb1>;
+ 	};
+ };
+-
+-#include "msm8952-mdss-panels.dtsi"
+-- 
+2.11.0
+

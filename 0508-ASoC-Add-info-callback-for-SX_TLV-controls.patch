@@ -1,0 +1,114 @@
+From 4cc833a846a5270a9c11a998192311ba9ff7136e Mon Sep 17 00:00:00 2001
+From: Charles Keepax <ckeepax@opensource.wolfsonmicro.com>
+Date: Tue, 13 Oct 2015 15:57:16 +0100
+Subject: [PATCH 508/959] ASoC: Add info callback for SX_TLV controls
+
+SX_TLV controls are intended for situations where the register behind
+the control has some non-zero value indicating the minimum gain
+and then gains increasing from there and eventually overflowing through
+zero.
+
+Currently every CODEC implementing these controls specifies the minimum
+as the non-zero value for the minimum and the maximum as the number of
+gain settings available.
+
+This means when the info callback subtracts the minimum value from the
+maximum value to calculate the number of gain levels available it is
+actually under reporting the available levels. This patch fixes this
+issue by adding a new snd_soc_info_volsw_sx callback that does not
+subtract the minimum value.
+
+Fixes: 1d99f2436d0d ("ASoC: core: Rework SOC_DOUBLE_R_SX_TLV add SOC_SINGLE_SX_TLV")
+Signed-off-by: Charles Keepax <ckeepax@opensource.wolfsonmicro.com>
+Acked-by: Brian Austin <brian.austin@cirrus.com>
+Tested-by: Brian Austin <brian.austin@cirrus.com>
+Signed-off-by: Mark Brown <broonie@kernel.org>
+Cc: stable@vger.kernel.org
+(cherry picked from commit 34198710f55b5f359f43e67d9a08fe5aadfbca1b)
+
+Change-Id: I38365ec3ec16dbc22b384fb2bb3eb4a02ecdff20
+Signed-off-by: Charles Keepax <ckeepax@opensource.wolfsonmicro.com>
+Reviewed-on: http://gerrit.mot.com/802306
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ include/sound/soc.h  |  6 ++++--
+ sound/soc/soc-core.c | 28 ++++++++++++++++++++++++++++
+ 2 files changed, 32 insertions(+), 2 deletions(-)
+
+diff --git a/include/sound/soc.h b/include/sound/soc.h
+index 4de92a7e99a..b5f4c33644b 100644
+--- a/include/sound/soc.h
++++ b/include/sound/soc.h
+@@ -75,7 +75,7 @@
+ 	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ | \
+ 	SNDRV_CTL_ELEM_ACCESS_READWRITE, \
+ 	.tlv.p  = (tlv_array),\
+-	.info = snd_soc_info_volsw, \
++	.info = snd_soc_info_volsw_sx, \
+ 	.get = snd_soc_get_volsw_sx,\
+ 	.put = snd_soc_put_volsw_sx, \
+ 	.private_value = (unsigned long)&(struct soc_mixer_control) \
+@@ -145,7 +145,7 @@
+ 	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ | \
+ 	SNDRV_CTL_ELEM_ACCESS_READWRITE, \
+ 	.tlv.p  = (tlv_array), \
+-	.info = snd_soc_info_volsw, \
++	.info = snd_soc_info_volsw_sx, \
+ 	.get = snd_soc_get_volsw_sx, \
+ 	.put = snd_soc_put_volsw_sx, \
+ 	.private_value = (unsigned long)&(struct soc_mixer_control) \
+@@ -513,6 +513,8 @@ int snd_soc_put_value_enum_double(struct snd_kcontrol *kcontrol,
+ 	struct snd_ctl_elem_value *ucontrol);
+ int snd_soc_info_volsw(struct snd_kcontrol *kcontrol,
+ 	struct snd_ctl_elem_info *uinfo);
++int snd_soc_info_volsw_sx(struct snd_kcontrol *kcontrol,
++	struct snd_ctl_elem_info *uinfo);
+ int snd_soc_info_volsw_ext(struct snd_kcontrol *kcontrol,
+ 	struct snd_ctl_elem_info *uinfo);
+ #define snd_soc_info_bool_ext		snd_ctl_boolean_mono_info
+diff --git a/sound/soc/soc-core.c b/sound/soc/soc-core.c
+index 92ed3372c1d..2249f9a1632 100644
+--- a/sound/soc/soc-core.c
++++ b/sound/soc/soc-core.c
+@@ -2663,6 +2663,34 @@ int snd_soc_info_volsw(struct snd_kcontrol *kcontrol,
+ }
+ EXPORT_SYMBOL_GPL(snd_soc_info_volsw);
+ 
++/*
++ * snd_soc_info_volsw_sx - Mixer info callback for SX TLV controls
++ * @kcontrol: mixer control
++ * @uinfo: control element information
++ *
++ * Callback to provide information about a single mixer control, or a double
++ * mixer control that spans 2 registers of the SX TLV type. SX TLV controls
++ * have a range that represents both positive and negative values either side
++ * of zero but without a sign bit.
++ *
++ * Returns 0 for success.
++ */
++int snd_soc_info_volsw_sx(struct snd_kcontrol *kcontrol,
++			  struct snd_ctl_elem_info *uinfo)
++{
++	struct soc_mixer_control *mc =
++		(struct soc_mixer_control *)kcontrol->private_value;
++
++	snd_soc_info_volsw(kcontrol, uinfo);
++	/* Max represents the number of levels in an SX control not the
++	 * maximum value, so add the minimum value back on
++	 */
++	uinfo->value.integer.max += mc->min;
++
++	return 0;
++}
++EXPORT_SYMBOL_GPL(snd_soc_info_volsw_sx);
++
+ /**
+  * snd_soc_get_volsw - single mixer get callback
+  * @kcontrol: mixer control
+-- 
+2.11.0
+

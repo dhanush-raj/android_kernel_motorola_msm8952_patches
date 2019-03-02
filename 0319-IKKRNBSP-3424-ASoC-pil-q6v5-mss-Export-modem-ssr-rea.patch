@@ -1,0 +1,60 @@
+From f8f7f5d889fdfa3bc4d6b2fd82cb48c0039a0bed Mon Sep 17 00:00:00 2001
+From: Bharat Srinivasan <bharatsrinivasan@motorola.com>
+Date: Wed, 27 Aug 2014 07:18:10 -0500
+Subject: [PATCH 319/959] IKKRNBSP-3424 ASoC: pil-q6v5-mss: Export modem ssr
+ reason.
+
+Export modem ssr reason to userspace. The Modem panic reason is
+needed by the user space daemon that collects the ramdumps and
+posts it to the native dropbox for Bug2Go.
+
+Port of IKVPREL1L-155
+
+Change-Id: If10a49e9938db44ba4586d1ae14941ad8e0e1b4f
+Signed-off-by: Bharat Srinivasan <bharatsrinivasan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/666479
+Tested-by: Jira Key <jirakey@motorola.com>
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Reviewed-by: Jason Hrycay <jason.hrycay@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/787269
+SME-Granted: SME Approvals Granted
+---
+ drivers/soc/qcom/pil-q6v5-mss.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/soc/qcom/pil-q6v5-mss.c b/drivers/soc/qcom/pil-q6v5-mss.c
+index ae932ec391a..8f103d6beb1 100644
+--- a/drivers/soc/qcom/pil-q6v5-mss.c
++++ b/drivers/soc/qcom/pil-q6v5-mss.c
+@@ -43,10 +43,14 @@
+ 
+ #define subsys_to_drv(d) container_of(d, struct modem_data, subsys_desc)
+ 
++static char pil_ssr_reason[MAX_SSR_REASON_LEN];
++static char *ssr_reason = pil_ssr_reason;
++module_param(ssr_reason, charp, S_IRUGO);
++
+ static void log_modem_sfr(void)
+ {
+ 	u32 size;
+-	char *smem_reason, reason[MAX_SSR_REASON_LEN];
++	char *smem_reason;
+ 
+ 	smem_reason = smem_get_entry_no_rlock(SMEM_SSR_REASON_MSS0, &size, 0,
+ 							SMEM_ANY_HOST_FLAG);
+@@ -59,8 +63,8 @@ static void log_modem_sfr(void)
+ 		return;
+ 	}
+ 
+-	strlcpy(reason, smem_reason, min(size, MAX_SSR_REASON_LEN));
+-	pr_err("modem subsystem failure reason: %s.\n", reason);
++	strlcpy(pil_ssr_reason, smem_reason, min(size, sizeof(pil_ssr_reason)));
++	pr_err("modem subsystem failure reason: %s.\n", pil_ssr_reason);
+ 
+ 	smem_reason[0] = '\0';
+ 	wmb();
+-- 
+2.11.0
+

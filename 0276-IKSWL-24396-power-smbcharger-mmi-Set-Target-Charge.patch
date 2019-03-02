@@ -1,0 +1,39 @@
+From 1205be1d1d9c84936853db2c5f65b9a99a92afc9 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Thu, 9 Jul 2015 17:12:31 -0500
+Subject: [PATCH 276/959] IKSWL-24396: power: smbcharger-mmi: Set Target Charge
+
+When the heartbeat runs and tries to set the Max charge
+rate it will fail if USB is not connected.  Make it so
+when USB is not present the next request set the Target
+to the requested level.  This will allow any throttling
+that has occurred to be cleared once USB is removed.
+
+Change-Id: Iafa70522171885c2349320b848407fd113b5a863
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/765454
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 7b4d31a8d81..a06b1ad5d37 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -3899,6 +3899,7 @@ static void set_max_allowed_current_ma(struct smbchg_chip *chip,
+ {
+ 	if (!chip->usb_present) {
+ 		pr_smb(PR_STATUS, "NO allowed current, No USB\n");
++		chip->target_fastchg_current_ma = current_ma;
+ 		return;
+ 	}
+ 
+-- 
+2.11.0
+

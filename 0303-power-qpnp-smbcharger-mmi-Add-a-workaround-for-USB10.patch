@@ -1,0 +1,58 @@
+From f86246de4c8302eae088ea58b5606ef9e4a1223b Mon Sep 17 00:00:00 2001
+From: Anirudh Ghayal <aghayal@codeaurora.org>
+Date: Sun, 5 Jul 2015 09:56:35 +0530
+Subject: [PATCH 303/959] power: qpnp-smbcharger-mmi: Add a workaround for
+ USB100 on PMI8950 v2.0
+
+During battery-hot conditions on PMI8950 v2.0 the IUSB=100mA
+drops to 0mA. Fix this by forcing 150mA instead of 100mA.
+
+CRs-Fixed: 865824
+Change-Id: Ibb3b11310baa45235f5c9837d2a10ce6917e80f8
+Signed-off-by: Anirudh Ghayal <aghayal@codeaurora.org>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 13 ++++++++++---
+ 1 file changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 428542fb099..5e4471aadd7 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -312,6 +312,7 @@ enum pmic_subtype {
+ enum smbchg_wa {
+ 	SMBCHG_AICL_DEGLITCH_WA = BIT(0),
+ 	SMBCHG_HVDCP_9V_EN_WA	= BIT(1),
++	SMBCHG_USB100_WA = BIT(2),
+ };
+ 
+ enum print_reason {
+@@ -1663,6 +1664,10 @@ static int smbchg_set_usb_current_max(struct smbchg_chip *chip,
+ 		rc = smbchg_primary_usb_en(chip, true, REASON_USB, &changed);
+ 	}
+ 
++	if ((current_ma < CURRENT_150_MA) &&
++	    (chip->wa_flags & SMBCHG_USB100_WA))
++		current_ma = CURRENT_150_MA;
++
+ 	if (current_ma < CURRENT_150_MA) {
+ 		/* force 100mA */
+ 		rc = smbchg_sec_masked_write(chip,
+@@ -6501,10 +6506,12 @@ static int smbchg_wa_config(struct smbchg_chip *chip)
+ 	case PMI8994:
+ 		chip->wa_flags |= SMBCHG_AICL_DEGLITCH_WA;
+ 	case PMI8950:
+-		if (pmic_rev_id->rev4 < 2) /* PMI8950 1.0 */
++		if (pmic_rev_id->rev4 < 2) /* PMI8950 1.0 */ {
+ 			chip->wa_flags |= SMBCHG_AICL_DEGLITCH_WA;
+-		else	/* rev > PMI8950 v1.0 */
+-			chip->wa_flags |= SMBCHG_HVDCP_9V_EN_WA;
++		} else	{ /* rev > PMI8950 v1.0 */
++			chip->wa_flags |= SMBCHG_HVDCP_9V_EN_WA
++					| SMBCHG_USB100_WA;
++		}
+ 		break;
+ 	default:
+ 		pr_err("PMIC subtype %d not supported, WA flags not set\n",
+-- 
+2.11.0
+

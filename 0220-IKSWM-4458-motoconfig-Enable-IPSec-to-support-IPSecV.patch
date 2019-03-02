@@ -1,0 +1,29 @@
+From 4c1a8349b5f47f7d88170f546834961d079b7807 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Fri, 25 Sep 2015 23:23:49 -0700
+Subject: [PATCH 220/959] IKSWM-4458 motoconfig: Enable IPSec to support
+ IPSecVPN
+
+To use IPSec VPN, IPSec must be enabled in kernel config.
+
+Change-Id: I095f9c82c3feda9e80e80816ac5738ab3309426a
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index 32c8129e949..fcd3cfda5b1 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -42,3 +42,7 @@ CONFIG_IP_MULTICAST=y
+ CONFIG_IP_MROUTE=y
+ CONFIG_IP_PIMSM_V2=y
+ CONFIG_INET_LRO=y
++CONFIG_XFRM_SUB_POLICY=y
++CONFIG_XFRM_MIGRATE=y
++CONFIG_NET_KEY_MIGRATE=y
++CONFIG_INET_XFRM_MODE_BEET=y
+-- 
+2.11.0
+

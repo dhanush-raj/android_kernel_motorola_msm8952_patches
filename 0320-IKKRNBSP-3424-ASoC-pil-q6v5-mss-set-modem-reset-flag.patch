@@ -1,0 +1,65 @@
+From 4b7468b4c134643231475adc828a8cfae097ee66 Mon Sep 17 00:00:00 2001
+From: Bharat Srinivasan <bharatsrinivasan@motorola.com>
+Date: Thu, 28 Aug 2014 06:01:40 -0500
+Subject: [PATCH 320/959] IKKRNBSP-3424 ASoC: pil-q6v5-mss: set modem reset
+ flag in SMEM
+
+On modem panic set the powerup reason for the modem as
+PU_REASON_MODEM_RESET. On restart the modem will check for this
+flag and do a silent SIM PIN entry if necesssary. This PU
+reason will only be used by the Modem.
+
+Port of IKVPREL1L-150
+
+Change-Id: I2cb36a80a3f0a30e1a4e0500de10a4429f9b49d6
+Signed-off-by: Bharat Srinivasan <bharatsrinivasan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/666822
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/787270
+SME-Granted: SME Approvals Granted
+---
+ drivers/soc/qcom/Makefile       | 1 +
+ drivers/soc/qcom/pil-q6v5-mss.c | 4 ++++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/drivers/soc/qcom/Makefile b/drivers/soc/qcom/Makefile
+index deddb34e925..5c66fee92ad 100644
+--- a/drivers/soc/qcom/Makefile
++++ b/drivers/soc/qcom/Makefile
+@@ -60,6 +60,7 @@ obj-$(CONFIG_MSM_HYP_DEBUG) += hyp-debug.o
+ obj-$(CONFIG_MSM_PIL) += peripheral-loader.o
+ obj-$(CONFIG_MSM_PIL_SSR_GENERIC) += subsys-pil-tz.o
+ obj-$(CONFIG_MSM_PIL_MSS_QDSP6V5) += pil-q6v5.o pil-msa.o pil-q6v5-mss.o
++ccflags-$(CONFIG_MSM_PIL_MSS_QDSP6V5) += -Iarch/arm/mach-msm
+ obj-$(CONFIG_MSM_PIL_FEMTO) += pil-q6v5.o pil-msa.o pil-femto-modem.o
+ 
+ obj-$(CONFIG_MSM_OCMEM) += ocmem.o ocmem_allocator.o ocmem_notifier.o
+diff --git a/drivers/soc/qcom/pil-q6v5-mss.c b/drivers/soc/qcom/pil-q6v5-mss.c
+index 8f103d6beb1..5bd2ca63e2a 100644
+--- a/drivers/soc/qcom/pil-q6v5-mss.c
++++ b/drivers/soc/qcom/pil-q6v5-mss.c
+@@ -35,6 +35,8 @@
+ #include "peripheral-loader.h"
+ #include "pil-q6v5.h"
+ #include "pil-msa.h"
++#include "mmi-unit-info.h"
++#include <soc/qcom/bootinfo.h>
+ 
+ #define MAX_VDD_MSS_UV		1150000
+ #define PROXY_TIMEOUT_MS	10000
+@@ -52,6 +54,8 @@ static void log_modem_sfr(void)
+ 	u32 size;
+ 	char *smem_reason;
+ 
++	mmi_set_pureason(PU_REASON_MODEM_RESET);
++
+ 	smem_reason = smem_get_entry_no_rlock(SMEM_SSR_REASON_MSS0, &size, 0,
+ 							SMEM_ANY_HOST_FLAG);
+ 	if (!smem_reason || !size) {
+-- 
+2.11.0
+

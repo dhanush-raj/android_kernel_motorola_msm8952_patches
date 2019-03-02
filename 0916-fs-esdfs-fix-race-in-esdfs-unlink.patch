@@ -1,0 +1,58 @@
+From 33546c793adfff30ea72767ff034035577b35b92 Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Fri, 8 Jul 2016 09:57:04 -0700
+Subject: [PATCH 916/959] fs: esdfs: fix race in esdfs unlink
+
+There is a ABBA deadlock between esdfs_unlink and esdfs_lookup.
+
+     esdfs_unlink                   esdfs_lookup
+
+  -lock_parent(lower_dentry);     -vfs_lookup
+    |-esdfs_drop_shared_icache      |-lock_parent(dentry);
+      ....                            ....
+
+      |-lock_parent(dentry);        |-vfs_lookup
+                                       |-lock_parent(lower_dentry);
+
+The esdfs_drop_shared_icache function only remove the shared
+dcache object before unlink the lower inode. It does not touch
+the lower inode so we don't need to hold the lower inode to do
+it.
+
+Move the lock_parent(lower_dentry) after esdfs_drop_shared_icache
+function to solve the ABBA deadlock issue.
+
+Mot-CRs-fixed: IKSWN-2255
+
+Change-Id: I148701e654261dfe9a21652a11af5e5b35c3c6f4
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/891991
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sheng-Zhe Zhao <a18689@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/esdfs/inode.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/fs/esdfs/inode.c b/fs/esdfs/inode.c
+index a9840658c02..871df2fbb7f 100644
+--- a/fs/esdfs/inode.c
++++ b/fs/esdfs/inode.c
+@@ -84,10 +84,10 @@ static int esdfs_unlink(struct inode *dir, struct dentry *dentry)
+ 	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+ 	dget(lower_dentry);
+-	lower_dir_dentry = lock_parent(lower_dentry);
+ 
+ 	esdfs_drop_shared_icache(dir->i_sb, lower_dentry->d_inode);
+ 
++	lower_dir_dentry = lock_parent(lower_dentry);
+ 	err = vfs_unlink(lower_dir_inode, lower_dentry);
+ 
+ 	/*
+-- 
+2.11.0
+

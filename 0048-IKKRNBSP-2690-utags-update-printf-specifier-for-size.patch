@@ -1,0 +1,57 @@
+From ac817e6b3141185c2cc0d46a46b5755aee9b54fd Mon Sep 17 00:00:00 2001
+From: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Date: Thu, 9 Oct 2014 11:56:29 -0500
+Subject: [PATCH 048/959] IKKRNBSP-2690 utags: update printf specifier for
+ size_t
+
+Use %zu instead of %d for impromoved 32- and 64-bit portability.
+
+Change-Id: Ibea79eb23a19db42754b0a26861cbff7be384176
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+---
+ drivers/misc/utag/utags.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/misc/utag/utags.c b/drivers/misc/utag/utags.c
+index f23e5318a1c..1d1809f9669 100644
+--- a/drivers/misc/utag/utags.c
++++ b/drivers/misc/utag/utags.c
+@@ -510,7 +510,7 @@ static struct utag *load_utags(const char *partition_name)
+ 
+ 	data = kmalloc(block_size, GFP_KERNEL);
+ 	if (!data) {
+-		pr_err("%s ERR file (%s) out of memory size %d\n", __func__,
++		pr_err("%s ERR file (%s) out of memory size %zu\n", __func__,
+ 		       partition_name, block_size);
+ 		goto close_block;
+ 	}
+@@ -602,7 +602,7 @@ flash_partition(const char *partition_name, const struct utag *tags)
+ 
+ 	written = filep->f_op->write(filep, datap, tags_size, &filep->f_pos);
+ 	if (written < tags_size) {
+-		pr_err("%s ERROR writing file (%s) ret %d\n", __func__,
++		pr_err("%s ERROR writing file (%s) ret %zu\n", __func__,
+ 		       utags_blkdev, written);
+ 		status = UTAG_ERR_PARTITION_WRITE_ERR;
+ 	}
+@@ -688,7 +688,7 @@ write_utag(struct file *file, const char __user *buffer,
+ 	}
+ 
+ 	if (MAX_UTAG_SIZE < count) {
+-		pr_err("%s error utag too big %d\n", __func__, count);
++		pr_err("%s error utag too big %zu\n", __func__, count);
+ 		return count;
+ 	}
+ 
+@@ -739,7 +739,7 @@ new_utag(struct file *file, const char __user *buffer,
+ 	struct proc_dir_entry *dir;
+ 
+ 	if ((MAX_UTAG_NAME < count) || (0 == count)) {
+-		pr_err("%s invalid utag name %d\n", __func__, count);
++		pr_err("%s invalid utag name %zu\n", __func__, count);
+ 		return count;
+ 	}
+ 
+-- 
+2.11.0
+

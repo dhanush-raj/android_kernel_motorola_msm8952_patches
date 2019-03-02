@@ -1,0 +1,54 @@
+From e9822f2d2a36b2c4db05cdfbb3beb2816700af95 Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Wed, 3 Feb 2016 17:47:41 -0800
+Subject: [PATCH 676/959] IKSWM-19463 arm/dt: msm8952: delay backlight on for
+ LGD and BOE panels
+
+Set the delay between 'display on' and 'backlight on' at 60 msec to
+avoid seeing an unexpected flicker or snow screen sometimes while
+turning on panel.
+
+Change-Id: Ib06e26af644c31c4f828bb0aa5e41df76d88b730
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/818664
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Patrick Auchter <auchter@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi | 2 +-
+ arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+index 27e5676eddb..407d28b9f03 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+@@ -85,7 +85,7 @@ qcom,mdss-dsi-t-clk-post = <0x3>;
+ qcom,mdss-dsi-t-clk-pre = <0x29>;
+ qcom,mdss-dsi-bl-min-level = <1>;
+ qcom,mdss-dsi-bl-max-level = <4095>;
+-qcom,mdss-dsi-bl-on-defer-delay = <30>;
++qcom,mdss-dsi-bl-on-defer-delay = <60>;
+ qcom,mdss-dsi-dma-trigger = "trigger_sw";
+ qcom,mdss-dsi-mdp-trigger = "none";
+ qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+index 31a50ef6821..3a41951e07c 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -82,7 +82,7 @@ qcom,mdss-dsi-t-clk-post = <0x3>;
+ qcom,mdss-dsi-t-clk-pre = <0x29>;
+ qcom,mdss-dsi-bl-min-level = <1>;
+ qcom,mdss-dsi-bl-max-level = <4095>;
+-qcom,mdss-dsi-bl-on-defer-delay = <30>;
++qcom,mdss-dsi-bl-on-defer-delay = <60>;
+ qcom,mdss-dsi-dma-trigger = "trigger_sw";
+ qcom,mdss-dsi-mdp-trigger = "none";
+ qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+-- 
+2.11.0
+

@@ -1,0 +1,532 @@
+From b25439200ab69f945680f79e9ecbfa844fbc4f79 Mon Sep 17 00:00:00 2001
+From: Nikit Sharma <nikitsharma92@gmail.com>
+Date: Sat, 17 Mar 2018 07:17:00 +0530
+Subject: [PATCH 456/959] IKMMINTG-6040: msm: camera: Add support for actuator
+ LC898212XD
+
+Port the Actuator code added for non-trivial actuators
+from 8992.
+
+281195a IKMMINTG-5799: msm: camera: Add recovery for actuator
+b5d4fc5 IKSWL-19598: msm: camera: use actuator step sizes from user space
+50fe9cf IKMMINTG-3118: msm: camera: Fix building of camera code
+135b173 IKMMINTG-2897: msm: camera: fix bivcm actuator
+e483b95 IKMMINTG-2812: drivers: actuator: Update Mot Actuator driver
+53266cf IKMMINTG-2768: msm: camera: fix step table generation
+4d1558d IKMMINTG-2598: msm: camera: Update Mot AF to use calibrated values
+117b463 IKMMINTG-2518: msm: camera: Add support for actuator LC898212XD
+
+Change-Id: I62eb3fd153efea88cd23bff364fcf2d35161dca0
+Signed-off-by: satya kottisa <fvgm76@motorola.com>
+Signed-off-by: Nikit Sharma <nikitsharma92@gmail.com>
+Reviewed-on: http://gerrit.mot.com/797903
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sachin Doshi <sachindoshi@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Reviewed-by: Elena Satraitis <w04888@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ .../msm/camera_v2/sensor/actuator/msm_actuator.c   |  48 +++-
+ .../camera_v2/sensor/actuator/msm_mot_actuator.c   | 253 +++++++++++++++++++++
+ include/media/msm_cam_sensor.h                     |   6 +
+ include/uapi/media/msm_cam_sensor.h                |   6 +
+ include/uapi/media/msm_camsensor_sdk.h             |  15 ++
+ 5 files changed, 325 insertions(+), 3 deletions(-)
+ create mode 100644 drivers/media/platform/msm/camera_v2/sensor/actuator/msm_mot_actuator.c
+
+diff --git a/drivers/media/platform/msm/camera_v2/sensor/actuator/msm_actuator.c b/drivers/media/platform/msm/camera_v2/sensor/actuator/msm_actuator.c
+index 5b90549db59..373c8d7e8de 100644
+--- a/drivers/media/platform/msm/camera_v2/sensor/actuator/msm_actuator.c
++++ b/drivers/media/platform/msm/camera_v2/sensor/actuator/msm_actuator.c
+@@ -26,6 +26,8 @@ DEFINE_MSM_MUTEX(msm_actuator_mutex);
+ #define CDBG(fmt, args...) pr_debug(fmt, ##args)
+ #endif
+ 
++#include "msm_mot_actuator.c"
++
+ #define PARK_LENS_LONG_STEP 7
+ #define PARK_LENS_MID_STEP 5
+ #define PARK_LENS_SMALL_STEP 3
+@@ -39,6 +41,7 @@ static struct msm_actuator msm_vcm_actuator_table;
+ static struct msm_actuator msm_piezo_actuator_table;
+ static struct msm_actuator msm_hvcm_actuator_table;
+ static struct msm_actuator msm_bivcm_actuator_table;
++static struct msm_actuator msm_mot_hvcm_actuator_table;
+ 
+ static struct i2c_driver msm_actuator_i2c_driver;
+ static struct msm_actuator *actuators[] = {
+@@ -46,6 +49,7 @@ static struct msm_actuator *actuators[] = {
+ 	&msm_piezo_actuator_table,
+ 	&msm_hvcm_actuator_table,
+ 	&msm_bivcm_actuator_table,
++        &msm_mot_hvcm_actuator_table,
+ };
+ 
+ static int32_t msm_actuator_piezo_set_default_focus(
+@@ -176,6 +180,9 @@ static int msm_actuator_bivcm_handle_i2c_ops(
+ 	struct msm_camera_i2c_reg_setting reg_setting;
+ 	enum msm_camera_i2c_reg_addr_type save_addr_type =
+ 		a_ctrl->i2c_client.addr_type;
++	static int16_t last_lens_position = 1;
++
++	CDBG("Enter\n");
+ 
+ 	for (i = 0; i < size; i++) {
+ 		reg_setting.size = 1;
+@@ -198,7 +205,7 @@ static int msm_actuator_bivcm_handle_i2c_ops(
+ 			a_ctrl->i2c_tbl_index++;
+ 
+ 			reg_setting.reg_setting = &i2c_tbl;
+-			reg_setting.data_type = a_ctrl->i2c_data_type;
++			reg_setting.data_type = write_arr[i].data_type;
+ 			rc = a_ctrl->i2c_client.
+ 				i2c_func_tbl->i2c_write_table_w_microdelay(
+ 				&a_ctrl->i2c_client, &reg_setting);
+@@ -237,7 +244,13 @@ static int msm_actuator_bivcm_handle_i2c_ops(
+ 			}
+ 			break;
+ 		case MSM_ACTUATOR_WRITE_DIR_REG:
+-			i2c_tbl.reg_data = hw_dword & 0xFFFF;
++			if (next_lens_position > last_lens_position)
++				i2c_tbl.reg_data =
++					(uint16_t)(0+write_arr[i].reg_data);
++			else
++				i2c_tbl.reg_data =
++					(uint16_t)(0-write_arr[i].reg_data);
++
+ 			i2c_tbl.reg_addr = write_arr[i].reg_addr;
+ 			i2c_tbl.delay = write_arr[i].delay;
+ 			reg_setting.reg_setting = &i2c_tbl;
+@@ -342,7 +355,7 @@ static int msm_actuator_bivcm_handle_i2c_ops(
+ 				write_arr[i].hw_shift;
+ 			i2c_tbl.delay = 0;
+ 			reg_setting.reg_setting = &i2c_tbl;
+-			reg_setting.data_type = a_ctrl->i2c_data_type;
++			reg_setting.data_type = write_arr[i].data_type;
+ 
+ 			rc = a_ctrl->i2c_client.
+ 				i2c_func_tbl->i2c_write_table_w_microdelay(
+@@ -359,6 +372,7 @@ static int msm_actuator_bivcm_handle_i2c_ops(
+ 		}
+ 		a_ctrl->i2c_client.addr_type = save_addr_type;
+ 	}
++        last_lens_position = next_lens_position;
+ 	CDBG("Exit\n");
+ 	return rc;
+ }
+@@ -369,6 +383,7 @@ static int32_t msm_actuator_init_focus(struct msm_actuator_ctrl_t *a_ctrl,
+ 	int32_t rc = -EFAULT;
+ 	int32_t i = 0;
+ 	enum msm_camera_i2c_reg_addr_type save_addr_type;
++        uint16_t read_position = 0x0;
+ 	CDBG("Enter\n");
+ 
+ 	save_addr_type = a_ctrl->i2c_client.addr_type;
+@@ -408,6 +423,23 @@ static int32_t msm_actuator_init_focus(struct msm_actuator_ctrl_t *a_ctrl,
+ 				settings[i].data_type,
+ 				settings[i].delay);
+ 			break;
++		case MSM_ACT_READ_SET:
++			rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_read(
++					&a_ctrl->i2c_client,
++					settings[i].reg_addr,
++					&read_position,
++					settings[i].data_type);
++			if (rc < 0) {
++				pr_err("%s: Unable to read!\n",
++						__func__);
++				break;
++			}
++			rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_write(
++					&a_ctrl->i2c_client,
++					settings[i].reg_data,
++					read_position,
++					settings[i].data_type);
++			break;
+ 		default:
+ 			pr_err("Unsupport i2c_operation: %d\n",
+ 				settings[i].i2c_operation);
+@@ -1703,6 +1735,16 @@ static long msm_actuator_subdev_do_ioctl(
+ 			actuator_data.cfg.set_info.actuator_params.park_lens =
+ 				u32->cfg.set_info.actuator_params.park_lens;
+ 
++			actuator_data.cfg.set_info.mot_af_tuning_params.
++				macro_dac =
++				u32->cfg.set_info.mot_af_tuning_params.
++				macro_dac;
++
++			actuator_data.cfg.set_info.mot_af_tuning_params.
++				infinity_dac =
++				u32->cfg.set_info.mot_af_tuning_params.
++				infinity_dac;
++
+ 			parg = &actuator_data;
+ 			break;
+ 		case CFG_SET_DEFAULT_FOCUS:
+diff --git a/drivers/media/platform/msm/camera_v2/sensor/actuator/msm_mot_actuator.c b/drivers/media/platform/msm/camera_v2/sensor/actuator/msm_mot_actuator.c
+new file mode 100644
+index 00000000000..3844cc63bb7
+--- /dev/null
++++ b/drivers/media/platform/msm/camera_v2/sensor/actuator/msm_mot_actuator.c
+@@ -0,0 +1,253 @@
++/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#include "msm_actuator.h"
++
++static int32_t msm_mot_actuator_init_step_table(
++	struct msm_actuator_ctrl_t *a_ctrl,
++	struct msm_actuator_set_info_t *set_info);
++
++static void msm_mot_actuator_write_focus(
++	struct msm_actuator_ctrl_t *a_ctrl,
++	uint16_t curr_lens_pos,
++	struct damping_params_t *damping_params,
++	int8_t sign_direction,
++	int16_t code_boundary);
++
++static int32_t msm_actuator_set_default_focus(
++	struct msm_actuator_ctrl_t *a_ctrl,
++	struct msm_actuator_move_params_t *move_params);
++
++static int32_t msm_actuator_init_focus(struct msm_actuator_ctrl_t *a_ctrl,
++	uint16_t size, struct reg_settings_t *settings);
++
++static int msm_actuator_bivcm_handle_i2c_ops(
++	struct msm_actuator_ctrl_t *a_ctrl,
++	int16_t next_lens_position, uint32_t hw_params, uint16_t delay);
++
++static void msm_mot_actuator_write_focus(
++	struct msm_actuator_ctrl_t *a_ctrl,
++	uint16_t curr_lens_pos,
++	struct damping_params_t *damping_params,
++	int8_t sign_direction,
++	int16_t code_boundary)
++{
++	uint16_t wait_time = 0;
++
++	CDBG("Enter %s\n", __func__);
++
++	wait_time = damping_params->damping_delay;
++
++	if (curr_lens_pos != code_boundary) {
++		msm_actuator_bivcm_handle_i2c_ops(a_ctrl,
++			code_boundary, damping_params->hw_params, wait_time);
++	}
++	CDBG("Exit %s\n", __func__);
++}
++
++static int32_t msm_mot_actuator_move_focus(
++	struct msm_actuator_ctrl_t *a_ctrl,
++	struct msm_actuator_move_params_t *move_params)
++{
++	int32_t rc = 0;
++	struct damping_params_t ringing_params_kernel;
++	int8_t sign_dir = move_params->sign_dir;
++	uint16_t step_boundary = 0;
++	uint16_t target_step_pos = 0;
++	int16_t target_lens_pos = 0;
++	int16_t dest_step_pos = move_params->dest_step_pos;
++	int16_t curr_lens_pos = 0;
++	int dir = move_params->dir;
++	int32_t num_steps = move_params->num_steps;
++
++	CDBG("Enter %s\n", __func__);
++
++	if (copy_from_user(&ringing_params_kernel,
++		&(move_params->ringing_params[a_ctrl->curr_region_index]),
++		sizeof(struct damping_params_t))) {
++		pr_err("%s: copy_from_user failed\n", __func__);
++		return -EFAULT;
++	}
++
++	CDBG("called, dir %d, num_steps %d\n", dir, num_steps);
++
++	if (dest_step_pos == a_ctrl->curr_step_pos)
++		return rc;
++
++	if ((sign_dir > MSM_ACTUATOR_MOVE_SIGNED_NEAR) ||
++		(sign_dir < MSM_ACTUATOR_MOVE_SIGNED_FAR)) {
++		pr_err("Invalid sign_dir = %d\n", sign_dir);
++		return -EFAULT;
++	}
++	if ((dir > MOVE_FAR) || (dir < MOVE_NEAR)) {
++		pr_err("Invalid direction = %d\n", dir);
++		return -EFAULT;
++	}
++	if (dest_step_pos >= a_ctrl->total_steps) {
++		pr_err("Step pos greater than total steps = %d\n",
++		dest_step_pos);
++		return -EFAULT;
++	}
++	curr_lens_pos = a_ctrl->step_position_table[a_ctrl->curr_step_pos];
++	a_ctrl->i2c_tbl_index = 0;
++	CDBG("curr_step_pos =%d dest_step_pos =%d curr_lens_pos=%d\n",
++		a_ctrl->curr_step_pos, dest_step_pos, curr_lens_pos);
++
++	while (a_ctrl->curr_step_pos != dest_step_pos) {
++		step_boundary =
++			a_ctrl->region_params[a_ctrl->curr_region_index].
++			step_bound[dir];
++		if ((dest_step_pos * sign_dir) <=
++			(step_boundary * sign_dir)) {
++
++			target_step_pos = dest_step_pos;
++			target_lens_pos =
++				a_ctrl->step_position_table[target_step_pos];
++			a_ctrl->func_tbl->actuator_write_focus(a_ctrl,
++					curr_lens_pos,
++					&ringing_params_kernel,
++					sign_dir,
++					target_lens_pos);
++			curr_lens_pos = target_lens_pos;
++
++		} else {
++			target_step_pos = step_boundary;
++			target_lens_pos =
++				a_ctrl->step_position_table[target_step_pos];
++			a_ctrl->func_tbl->actuator_write_focus(a_ctrl,
++					curr_lens_pos,
++					&ringing_params_kernel,
++					sign_dir,
++					target_lens_pos);
++			curr_lens_pos = target_lens_pos;
++
++			a_ctrl->curr_region_index += sign_dir;
++		}
++		a_ctrl->curr_step_pos = target_step_pos;
++		a_ctrl->i2c_tbl_index = 0;
++	}
++
++	move_params->curr_lens_pos = curr_lens_pos;
++
++	CDBG("Exit\n");
++	return rc;
++}
++
++static int32_t msm_mot_actuator_set_position(
++	struct msm_actuator_ctrl_t *a_ctrl,
++	struct msm_actuator_set_position_t *set_pos)
++{
++	int32_t rc = 0;
++	int32_t index;
++	uint16_t next_lens_position;
++	uint16_t delay;
++	uint32_t hw_params = 0;
++
++	CDBG("%s Enter %d\n", __func__, __LINE__);
++	if (set_pos->number_of_steps  == 0)
++		return rc;
++
++	a_ctrl->i2c_tbl_index = 0;
++	for (index = 0; index < set_pos->number_of_steps; index++) {
++		next_lens_position = set_pos->pos[index];
++		delay = set_pos->delay[index];
++		msm_actuator_bivcm_handle_i2c_ops(a_ctrl,
++		next_lens_position, hw_params, delay);
++
++		a_ctrl->i2c_tbl_index = 0;
++	}
++	CDBG("%s exit %d\n", __func__, __LINE__);
++	return rc;
++}
++
++static int32_t msm_mot_actuator_init_step_table(
++	struct msm_actuator_ctrl_t *a_ctrl,
++	struct msm_actuator_set_info_t *set_info)
++{
++	int macro_dac = 0;
++	int inf_dac = 0;
++	int cur_code = 0;
++	int16_t step_index = 0, region_index = 0;
++	uint16_t step_boundary = 0;
++	int32_t max_code_size = 1;
++	uint16_t data_size = set_info->actuator_params.data_size;
++
++	CDBG("Enter %s\n", __func__);
++
++	for (; data_size > 0; data_size--)
++		max_code_size *= 2;
++
++	a_ctrl->max_code_size = max_code_size;
++	kfree(a_ctrl->step_position_table);
++	a_ctrl->step_position_table = NULL;
++
++	if (set_info->af_tuning_params.total_steps
++		>  MAX_ACTUATOR_AF_TOTAL_STEPS) {
++		pr_err("Max actuator totalsteps exceeded = %d\n",
++		set_info->af_tuning_params.total_steps);
++		return -EFAULT;
++	}
++
++	/* Fill step position table */
++	a_ctrl->step_position_table =
++		kmalloc(sizeof(uint16_t) *
++		(set_info->af_tuning_params.total_steps), GFP_KERNEL);
++
++	if (a_ctrl->step_position_table == NULL)
++		return -ENOMEM;
++
++	inf_dac = set_info->mot_af_tuning_params.infinity_dac;
++	macro_dac = set_info->mot_af_tuning_params.macro_dac;
++
++	for (region_index = 0;
++		region_index < a_ctrl->region_size;
++		region_index++) {
++		step_boundary =
++			a_ctrl->region_params[region_index].
++			step_bound[MOVE_NEAR];
++		for (step_index = 0; step_index < step_boundary;
++			step_index++) {
++			cur_code =
++				((int)step_index * (macro_dac - inf_dac)) /
++				(set_info->af_tuning_params.total_steps - 1) +
++				inf_dac;
++			if (step_index <
++				set_info->af_tuning_params.total_steps) {
++				if (cur_code > max_code_size) {
++					a_ctrl->step_position_table[step_index]
++						= (uint16_t)max_code_size;
++				} else {
++					a_ctrl->step_position_table[step_index]
++						= (uint16_t)cur_code;
++				}
++			}
++		}
++	}
++
++	CDBG("Exit %s\n", __func__);
++	return 0;
++}
++
++static struct msm_actuator msm_mot_hvcm_actuator_table = {
++	.act_type = ACTUATOR_MOT_HVCM,
++	.func_tbl = {
++		.actuator_init_step_table = msm_mot_actuator_init_step_table,
++		.actuator_move_focus = msm_mot_actuator_move_focus,
++		.actuator_write_focus = msm_mot_actuator_write_focus,
++		.actuator_set_default_focus = msm_actuator_set_default_focus,
++		.actuator_init_focus = msm_actuator_init_focus,
++		.actuator_parse_i2c_params = NULL,
++		.actuator_set_position = msm_mot_actuator_set_position,
++		.actuator_park_lens = NULL,
++	},
++};
++
+diff --git a/include/media/msm_cam_sensor.h b/include/media/msm_cam_sensor.h
+index 44bb21d721e..0ae2b26c3c5 100644
+--- a/include/media/msm_cam_sensor.h
++++ b/include/media/msm_cam_sensor.h
+@@ -121,6 +121,11 @@ struct msm_camera_i2c_array_write_config32 {
+ 	uint16_t slave_addr;
+ };
+ 
++struct msm_mot_actuator_tuning_params_t32 {
++	int16_t infinity_dac;
++	int16_t macro_dac;
++};
++
+ struct msm_actuator_tuning_params_t32 {
+ 	int16_t initial_code;
+ 	uint16_t pwd_step;
+@@ -146,6 +151,7 @@ struct msm_actuator_params_t32 {
+ struct msm_actuator_set_info_t32 {
+ 	struct msm_actuator_params_t32 actuator_params;
+ 	struct msm_actuator_tuning_params_t32 af_tuning_params;
++        struct msm_mot_actuator_tuning_params_t32 mot_af_tuning_params;
+ };
+ 
+ struct sensor_init_cfg_data32 {
+diff --git a/include/uapi/media/msm_cam_sensor.h b/include/uapi/media/msm_cam_sensor.h
+index c2160cb948c..15da00d8da0 100644
+--- a/include/uapi/media/msm_cam_sensor.h
++++ b/include/uapi/media/msm_cam_sensor.h
+@@ -412,6 +412,11 @@ struct msm_actuator_move_params_t {
+ 	struct damping_params_t *ringing_params;
+ };
+ 
++struct msm_mot_actuator_tuning_params_t {
++	int16_t infinity_dac;
++	int16_t macro_dac;
++};
++
+ struct msm_actuator_tuning_params_t {
+ 	int16_t initial_code;
+ 	uint16_t pwd_step;
+@@ -444,6 +449,7 @@ struct msm_actuator_params_t {
+ struct msm_actuator_set_info_t {
+ 	struct msm_actuator_params_t actuator_params;
+ 	struct msm_actuator_tuning_params_t af_tuning_params;
++	struct msm_mot_actuator_tuning_params_t mot_af_tuning_params;
+ };
+ 
+ struct msm_actuator_get_info_t {
+diff --git a/include/uapi/media/msm_camsensor_sdk.h b/include/uapi/media/msm_camsensor_sdk.h
+index b6f3bfab68e..c03c614f217 100644
+--- a/include/uapi/media/msm_camsensor_sdk.h
++++ b/include/uapi/media/msm_camsensor_sdk.h
+@@ -140,9 +140,20 @@ enum camerab_mode_t {
+ 	CAMERA_MODE_INVALID = (1<<2),
+ };
+ 
++/* Need to keep this table aligned with
++ * enum msm_camera_i2c_data_type
++ */
++
+ enum msm_actuator_data_type {
+ 	MSM_ACTUATOR_BYTE_DATA = 1,
+ 	MSM_ACTUATOR_WORD_DATA,
++	MSM_ACTUATOR_DWORD_DATA,
++	MSM_ACTUATOR_SET_BYTE_MASK,
++	MSM_ACTUATOR_UNSET_BYTE_MASK,
++	MSM_ACTUATOR_SET_WORD_MASK,
++	MSM_ACTUATOR_UNSET_WORD_MASK,
++	MSM_ACTUATOR_SET_BYTE_WRITE_MASK_DATA,
++	MSM_ACTUATOR_DATA_TYPE_MAX,
+ };
+ 
+ enum msm_actuator_addr_type {
+@@ -157,11 +168,13 @@ enum msm_actuator_write_type {
+ 	MSM_ACTUATOR_WRITE_DIR_REG,
+ 	MSM_ACTUATOR_POLL,
+ 	MSM_ACTUATOR_READ_WRITE,
++        MSM_ACTUATOR_WRITE_REG,
+ };
+ 
+ enum msm_actuator_i2c_operation {
+ 	MSM_ACT_WRITE = 0,
+ 	MSM_ACT_POLL,
++        MSM_ACT_READ_SET,
+ };
+ 
+ enum actuator_type {
+@@ -169,6 +182,7 @@ enum actuator_type {
+ 	ACTUATOR_PIEZO,
+ 	ACTUATOR_HVCM,
+ 	ACTUATOR_BIVCM,
++        ACTUATOR_MOT_HVCM,
+ };
+ 
+ enum msm_flash_driver_type {
+@@ -279,6 +293,7 @@ struct msm_camera_i2c_reg_array {
+ 	unsigned short reg_addr;
+ 	unsigned short reg_data;
+ 	unsigned int delay;
++        unsigned short eeprom_offset;
+ };
+ 
+ struct msm_camera_i2c_reg_setting {
+-- 
+2.11.0
+

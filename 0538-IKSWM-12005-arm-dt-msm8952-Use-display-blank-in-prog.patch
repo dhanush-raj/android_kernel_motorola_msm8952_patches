@@ -1,0 +1,52 @@
+From c31eac4d0e113576082138e0f20248f298058063 Mon Sep 17 00:00:00 2001
+From: Zac Crosby <zac@motorola.com>
+Date: Fri, 2 Oct 2015 18:33:38 -0500
+Subject: [PATCH 538/959] IKSWM-12005 arm/dt: msm8952: Use display blank in
+ progress notification
+
+LG and BOE display requires mid-blank notification.
+
+Change-Id: If1b0cdee142be9ee004e6931772f0374d33a7c98
+Signed-off-by: daiss1 <daiss1@motorola.com>
+(cherry picked from commit 488cc7f3bdc724fbed040c3a4693bd567fbe7fb4)
+Reviewed-on: http://gerrit.mot.com/802386
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi | 1 +
+ arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+index 24ccfc79966..39976882c17 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+@@ -69,6 +69,7 @@ qcom,mdss-dsi-cabc-dis-command = [15 01 00 00 00 00 02 55 00];
+ qcom,mdss-dsi-hbm-on-command = [15 01 00 00 00 00 02 51 FF];
+ qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 CD];
+ 
++qcom,mdss-dsi-use-blank-in-progress-notifier;
+ qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+ qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+ qcom,mdss-dsi-h-sync-pulse = <0>;
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+index 80558f37d80..7bb967fb7d0 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -66,6 +66,7 @@ qcom,mdss-dsi-cabc-dis-command = [15 01 00 00 00 00 02 55 00];
+ qcom,mdss-dsi-hbm-on-command = [15 01 00 00 00 00 02 51 D1];
+ qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 A8];
+ 
++qcom,mdss-dsi-use-blank-in-progress-notifier;
+ qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+ qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+ qcom,mdss-dsi-h-sync-pulse = <0>;
+-- 
+2.11.0
+

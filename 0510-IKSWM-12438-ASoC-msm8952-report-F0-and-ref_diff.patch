@@ -1,0 +1,45 @@
+From 02fd5335035b1dbbcc1844f4271fe5871b5c3377 Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Tue, 24 Nov 2015 16:22:48 -0600
+Subject: [PATCH 510/959] IKSWM-12438 ASoC: msm8952: report F0 and ref_diff
+
+report F0 and ref_diff togerther over "OSPL Tx F0"
+
+Change-Id: I32d01213f7b24bd53a2ba0668172b6fd07daa625
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/802553
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/msm/ospl2xx.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/sound/soc/msm/ospl2xx.c b/sound/soc/msm/ospl2xx.c
+index 6c3b9804a82..d5844d903a8 100644
+--- a/sound/soc/msm/ospl2xx.c
++++ b/sound/soc/msm/ospl2xx.c
+@@ -686,6 +686,7 @@ static int ospl2xx_tx_get_f0(struct snd_kcontrol *kcontrol,
+ 	ospl2xx_afe_get_param(PARAM_ID_OPALUM_TX_F0_CALIBRATION_VALUE);
+ 
+ 	ucontrol->value.integer.value[0] = afe_cb_payload32_data[0];
++	ucontrol->value.integer.value[1] = afe_cb_payload32_data[1];
+ 	mutex_unlock(&mr_lock);
+ 
+ 	return 0;
+@@ -768,8 +769,8 @@ static const struct snd_kcontrol_new ospl2xx_params_controls[] = {
+ 	/* PUT */ SOC_ENUM_EXT("OSPL Tx diagnostic",
+ 		ospl2xx_tx_run_diagnostic_enum[0],
+ 		ospl2xx_tx_run_diagnostic_get, ospl2xx_tx_run_diagnostic),
+-	/* GET */ SOC_SINGLE_EXT("OSPL Tx F0",
+-		SND_SOC_NOPM, 0, 0xFFFF, 0,
++	/* GET */ SOC_SINGLE_MULTI_EXT("OSPL Tx F0",
++		SND_SOC_NOPM, 0, 0xFFFF, 0, 2,
+ 		ospl2xx_tx_get_f0, NULL),
+ 	/* GET */ SOC_SINGLE_MULTI_EXT("OSPL Tx temp_cal",
+ 		SND_SOC_NOPM, 0, 0xFFFF, 0, 2,
+-- 
+2.11.0
+

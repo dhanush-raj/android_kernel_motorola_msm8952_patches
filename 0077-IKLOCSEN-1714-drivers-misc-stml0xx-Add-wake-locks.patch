@@ -1,0 +1,65 @@
+From 6f822f1a797a7bd2af10949e443b9b61e25b70da Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Fri, 26 Sep 2014 14:12:41 -0500
+Subject: [PATCH 077/959] IKLOCSEN-1714:drivers:misc:stml0xx: Add wake locks
+
+Add wakelock to the ioctl and irq code so the kernel
+doesn't try to suspend while we are doing spi
+transactions
+
+Change-Id: Id02b27166b03b64a5f6c614c3c59b1d7d3ee67e2
+Signed-off-by: Dan Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/674189
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Gabriel Burca <Gabriel.Burca@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_ioctl.c | 3 +++
+ drivers/misc/stml0xx/stml0xx_irq.c   | 3 +++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_ioctl.c b/drivers/misc/stml0xx/stml0xx_ioctl.c
+index b4a5258a503..1043b1c8b15 100644
+--- a/drivers/misc/stml0xx/stml0xx_ioctl.c
++++ b/drivers/misc/stml0xx/stml0xx_ioctl.c
+@@ -62,6 +62,8 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 	if (!stml0xx_misc_data)
+ 		stml0xx_misc_data = file->private_data;
+ 
++	wake_lock(&ps_stml0xx->wakelock);
++
+ 	mutex_lock(&ps_stml0xx->lock);
+ 
+ 	stml0xx_wake(ps_stml0xx);
+@@ -649,5 +651,6 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 
+ 	stml0xx_sleep(ps_stml0xx);
+ 	mutex_unlock(&ps_stml0xx->lock);
++	wake_unlock(&ps_stml0xx->wakelock);
+ 	return err;
+ }
+diff --git a/drivers/misc/stml0xx/stml0xx_irq.c b/drivers/misc/stml0xx/stml0xx_irq.c
+index 1f3e2bcd757..d112fe41581 100644
+--- a/drivers/misc/stml0xx/stml0xx_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_irq.c
+@@ -50,6 +50,8 @@ irqreturn_t stml0xx_isr(int irq, void *dev)
+ 	if (stml0xx_irq_disable)
+ 		return IRQ_HANDLED;
+ 
++	wake_lock(&ps_stml0xx->wakelock);
++
+ 	queue_work(ps_stml0xx->irq_work_queue, &ps_stml0xx->irq_work);
+ 	if (ps_stml0xx->irq_wake == -1)
+ 		queue_work(ps_stml0xx->irq_work_queue,
+@@ -308,4 +310,5 @@ EXIT:
+ 	stml0xx_sleep(ps_stml0xx);
+ 	/* For now HAE needs events even if the activity is still */
+ 	mutex_unlock(&ps_stml0xx->lock);
++	wake_unlock(&ps_stml0xx->wakelock);
+ }
+-- 
+2.11.0
+

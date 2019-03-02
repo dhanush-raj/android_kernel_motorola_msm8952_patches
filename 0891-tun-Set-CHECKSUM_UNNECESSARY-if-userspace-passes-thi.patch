@@ -1,0 +1,51 @@
+From 3dada976bd83dac0247aeaf2d8b128b441869d40 Mon Sep 17 00:00:00 2001
+From: Subash Abhinov Kasiviswanathan <subashab@codeaurora.org>
+Date: Mon, 26 Oct 2015 17:32:26 -0600
+Subject: [PATCH 891/959] tun: Set CHECKSUM_UNNECESSARY if userspace passes
+ this indication
+
+Userspace may already know that the checksum validation is already
+completed prior to being passed to the TUN interface. As a result,
+computing checksum again in network stack may be a redundant
+operation.
+
+Add support to read this information from the TUN header flags
+to skip checksum validation for these packets only.
+
+This is useful in cases where the packet checksum was computed by
+hardware for IPv4 / IPv6 TCP / UDP packets. Since the packet
+intergrity was already verified for packets over the wire, subsequent
+validation within the network stack is redundant work.
+
+Mot-CRs-fixed: IKSWM-38459
+Change-Id: I18ee3408c05910207b205d6205f282e6f3599156
+Signed-off-by: Subash Abhinov Kasiviswanathan <subashab@codeaurora.org>
+Reviewed-on: http://gerrit.mot.com/857107
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Hong-Mei Li <a21834@motorola.com>
+Reviewed-by: Yi-Wei Zhao <gbjc64@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/net/tun.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/net/tun.c b/drivers/net/tun.c
+index 9acd8ca48fb..b2610e33d3b 100644
+--- a/drivers/net/tun.c
++++ b/drivers/net/tun.c
+@@ -1169,6 +1169,10 @@ static ssize_t tun_get_user(struct tun_struct *tun, struct tun_file *tfile,
+ 		if (pi.flags & htons(CHECKSUM_UNNECESSARY))
+ 			skb->ip_summed = CHECKSUM_UNNECESSARY;
+ 
++	if (!(tun->flags & TUN_NO_PI))
++		if (pi.flags & htons(CHECKSUM_UNNECESSARY))
++			skb->ip_summed = CHECKSUM_UNNECESSARY;
++
+ 	switch (tun->flags & TUN_TYPE_MASK) {
+ 	case TUN_TUN_DEV:
+ 		if (tun->flags & TUN_NO_PI) {
+-- 
+2.11.0
+

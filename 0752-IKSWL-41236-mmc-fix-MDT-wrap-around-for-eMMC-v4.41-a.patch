@@ -1,0 +1,40 @@
+From b474b43b02d359561c8cd92b0b0d6c98913f3913 Mon Sep 17 00:00:00 2001
+From: "Russ W. Knize" <Russ.Knize@motorola.com>
+Date: Thu, 14 May 2015 15:02:09 -0500
+Subject: [PATCH 752/959] IKSWL-41236: mmc: fix MDT wrap around for eMMC v4.41
+ and later
+
+The eMMC v4.41 specification redefined the the MDT field of the CID to
+deal with the "Mayan calander" problem.  The 4-bit value has officially
+rolled-over and now starts with the year 2013 instead of 1997.
+
+Change-Id: Ib74da32b618665fdf1af6cece355126b1608be6a
+Signed-off-by: Russ Knize <Russ.Knize@motorola.com>
+Reviewed-on: http://gerrit.mot.com/748029
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830277
+---
+ drivers/mmc/core/mmc.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/mmc/core/mmc.c b/drivers/mmc/core/mmc.c
+index 4a1944bba7c..f351c432c36 100644
+--- a/drivers/mmc/core/mmc.c
++++ b/drivers/mmc/core/mmc.c
+@@ -561,6 +561,9 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
+ 				"rpmb", 0, false,
+ 				MMC_BLK_DATA_AREA_RPMB);
+ 		}
++
++		/* Handle the CID year roll-over. */
++		card->cid.year += 16;
+ 	}
+ 
+ 	card->ext_csd.raw_erased_mem_count = ext_csd[EXT_CSD_ERASED_MEM_CONT];
+-- 
+2.11.0
+

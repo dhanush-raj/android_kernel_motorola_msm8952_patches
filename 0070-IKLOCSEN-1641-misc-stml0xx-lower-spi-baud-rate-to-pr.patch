@@ -1,0 +1,73 @@
+From e5fcd234b075dfbe64b6a88ade743473dc43839d Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Mon, 25 Aug 2014 11:51:53 -0500
+Subject: [PATCH 070/959] IKLOCSEN-1641:misc:stml0xx: lower spi baud rate to
+ prevent nacks
+
+Lowering the spi baud rate makes the bus more reliable
+
+Also changing to dbg logging for nacks and data ready
+since it does not indicate a complete failure
+
+Change-Id: I6934c98a941b7f7b6356e4b43401a5fd2ed607e1
+Signed-off-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/665874
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_spi.c | 8 ++++----
+ include/linux/stml0xx.h            | 2 +-
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_spi.c b/drivers/misc/stml0xx/stml0xx_spi.c
+index 4625dccb961..d0cf2e48e09 100644
+--- a/drivers/misc/stml0xx/stml0xx_spi.c
++++ b/drivers/misc/stml0xx/stml0xx_spi.c
+@@ -57,7 +57,7 @@ int stml0xx_spi_sensorhub_ready(void)
+ 	}
+ 
+ 	if (timeout <= 0)
+-		dev_err(&stml0xx_misc_data->spi->dev,
++		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"data ready timeout: %d", timeout);
+ 	else
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+@@ -109,8 +109,8 @@ int stml0xx_spi_transfer(unsigned char *tx_buf, unsigned char *rx_buf, int len)
+ 	spi_message_add_tail(&transfer, &msg);
+ 
+ 	if (stml0xx_misc_data->mode != BOOTMODE && stml0xx_g_booted) {
+-		if (stml0xx_spi_sensorhub_ready() < 0) {
+-			dev_err(&stml0xx_misc_data->spi->dev,
++		if (stml0xx_spi_sensorhub_ready() <= 0) {
++			dev_dbg(&stml0xx_misc_data->spi->dev,
+ 				"SPI error STM not ready");
+ 			rc = -EIO;
+ 			goto EXIT;
+@@ -128,7 +128,7 @@ int stml0xx_spi_transfer(unsigned char *tx_buf, unsigned char *rx_buf, int len)
+ 			/* check for sensorhub ack */
+ 			if (!stml0xx_spi_sensorhub_ack()) {
+ 				rc = -EIO;
+-				dev_err(&stml0xx_misc_data->spi->dev,
++				dev_dbg(&stml0xx_misc_data->spi->dev,
+ 					"SPI transfer error NACK");
+ 			}
+ 		}
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 7e469ce670c..2715e2c2062 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -34,7 +34,7 @@
+ /* SPI */
+ #define SPI_DMA_ENABLED         true
+ #define SPI_FLASH_CLK_SPD_HZ    4000000
+-#define SPI_NORMAL_CLK_SPD_HZ    8000000
++#define SPI_NORMAL_CLK_SPD_HZ    4000000
+ #define SPI_BUFF_SIZE           1152
+ #define SPI_RETRIES             5
+ #define SPI_RETRY_DELAY         20
+-- 
+2.11.0
+

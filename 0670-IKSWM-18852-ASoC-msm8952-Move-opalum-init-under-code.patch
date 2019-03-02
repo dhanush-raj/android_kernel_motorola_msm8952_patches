@@ -1,0 +1,63 @@
+From a45b0c2417ed7aa55dde8486e9dbe31720ee656c Mon Sep 17 00:00:00 2001
+From: Paul Handrigan <Paul.Handrigan@cirrus.com>
+Date: Tue, 2 Feb 2016 15:37:28 -0600
+Subject: [PATCH 670/959] IKSWM-18852: ASoC: msm8952: Move opalum init under
+ codec init
+
+- if ospl2xx_init() is called from cs35l34 init, the rtd->codec
+  will be for cs35l34. calling snd_soc_codec_get_drvdata(codec)
+  will get struct cs35l34_private. But function ospl2xx_init()
+  took it as msm8x16_wcd_codec and caused mem corruption
+
+- Move ospl2xx_init() function call from the cs35l34 init
+  to the msm8x16 codec init.
+
+Change-Id: I7868c637474dcf6ff5a8d29e64e717e8add20946
+Signed-off-by: Paul Handrigan <Paul.Handrigan@cirrus.com>
+Reviewed-on: http://gerrit.mot.com/818133
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Seungyoon Lee <yoon@motorola.com>
+Reviewed-by: Jonathan Eklund <jeklund@motorola.com>
+Reviewed-by: Harini Peddibhotla <hpeddib1@motorola.com>
+Reviewed-by: Kiran Kumar Krishna <kiran@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/msm/msm8952.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/sound/soc/msm/msm8952.c b/sound/soc/msm/msm8952.c
+index d23f1a9da2c..01a241b8aa7 100644
+--- a/sound/soc/msm/msm8952.c
++++ b/sound/soc/msm/msm8952.c
+@@ -1852,6 +1852,12 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
+ 			return ret;
+ 		}
+ 	}
++#ifdef CONFIG_SND_SOC_OPALUM
++	ret = ospl2xx_init(rtd);
++	if (ret != 0)
++		pr_err("%s Cannot set Opalum controls %d\n", __func__, ret);
++#endif
++
+ 	return msm8x16_wcd_hs_detect(codec, &mbhc_cfg);
+ }
+ 
+@@ -1894,12 +1900,6 @@ static int cs35l34_dai_init(struct snd_soc_pcm_runtime *rtd)
+ 	if (ret != 0)
+ 		dev_err(cs35l34_dai->dev, "Cannot set cs35l34 MCLK %d\n", ret);
+ 
+-#ifdef CONFIG_SND_SOC_OPALUM
+-	ret = ospl2xx_init(rtd);
+-	if (ret != 0)
+-		dev_err(cs35l34_dai->dev, "Cannot set Opalum controls %d\n", ret);
+-#endif
+-
+ 	return ret;
+ }
+ #endif
+-- 
+2.11.0
+

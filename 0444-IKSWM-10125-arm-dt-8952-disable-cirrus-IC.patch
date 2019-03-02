@@ -1,0 +1,40 @@
+From 9cdc459aa32bbd863940d84e269550d70e38f20c Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Tue, 3 Nov 2015 15:14:24 -0600
+Subject: [PATCH 444/959] IKSWM-10125 arm/dt: 8952: disable cirrus IC
+
+Cirrus Watson IC will be in from P1.1.
+
+Disable it for old P0.
+P1 and P1.1 seem to share same HW ID, leave P1 DT enabled.
+
+Change-Id: I12069d29467c12128280a0a5a454ca3791ad0639
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/797105
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Dmitry Ornatsky <ornatsky@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-athene-p0.dts | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+index 8066e3ec8bd..feb6f953e2e 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
++++ b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+@@ -78,3 +78,9 @@
+ &pmi8950_fg {
+ 	qcom,fg-cc-cv-threshold-mv = <4340>;
+ };
++
++&i2c_2 {
++	cs35l34@40 {
++		status = "disabled";
++	};
++};
+-- 
+2.11.0
+

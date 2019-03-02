@@ -1,0 +1,58 @@
+From 7468a4cd8ab4d3edfa11a7523e00a681e3884389 Mon Sep 17 00:00:00 2001
+From: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Date: Fri, 3 Apr 2015 11:18:49 -0500
+Subject: [PATCH 121/959] IKSWL-6267 stml0xx: Optimize sensorhub firmware flash
+
+ACK byte usually takes two clock cycles to arrive regardless of the speed.
+Read two bytes at a time to check for the ACK byte in order to reduce
+overall delay especially during flash.
+
+Change-Id: Ia0e89ec5cad7c3e0054affe379b566994b7f8a06
+Signed-off-by: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Reviewed-on: http://gerrit.mot.com/732167
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Philip Lee <pglee@motorola.com>
+Reviewed-by: Vladimir Karpovich <vkarpovich@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_flash.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_flash.c b/drivers/misc/stml0xx/stml0xx_flash.c
+index b39645a7494..340196771a6 100644
+--- a/drivers/misc/stml0xx/stml0xx_flash.c
++++ b/drivers/misc/stml0xx/stml0xx_flash.c
+@@ -44,7 +44,7 @@
+ #include <linux/stml0xx.h>
+ 
+ #define GET_ACK_RETRIES 10
+-#define GET_ACK_DELAY   20
++#define GET_ACK_DELAY   5
+ #define COMMAND_RETRIES 5
+ #define COMMAND_DELAY   2000
+ 
+@@ -96,13 +96,16 @@ static int stml0xx_boot_spi_wait_for_ack(int num_polls, int poll_int_ms,
+ 	/* Poll for ACK */
+ 	int rc = 0;
+ 	while (num_polls--) {
+-		rc = stml0xx_spi_read_no_reset(stml0xx_boot_readbuff, 1);
++		/* Read two bytes at a time as the part usually takes
++			two clock cycles to ACK regardless of speed */
++		rc = stml0xx_spi_read_no_reset(stml0xx_boot_readbuff, 2);
+ 		if (rc < 0) {
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+ 				"Failed to read from SPI [%d]", rc);
+ 			return rc;
+ 		}
+-		if (stml0xx_boot_readbuff[0] == ACK_BYTE) {
++		if (stml0xx_boot_readbuff[0] == ACK_BYTE ||
++			stml0xx_boot_readbuff[1] == ACK_BYTE) {
+ 			/* Received ACK */
+ 			if (send_ack) {
+ 				dev_dbg(&stml0xx_misc_data->spi->dev,
+-- 
+2.11.0
+

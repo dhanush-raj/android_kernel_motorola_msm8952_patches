@@ -1,0 +1,1116 @@
+From 5bf3d095a7db4d18090dd635679ecec95d65c350 Mon Sep 17 00:00:00 2001
+From: "Russ W. Knize" <Russ.Knize@motorola.com>
+Date: Tue, 10 Sep 2013 23:17:20 -0500
+Subject: [PATCH 344/959] IKSWL-1135: esdfs: emulated SD card storage for
+ Android
+
+Propagated from IKXREL3KK-2650.
+
+This commit implements the functionality of Android's FUSE-backed
+"sdcard" file system using the wrapfs stackable file system approach.
+The lower half overrides the caller's credentials to behave as the
+Android user space "sdcard" service would on the underlying file
+system.  The upper half implements a case-insensitive, case-preserving
+file system with hard-coded permissions to emulate the behavior of the
+vfat driver as much as possible.  To improve lookup performance, it
+relies on the underlying file system to support the LOOKUP_NOCASE
+intent.
+
+Change-Id: Ieb370bfbf29d6a1a1c7365976d96bd2f1932b708
+Signed-off-by: Russ Knize <Russ.Knize@motorola.com>
+Reviewed-on: http://gerrit.mot.com/658213
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+SLTApproved: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/esdfs/dentry.c | 107 +++++++++++++++++++++++-
+ fs/esdfs/esdfs.h  | 119 ++++++++++++++++++++++++++
+ fs/esdfs/file.c   |  11 +--
+ fs/esdfs/inode.c  | 244 +++++++++++++++++-------------------------------------
+ fs/esdfs/lookup.c |  12 ++-
+ fs/esdfs/main.c   | 159 ++++++++++++++++++++++++++++++++---
+ fs/esdfs/mmap.c   |   1 +
+ fs/esdfs/super.c  |  30 ++++++-
+ 8 files changed, 492 insertions(+), 191 deletions(-)
+
+diff --git a/fs/esdfs/dentry.c b/fs/esdfs/dentry.c
+index bbd8c39a41e..fe3bc0826bb 100644
+--- a/fs/esdfs/dentry.c
++++ b/fs/esdfs/dentry.c
+@@ -3,12 +3,14 @@
+  * Copyright (c) 2009	   Shrikar Archak
+  * Copyright (c) 2003-2014 Stony Brook University
+  * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ * Copyright (C) 2013-2014 Motorola Mobility, LLC
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 as
+  * published by the Free Software Foundation.
+  */
+ 
++#include <linux/ctype.h>
+ #include "esdfs.h"
+ 
+ /*
+@@ -19,22 +21,117 @@
+ static int esdfs_d_revalidate(struct dentry *dentry, unsigned int flags)
+ {
+ 	struct path lower_path;
+-	struct dentry *lower_dentry;
++	struct path lower_parent_path;
++	struct dentry *parent_dentry = NULL;
++	struct dentry *lower_dentry = NULL;
++	struct dentry *lower_parent_dentry = NULL;
+ 	int err = 1;
+ 
+ 	if (flags & LOOKUP_RCU)
+ 		return -ECHILD;
+ 
++	/* short-circuit if it's root */
++	spin_lock(&dentry->d_lock);
++	if (IS_ROOT(dentry)) {
++		spin_unlock(&dentry->d_lock);
++		return 1;
++	}
++	spin_unlock(&dentry->d_lock);
++
+ 	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+-	if (!lower_dentry->d_op || !lower_dentry->d_op->d_revalidate)
+-		goto out;
+-	err = lower_dentry->d_op->d_revalidate(lower_dentry, flags);
++	lower_parent_dentry = dget_parent(lower_dentry);
++
++	parent_dentry = dget_parent(dentry);
++	esdfs_get_lower_path(parent_dentry, &lower_parent_path);
++
++	if (lower_parent_path.dentry != lower_parent_dentry)
++		goto drop;
++
++	/* can't do strcmp if lower is hashed */
++	spin_lock(&lower_dentry->d_lock);
++	if (d_unhashed(lower_dentry)) {
++		spin_unlock(&lower_dentry->d_lock);
++		goto drop;
++	}
++
++	spin_lock(&dentry->d_lock);
++
++	if (lower_dentry->d_name.len != dentry->d_name.len ||
++	    strncasecmp(lower_dentry->d_name.name,
++			dentry->d_name.name,
++			dentry->d_name.len) != 0) {
++		err = 0;
++		__d_drop(dentry);	/* already holding spin lock */
++	}
++
++	spin_unlock(&dentry->d_lock);
++	spin_unlock(&lower_dentry->d_lock);
++
++	goto out;
++
++drop:
++	d_drop(dentry);
++	err = 0;
+ out:
++	esdfs_put_lower_path(parent_dentry, &lower_parent_path);
++	dput(parent_dentry);
++	dput(lower_parent_dentry);
+ 	esdfs_put_lower_path(dentry, &lower_path);
+ 	return err;
+ }
+ 
++/* directly from fs/fat/namei_vfat.c */
++static unsigned int __vfat_striptail_len(unsigned int len, const char *name)
++{
++	while (len && name[len - 1] == '.')
++		len--;
++	return len;
++}
++
++static unsigned int vfat_striptail_len(const struct qstr *qstr)
++{
++	return __vfat_striptail_len(qstr->len, qstr->name);
++}
++
++
++/* based on vfat_hashi() in fs/fat/namei_vfat.c (no code pages) */
++static int esdfs_d_hash(const struct dentry *dentry,
++		const struct inode *inode, struct qstr *qstr)
++{
++	const unsigned char *name;
++	unsigned int len;
++	unsigned long hash;
++
++	name = qstr->name;
++	len = vfat_striptail_len(qstr);
++
++	hash = init_name_hash();
++	while (len--)
++		hash = partial_name_hash(tolower(*name++), hash);
++	qstr->hash = end_name_hash(hash);
++
++	return 0;
++}
++
++/* based on vfat_cmpi() in fs/fat/namei_vfat.c (no code pages) */
++static int esdfs_d_compare(const struct dentry *parent,
++		const struct inode *pinode, const struct dentry *dentry,
++		const struct inode *inode, unsigned int len, const char *str,
++		const struct qstr *name)
++{
++	unsigned int alen, blen;
++
++	/* A filename cannot end in '.' or we treat it like it has none */
++	alen = vfat_striptail_len(name);
++	blen = __vfat_striptail_len(len, str);
++	if (alen == blen) {
++		if (strncasecmp(name->name, str, alen) == 0)
++			return 0;
++	}
++	return 1;
++}
++
+ static void esdfs_d_release(struct dentry *dentry)
+ {
+ 	/* release and reset the lower paths */
+@@ -45,5 +142,7 @@ static void esdfs_d_release(struct dentry *dentry)
+ 
+ const struct dentry_operations esdfs_dops = {
+ 	.d_revalidate	= esdfs_d_revalidate,
++	.d_hash		= esdfs_d_hash,
++	.d_compare	= esdfs_d_compare,
+ 	.d_release	= esdfs_d_release,
+ };
+diff --git a/fs/esdfs/esdfs.h b/fs/esdfs/esdfs.h
+index 877732e7dec..1a9609111c1 100644
+--- a/fs/esdfs/esdfs.h
++++ b/fs/esdfs/esdfs.h
+@@ -3,6 +3,7 @@
+  * Copyright (c) 2009	   Shrikar Archak
+  * Copyright (c) 2003-2014 Stony Brook University
+  * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ * Copyright (C) 2013-2014 Motorola Mobility, LLC
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 as
+@@ -25,6 +26,7 @@
+ #include <linux/uaccess.h>
+ #include <linux/slab.h>
+ #include <linux/sched.h>
++#include <linux/fs_struct.h>
+ 
+ /* the file system name */
+ #define ESDFS_NAME "esdfs"
+@@ -35,6 +37,16 @@
+ /* useful for tracking code reachability */
+ #define UDBG printk(KERN_DEFAULT "DBG:%s:%s:%d\n", __FILE__, __func__, __LINE__)
+ 
++/* default permissions as specified by the Android sdcard service */
++#define ESDFS_DEFAULT_LOWER_UID		1023	/* AID_MEDIA_RW */
++#define ESDFS_DEFAULT_LOWER_GID		1023	/* AID_MEDIA_RW */
++#define ESDFS_DEFAULT_LOWER_FMASK	0664
++#define ESDFS_DEFAULT_LOWER_DMASK	0775
++#define ESDFS_DEFAULT_UPPER_UID		0	/* AID_ROOT */
++#define ESDFS_DEFAULT_UPPER_GID		1015	/* AID_SDCARD_RW */
++#define ESDFS_DEFAULT_UPPER_FMASK	0664
++#define ESDFS_DEFAULT_UPPER_DMASK	0775
++
+ /* operations vectors defined in specific files */
+ extern const struct file_operations esdfs_main_fops;
+ extern const struct file_operations esdfs_dir_fops;
+@@ -78,9 +90,19 @@ struct esdfs_dentry_info {
+ 	struct path lower_path;
+ };
+ 
++struct esdfs_perms {
++	uid_t uid;
++	gid_t gid;
++	unsigned short fmask;
++	unsigned short dmask;
++};
++
+ /* esdfs super-block data in memory */
+ struct esdfs_sb_info {
+ 	struct super_block *lower_sb;
++	struct esdfs_perms lower_perms;
++	struct esdfs_perms upper_perms;
++	unsigned int options;
+ };
+ 
+ /*
+@@ -202,4 +224,101 @@ static inline void unlock_dir(struct dentry *dir)
+ 	mutex_unlock(&dir->d_inode->i_mutex);
+ 	dput(dir);
+ }
++
++static inline void esdfs_set_lower_perms(struct esdfs_sb_info *sbi,
++		uid_t *uid, gid_t *gid)
++{
++	*uid = sbi->lower_perms.uid;
++	*gid = sbi->lower_perms.gid;
++}
++
++static inline void esdfs_set_lower_mode(struct esdfs_sb_info *sbi,
++		umode_t *mode)
++{
++	if (S_ISDIR(*mode))
++		*mode = (*mode & S_IFMT) | sbi->lower_perms.dmask;
++	else
++		*mode = (*mode & S_IFMT) | sbi->lower_perms.fmask;
++}
++
++static inline void esdfs_lower_i_perms(struct inode *inode)
++{
++	struct esdfs_sb_info *sbi = ESDFS_SB(inode->i_sb);
++
++	esdfs_set_lower_perms(sbi, &inode->i_uid, &inode->i_gid);
++	esdfs_set_lower_mode(sbi, &inode->i_mode);
++}
++
++static inline void esdfs_set_perms(struct esdfs_sb_info *sbi,
++		uid_t *uid, gid_t *gid)
++{
++	*uid = sbi->upper_perms.uid;
++	*gid = sbi->upper_perms.gid;
++}
++
++/* file attribute helpers */
++static inline void esdfs_copy_lower_attr(struct inode *dest,
++					 const struct inode *src)
++{
++	dest->i_mode = src->i_mode & S_IFMT;
++	dest->i_rdev = src->i_rdev;
++	dest->i_atime = src->i_atime;
++	dest->i_mtime = src->i_mtime;
++	dest->i_ctime = src->i_ctime;
++	dest->i_blkbits = src->i_blkbits;
++	dest->i_flags = src->i_flags;
++	set_nlink(dest, src->i_nlink);
++}
++
++static inline void esdfs_copy_attr(struct inode *dest, const struct inode *src)
++{
++	struct esdfs_sb_info *sbi = ESDFS_SB(dest->i_sb);
++
++	esdfs_copy_lower_attr(dest, src);
++	dest->i_uid = sbi->upper_perms.uid;
++	dest->i_gid = sbi->upper_perms.gid;
++	if (S_ISDIR(dest->i_mode))
++		dest->i_mode |= sbi->upper_perms.dmask;
++	else
++		dest->i_mode |= sbi->upper_perms.fmask;
++}
++
++/*
++ * Based on nfs4_save_creds() and nfs4_reset_creds() in nfsd/nfs4recover.c.
++ * Returns NULL if prepare_creds() could not allocate heap, otherwise
++ */
++static inline const struct cred *esdfs_override_creds(
++		struct esdfs_sb_info *sbi, int *mask)
++{
++	struct cred *creds = prepare_creds();
++
++	if (!creds)
++		return NULL;
++
++	/* clear the umask so that the lower mode works for create cases */
++	if (mask) {
++		*mask = 0;
++		*mask = xchg(&current->fs->umask, *mask & S_IRWXUGO);
++	}
++
++	creds->fsuid = sbi->lower_perms.uid;
++	creds->fsgid = sbi->lower_perms.gid;
++
++	/* this installs the new creds into current, which we must destroy */
++	return override_creds(creds);
++}
++
++static inline void esdfs_revert_creds(const struct cred *creds, int *mask)
++{
++	const struct cred *current_creds = current->cred;
++
++	/* restore the old umask */
++	if (mask)
++		*mask = xchg(&current->fs->umask, *mask & S_IRWXUGO);
++
++	/* restore the old creds into current */
++	revert_creds(creds);
++	put_cred(current_creds);	/* destroy the old temporary creds */
++}
++
+ #endif	/* not _ESDFS_H_ */
+diff --git a/fs/esdfs/file.c b/fs/esdfs/file.c
+index 8e51e0eb195..47a570b6ed9 100644
+--- a/fs/esdfs/file.c
++++ b/fs/esdfs/file.c
+@@ -3,6 +3,7 @@
+  * Copyright (c) 2009	   Shrikar Archak
+  * Copyright (c) 2003-2014 Stony Brook University
+  * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ * Copyright (C) 2013-2014 Motorola Mobility, LLC
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 as
+@@ -41,8 +42,8 @@ static ssize_t esdfs_write(struct file *file, const char __user *buf,
+ 	if (err >= 0) {
+ 		fsstack_copy_inode_size(dentry->d_inode,
+ 					lower_file->f_path.dentry->d_inode);
+-		fsstack_copy_attr_times(dentry->d_inode,
+-					lower_file->f_path.dentry->d_inode);
++		esdfs_copy_attr(dentry->d_inode,
++				lower_file->f_path.dentry->d_inode);
+ 	}
+ 
+ 	return err;
+@@ -79,8 +80,8 @@ static long esdfs_unlocked_ioctl(struct file *file, unsigned int cmd,
+ 
+ 	/* some ioctls can change inode attributes (EXT2_IOC_SETFLAGS) */
+ 	if (!err)
+-		fsstack_copy_attr_all(file->f_path.dentry->d_inode,
+-				      lower_file->f_path.dentry->d_inode);
++		esdfs_copy_attr(file->f_path.dentry->d_inode,
++				lower_file->f_path.dentry->d_inode);
+ out:
+ 	return err;
+ }
+@@ -199,7 +200,7 @@ static int esdfs_open(struct inode *inode, struct file *file)
+ 	if (err)
+ 		kfree(ESDFS_F(file));
+ 	else
+-		fsstack_copy_attr_all(inode, esdfs_lower_inode(inode));
++		esdfs_copy_attr(inode, esdfs_lower_inode(inode));
+ out_err:
+ 	return err;
+ }
+diff --git a/fs/esdfs/inode.c b/fs/esdfs/inode.c
+index 9016b728d41..3f366057ac6 100644
+--- a/fs/esdfs/inode.c
++++ b/fs/esdfs/inode.c
+@@ -3,6 +3,7 @@
+  * Copyright (c) 2009	   Shrikar Archak
+  * Copyright (c) 2003-2014 Stony Brook University
+  * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ * Copyright (C) 2013-2014 Motorola Mobility, LLC
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 as
+@@ -18,11 +19,18 @@ static int esdfs_create(struct inode *dir, struct dentry *dentry,
+ 	struct dentry *lower_dentry;
+ 	struct dentry *lower_parent_dentry = NULL;
+ 	struct path lower_path;
++	int mask;
++	const struct cred *creds =
++			esdfs_override_creds(ESDFS_SB(dir->i_sb), &mask);
++	if (!creds)
++		return -ENOMEM;
+ 
+ 	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+ 	lower_parent_dentry = lock_parent(lower_dentry);
+ 
++	esdfs_set_lower_mode(ESDFS_SB(dir->i_sb), &mode);
++
+ 	err = vfs_create(lower_parent_dentry->d_inode, lower_dentry, mode,
+ 			 want_excl);
+ 	if (err)
+@@ -37,43 +45,7 @@ static int esdfs_create(struct inode *dir, struct dentry *dentry,
+ out:
+ 	unlock_dir(lower_parent_dentry);
+ 	esdfs_put_lower_path(dentry, &lower_path);
+-	return err;
+-}
+-
+-static int esdfs_link(struct dentry *old_dentry, struct inode *dir,
+-		       struct dentry *new_dentry)
+-{
+-	struct dentry *lower_old_dentry;
+-	struct dentry *lower_new_dentry;
+-	struct dentry *lower_dir_dentry;
+-	u64 file_size_save;
+-	int err;
+-	struct path lower_old_path, lower_new_path;
+-
+-	file_size_save = i_size_read(old_dentry->d_inode);
+-	esdfs_get_lower_path(old_dentry, &lower_old_path);
+-	esdfs_get_lower_path(new_dentry, &lower_new_path);
+-	lower_old_dentry = lower_old_path.dentry;
+-	lower_new_dentry = lower_new_path.dentry;
+-	lower_dir_dentry = lock_parent(lower_new_dentry);
+-
+-	err = vfs_link(lower_old_dentry, lower_dir_dentry->d_inode,
+-		       lower_new_dentry);
+-	if (err || !lower_new_dentry->d_inode)
+-		goto out;
+-
+-	err = esdfs_interpose(new_dentry, dir->i_sb, &lower_new_path);
+-	if (err)
+-		goto out;
+-	fsstack_copy_attr_times(dir, lower_new_dentry->d_inode);
+-	fsstack_copy_inode_size(dir, lower_new_dentry->d_inode);
+-	set_nlink(old_dentry->d_inode,
+-		  esdfs_lower_inode(old_dentry->d_inode)->i_nlink);
+-	i_size_write(new_dentry->d_inode, file_size_save);
+-out:
+-	unlock_dir(lower_dir_dentry);
+-	esdfs_put_lower_path(old_dentry, &lower_old_path);
+-	esdfs_put_lower_path(new_dentry, &lower_new_path);
++	esdfs_revert_creds(creds, &mask);
+ 	return err;
+ }
+ 
+@@ -84,6 +56,10 @@ static int esdfs_unlink(struct inode *dir, struct dentry *dentry)
+ 	struct inode *lower_dir_inode = esdfs_lower_inode(dir);
+ 	struct dentry *lower_dir_dentry;
+ 	struct path lower_path;
++	const struct cred *creds =
++			esdfs_override_creds(ESDFS_SB(dir->i_sb), NULL);
++	if (!creds)
++		return -ENOMEM;
+ 
+ 	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+@@ -113,33 +89,7 @@ out:
+ 	unlock_dir(lower_dir_dentry);
+ 	dput(lower_dentry);
+ 	esdfs_put_lower_path(dentry, &lower_path);
+-	return err;
+-}
+-
+-static int esdfs_symlink(struct inode *dir, struct dentry *dentry,
+-			  const char *symname)
+-{
+-	int err = 0;
+-	struct dentry *lower_dentry;
+-	struct dentry *lower_parent_dentry = NULL;
+-	struct path lower_path;
+-
+-	esdfs_get_lower_path(dentry, &lower_path);
+-	lower_dentry = lower_path.dentry;
+-	lower_parent_dentry = lock_parent(lower_dentry);
+-
+-	err = vfs_symlink(lower_parent_dentry->d_inode, lower_dentry, symname);
+-	if (err)
+-		goto out;
+-	err = esdfs_interpose(dentry, dir->i_sb, &lower_path);
+-	if (err)
+-		goto out;
+-	fsstack_copy_attr_times(dir, esdfs_lower_inode(dir));
+-	fsstack_copy_inode_size(dir, lower_parent_dentry->d_inode);
+-
+-out:
+-	unlock_dir(lower_parent_dentry);
+-	esdfs_put_lower_path(dentry, &lower_path);
++	esdfs_revert_creds(creds, NULL);
+ 	return err;
+ }
+ 
+@@ -149,11 +99,19 @@ static int esdfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
+ 	struct dentry *lower_dentry;
+ 	struct dentry *lower_parent_dentry = NULL;
+ 	struct path lower_path;
++	int mask;
++	const struct cred *creds =
++			esdfs_override_creds(ESDFS_SB(dir->i_sb), &mask);
++	if (!creds)
++		return -ENOMEM;
+ 
+ 	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+ 	lower_parent_dentry = lock_parent(lower_dentry);
+ 
++	mode |= S_IFDIR;
++	esdfs_set_lower_mode(ESDFS_SB(dir->i_sb), &mode);
++
+ 	err = vfs_mkdir(lower_parent_dentry->d_inode, lower_dentry, mode);
+ 	if (err)
+ 		goto out;
+@@ -170,6 +128,7 @@ static int esdfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
+ out:
+ 	unlock_dir(lower_parent_dentry);
+ 	esdfs_put_lower_path(dentry, &lower_path);
++	esdfs_revert_creds(creds, &mask);
+ 	return err;
+ }
+ 
+@@ -179,6 +138,10 @@ static int esdfs_rmdir(struct inode *dir, struct dentry *dentry)
+ 	struct dentry *lower_dir_dentry;
+ 	int err;
+ 	struct path lower_path;
++	const struct cred *creds =
++			esdfs_override_creds(ESDFS_SB(dir->i_sb), NULL);
++	if (!creds)
++		return -ENOMEM;
+ 
+ 	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+@@ -198,34 +161,7 @@ static int esdfs_rmdir(struct inode *dir, struct dentry *dentry)
+ out:
+ 	unlock_dir(lower_dir_dentry);
+ 	esdfs_put_lower_path(dentry, &lower_path);
+-	return err;
+-}
+-
+-static int esdfs_mknod(struct inode *dir, struct dentry *dentry, umode_t mode,
+-			dev_t dev)
+-{
+-	int err = 0;
+-	struct dentry *lower_dentry;
+-	struct dentry *lower_parent_dentry = NULL;
+-	struct path lower_path;
+-
+-	esdfs_get_lower_path(dentry, &lower_path);
+-	lower_dentry = lower_path.dentry;
+-	lower_parent_dentry = lock_parent(lower_dentry);
+-
+-	err = vfs_mknod(lower_parent_dentry->d_inode, lower_dentry, mode, dev);
+-	if (err)
+-		goto out;
+-
+-	err = esdfs_interpose(dentry, dir->i_sb, &lower_path);
+-	if (err)
+-		goto out;
+-	fsstack_copy_attr_times(dir, esdfs_lower_inode(dir));
+-	fsstack_copy_inode_size(dir, lower_parent_dentry->d_inode);
+-
+-out:
+-	unlock_dir(lower_parent_dentry);
+-	esdfs_put_lower_path(dentry, &lower_path);
++	esdfs_revert_creds(creds, NULL);
+ 	return err;
+ }
+ 
+@@ -243,6 +179,11 @@ static int esdfs_rename(struct inode *old_dir, struct dentry *old_dentry,
+ 	struct dentry *lower_new_dir_dentry = NULL;
+ 	struct dentry *trap = NULL;
+ 	struct path lower_old_path, lower_new_path;
++	int mask;
++	const struct cred *creds =
++			esdfs_override_creds(ESDFS_SB(old_dir->i_sb), &mask);
++	if (!creds)
++		return -ENOMEM;
+ 
+ 	esdfs_get_lower_path(old_dentry, &lower_old_path);
+ 	esdfs_get_lower_path(new_dentry, &lower_new_path);
+@@ -268,11 +209,11 @@ static int esdfs_rename(struct inode *old_dir, struct dentry *old_dentry,
+ 	if (err)
+ 		goto out;
+ 
+-	fsstack_copy_attr_all(new_dir, lower_new_dir_dentry->d_inode);
++	esdfs_copy_attr(new_dir, lower_new_dir_dentry->d_inode);
+ 	fsstack_copy_inode_size(new_dir, lower_new_dir_dentry->d_inode);
+ 	if (new_dir != old_dir) {
+-		fsstack_copy_attr_all(old_dir,
+-				      lower_old_dir_dentry->d_inode);
++		esdfs_copy_attr(old_dir,
++				lower_old_dir_dentry->d_inode);
+ 		fsstack_copy_inode_size(old_dir,
+ 					lower_old_dir_dentry->d_inode);
+ 	}
+@@ -283,79 +224,24 @@ out:
+ 	dput(lower_new_dir_dentry);
+ 	esdfs_put_lower_path(old_dentry, &lower_old_path);
+ 	esdfs_put_lower_path(new_dentry, &lower_new_path);
++	esdfs_revert_creds(creds, &mask);
+ 	return err;
+ }
+ 
+-static int esdfs_readlink(struct dentry *dentry, char __user *buf, int bufsiz)
+-{
+-	int err;
+-	struct dentry *lower_dentry;
+-	struct path lower_path;
+-
+-	esdfs_get_lower_path(dentry, &lower_path);
+-	lower_dentry = lower_path.dentry;
+-	if (!lower_dentry->d_inode->i_op ||
+-	    !lower_dentry->d_inode->i_op->readlink) {
+-		err = -EINVAL;
+-		goto out;
+-	}
+-
+-	err = lower_dentry->d_inode->i_op->readlink(lower_dentry,
+-						    buf, bufsiz);
+-	if (err < 0)
+-		goto out;
+-	fsstack_copy_attr_atime(dentry->d_inode, lower_dentry->d_inode);
+-
+-out:
+-	esdfs_put_lower_path(dentry, &lower_path);
+-	return err;
+-}
+-
+-static void *esdfs_follow_link(struct dentry *dentry, struct nameidata *nd)
+-{
+-	char *buf;
+-	int len = PAGE_SIZE, err;
+-	mm_segment_t old_fs;
+-
+-	/* This is freed by the put_link method assuming a successful call. */
+-	buf = kmalloc(len, GFP_KERNEL);
+-	if (!buf) {
+-		buf = ERR_PTR(-ENOMEM);
+-		goto out;
+-	}
+-
+-	/* read the symlink, and then we will follow it */
+-	old_fs = get_fs();
+-	set_fs(KERNEL_DS);
+-	err = esdfs_readlink(dentry, buf, len);
+-	set_fs(old_fs);
+-	if (err < 0) {
+-		kfree(buf);
+-		buf = ERR_PTR(err);
+-	} else {
+-		buf[err] = '\0';
+-	}
+-out:
+-	nd_set_link(nd, buf);
+-	return NULL;
+-}
+-
+-/* this @nd *IS* still used */
+-static void esdfs_put_link(struct dentry *dentry, struct nameidata *nd,
+-			    void *cookie)
+-{
+-	char *buf = nd_get_link(nd);
+-	if (!IS_ERR(buf))	/* free the char* */
+-		kfree(buf);
+-}
+-
+ static int esdfs_permission(struct inode *inode, int mask)
+ {
+ 	struct inode *lower_inode;
+ 	int err;
++	int oldmask;
++	const struct cred *creds =
++			esdfs_override_creds(ESDFS_SB(inode->i_sb), &oldmask);
++	if (!creds)
++		return -ENOMEM;
+ 
+ 	lower_inode = esdfs_lower_inode(inode);
+ 	err = inode_permission(lower_inode, mask);
++
++	esdfs_revert_creds(creds, &oldmask);
+ 	return err;
+ }
+ 
+@@ -368,6 +254,11 @@ static int esdfs_setattr(struct dentry *dentry, struct iattr *ia)
+ 	struct path lower_path;
+ 	struct iattr lower_ia;
+ 
++	/* We don't allow chmod or chown, so skip those */
++	ia->ia_valid &= ~(ATTR_UID | ATTR_GID | ATTR_MODE);
++	if (!ia->ia_valid)
++		return 0;
++
+ 	inode = dentry->d_inode;
+ 
+ 	/*
+@@ -423,7 +314,7 @@ static int esdfs_setattr(struct dentry *dentry, struct iattr *ia)
+ 		goto out;
+ 
+ 	/* get attributes from the lower inode */
+-	fsstack_copy_attr_all(inode, lower_inode);
++	esdfs_copy_attr(inode, lower_inode);
+ 	/*
+ 	 * Not running fsstack_copy_inode_size(inode, lower_inode), because
+ 	 * VFS should update our inode size, and notify_change on
+@@ -436,29 +327,46 @@ out_err:
+ 	return err;
+ }
+ 
++static int esdfs_getattr(struct vfsmount *mnt, struct dentry *dentry,
++		 struct kstat *stat)
++{
++	struct dentry *lower_dentry;
++	struct inode *inode;
++	struct inode *lower_inode;
++	struct path lower_path;
++
++	inode = dentry->d_inode;
++
++	esdfs_get_lower_path(dentry, &lower_path);
++	lower_dentry = lower_path.dentry;
++	lower_inode = esdfs_lower_inode(inode);
++
++	esdfs_copy_attr(inode, lower_inode);
++
++	generic_fillattr(inode, stat);
++	esdfs_put_lower_path(dentry, &lower_path);
++	return 0;
++}
++
+ const struct inode_operations esdfs_symlink_iops = {
+-	.readlink	= esdfs_readlink,
+-	.permission	= esdfs_permission,
+-	.follow_link	= esdfs_follow_link,
++	.permission     = esdfs_permission,
+ 	.setattr	= esdfs_setattr,
+-	.put_link	= esdfs_put_link,
+ };
+ 
+ const struct inode_operations esdfs_dir_iops = {
+ 	.create		= esdfs_create,
+ 	.lookup		= esdfs_lookup,
+-	.link		= esdfs_link,
+ 	.unlink		= esdfs_unlink,
+-	.symlink	= esdfs_symlink,
+ 	.mkdir		= esdfs_mkdir,
+ 	.rmdir		= esdfs_rmdir,
+-	.mknod		= esdfs_mknod,
+ 	.rename		= esdfs_rename,
+-	.permission	= esdfs_permission,
++	.permission     = esdfs_permission,
+ 	.setattr	= esdfs_setattr,
++	.getattr	= esdfs_getattr,
+ };
+ 
+ const struct inode_operations esdfs_main_iops = {
+-	.permission	= esdfs_permission,
++	.permission     = esdfs_permission,
+ 	.setattr	= esdfs_setattr,
++	.getattr	= esdfs_getattr,
+ };
+diff --git a/fs/esdfs/lookup.c b/fs/esdfs/lookup.c
+index 51c63892e76..68bf8439e4b 100644
+--- a/fs/esdfs/lookup.c
++++ b/fs/esdfs/lookup.c
+@@ -3,6 +3,7 @@
+  * Copyright (c) 2009	   Shrikar Archak
+  * Copyright (c) 2003-2014 Stony Brook University
+  * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ * Copyright (C) 2013-2014 Motorola Mobility, LLC
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 as
+@@ -164,7 +165,7 @@ struct inode *esdfs_iget(struct super_block *sb, struct inode *lower_inode)
+ 				   lower_inode->i_rdev);
+ 
+ 	/* all well, copy inode attributes */
+-	fsstack_copy_attr_all(inode, lower_inode);
++	esdfs_copy_attr(inode, lower_inode);
+ 	fsstack_copy_inode_size(inode, lower_inode);
+ 
+ 	unlock_new_inode(inode);
+@@ -245,8 +246,8 @@ static struct dentry *__esdfs_lookup(struct dentry *dentry,
+ 	lower_dir_mnt = lower_parent_path->mnt;
+ 
+ 	/* Use vfs_path_lookup to check if the dentry exists or not */
+-	err = vfs_path_lookup(lower_dir_dentry, lower_dir_mnt, name, 0,
+-			      &lower_path);
++	err = vfs_path_lookup(lower_dir_dentry, lower_dir_mnt, name,
++			      LOOKUP_NOCASE, &lower_path);
+ 
+ 	/* no error: handle positive dentries */
+ 	if (!err) {
+@@ -302,6 +303,10 @@ struct dentry *esdfs_lookup(struct inode *dir, struct dentry *dentry,
+ 	struct dentry *ret, *parent;
+ 	struct path lower_parent_path;
+ 	int err = 0;
++	const struct cred *creds =
++			esdfs_override_creds(ESDFS_SB(dir->i_sb), NULL);
++	if (!creds)
++		return NULL;
+ 
+ 	parent = dget_parent(dentry);
+ 
+@@ -328,5 +333,6 @@ struct dentry *esdfs_lookup(struct inode *dir, struct dentry *dentry,
+ out:
+ 	esdfs_put_lower_path(parent, &lower_parent_path);
+ 	dput(parent);
++	esdfs_revert_creds(creds, NULL);
+ 	return ret;
+ }
+diff --git a/fs/esdfs/main.c b/fs/esdfs/main.c
+index 5c3f3dde605..c70a4f75c05 100644
+--- a/fs/esdfs/main.c
++++ b/fs/esdfs/main.c
+@@ -3,6 +3,7 @@
+  * Copyright (c) 2009	   Shrikar Archak
+  * Copyright (c) 2003-2014 Stony Brook University
+  * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ * Copyright (C) 2013-2014 Motorola Mobility, LLC
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 as
+@@ -11,17 +12,127 @@
+ 
+ #include "esdfs.h"
+ #include <linux/module.h>
++#include <linux/parser.h>
++
++/*
++ * Derived from first generation "ANDROID_EMU" glue in modifed F2FS driver.
++ */
++enum {
++	Opt_lower_perms,
++	Opt_upper_perms,
++	Opt_err
++};
++
++static match_table_t esdfs_tokens = {
++	{Opt_lower_perms, "lower=%s"},
++	{Opt_upper_perms, "upper=%s"},
++	{Opt_err, NULL},
++};
++
++static int parse_perms(struct esdfs_perms *perms, char *args)
++{
++	char *sep = args;
++	char *sepres;
++	int ret;
++
++	if (!sep)
++		return -EINVAL;
++
++	sepres = strsep(&sep, ":");
++	if (!sep)
++		return -EINVAL;
++	ret = kstrtou32(sepres, 0, &perms->uid);
++	if (ret)
++		return ret;
++
++	sepres = strsep(&sep, ":");
++	if (!sep)
++		return -EINVAL;
++	ret = kstrtou32(sepres, 0, &perms->gid);
++	if (ret)
++		return ret;
++
++	sepres = strsep(&sep, ":");
++	if (!sep)
++		return -EINVAL;
++	ret = kstrtou16(sepres, 0, &perms->fmask);
++	if (ret)
++		return ret;
++
++	sepres = strsep(&sep, ":");
++	ret = kstrtou16(sepres, 8, &perms->dmask);
++	if (ret)
++		return ret;
++
++	return 0;
++}
++
++static int parse_options(struct super_block *sb, char *options)
++{
++	struct esdfs_sb_info *sbi = ESDFS_SB(sb);
++	substring_t args[MAX_OPT_ARGS];
++	char *p;
++
++	if (!options)
++		return 0;
++
++	while ((p = strsep(&options, ",")) != NULL) {
++		int token;
++		if (!*p)
++			continue;
++		/*
++		 * Initialize args struct so we know whether arg was
++		 * found; some options take optional arguments.
++		 */
++		args[0].to = args[0].from = NULL;
++		token = match_token(p, esdfs_tokens, args);
++
++		switch (token) {
++		case Opt_lower_perms:
++			if (args->from) {
++				int ret;
++				char *perms = match_strdup(args);
++
++				ret = parse_perms(&sbi->lower_perms, perms);
++				kfree(perms);
++
++				if (ret)
++					return -EINVAL;
++			} else
++				return -EINVAL;
++			break;
++		case Opt_upper_perms:
++			if (args->from) {
++				int ret;
++				char *perms = match_strdup(args);
++
++				ret = parse_perms(&sbi->upper_perms, perms);
++				kfree(perms);
++
++				if (ret)
++					return -EINVAL;
++			} else
++				return -EINVAL;
++			break;
++		default:
++			printk(KERN_ERR	"Unrecognized mount option \"%s\" or missing value",
++				p);
++			return -EINVAL;
++		}
++	}
++	return 0;
++}
+ 
+ /*
+  * There is no need to lock the esdfs_super_info's rwsem as there is no
+  * way anyone can have a reference to the superblock at this point in time.
+  */
+-static int esdfs_read_super(struct super_block *sb, void *raw_data, int silent)
++static int esdfs_read_super(struct super_block *sb, const char *dev_name,
++		void *raw_data, int silent)
+ {
+ 	int err = 0;
+ 	struct super_block *lower_sb;
+ 	struct path lower_path;
+-	char *dev_name = (char *) raw_data;
+ 	struct inode *inode;
+ 
+ 	if (!dev_name) {
+@@ -45,9 +156,22 @@ static int esdfs_read_super(struct super_block *sb, void *raw_data, int silent)
+ 	if (!ESDFS_SB(sb)) {
+ 		printk(KERN_CRIT "esdfs: read_super: out of memory\n");
+ 		err = -ENOMEM;
+-		goto out_free;
++		goto out_pput;
+ 	}
+ 
++	/* set defaults and then parse the mount options */
++	ESDFS_SB(sb)->lower_perms.uid = ESDFS_DEFAULT_LOWER_UID;
++	ESDFS_SB(sb)->lower_perms.gid = ESDFS_DEFAULT_LOWER_GID;
++	ESDFS_SB(sb)->lower_perms.fmask = ESDFS_DEFAULT_LOWER_FMASK;
++	ESDFS_SB(sb)->lower_perms.dmask = ESDFS_DEFAULT_LOWER_DMASK;
++	ESDFS_SB(sb)->upper_perms.uid = ESDFS_DEFAULT_UPPER_UID;
++	ESDFS_SB(sb)->upper_perms.gid = ESDFS_DEFAULT_UPPER_GID;
++	ESDFS_SB(sb)->upper_perms.fmask = ESDFS_DEFAULT_UPPER_FMASK;
++	ESDFS_SB(sb)->upper_perms.dmask = ESDFS_DEFAULT_UPPER_DMASK;
++	err = parse_options(sb, (char *)raw_data);
++	if (err)
++		goto out_free;
++
+ 	/* set the lower superblock field of upper superblock */
+ 	lower_sb = lower_path.dentry->d_sb;
+ 	atomic_inc(&lower_sb->s_active);
+@@ -108,22 +232,38 @@ out_iput:
+ out_sput:
+ 	/* drop refs we took earlier */
+ 	atomic_dec(&lower_sb->s_active);
++out_free:
+ 	kfree(ESDFS_SB(sb));
+ 	sb->s_fs_info = NULL;
+-out_free:
++out_pput:
+ 	path_put(&lower_path);
+ 
+ out:
+ 	return err;
+ }
+ 
++/*
++ * Based on mount_nodev() in fs/super.c (need to pass mount options).
++ */
+ struct dentry *esdfs_mount(struct file_system_type *fs_type, int flags,
+ 			    const char *dev_name, void *raw_data)
+ {
+-	void *lower_path_name = (void *) dev_name;
++	int error;
++	struct super_block *s = sget(fs_type, NULL, set_anon_super, flags, NULL);
++
++	if (IS_ERR(s))
++		return ERR_CAST(s);
+ 
+-	return mount_nodev(fs_type, flags, lower_path_name,
+-			   esdfs_read_super);
++	s->s_flags = flags;
++
++	error = esdfs_read_super(s, dev_name, raw_data,
++					flags & MS_SILENT ? 1 : 0);
++	if (error) {
++		deactivate_locked_super(s);
++		return ERR_PTR(error);
++	}
++	s->s_flags |= MS_ACTIVE;
++	return dget(s->s_root);
+ }
+ 
+ static struct file_system_type esdfs_fs_type = {
+@@ -165,9 +305,8 @@ static void __exit exit_esdfs_fs(void)
+ }
+ 
+ MODULE_AUTHOR("Erez Zadok, Filesystems and Storage Lab, Stony Brook University"
+-	      " (http://www.fsl.cs.sunysb.edu/)");
+-MODULE_DESCRIPTION("Wrapfs " ESDFS_VERSION
+-		   " (http://esdfs.filesystems.org/)");
++	      " (http://www.fsl.cs.sunysb.edu/), Motorola Mobility, LLC");
++MODULE_DESCRIPTION("Emulated 'SD card' Filesystem");
+ MODULE_LICENSE("GPL");
+ 
+ module_init(init_esdfs_fs);
+diff --git a/fs/esdfs/mmap.c b/fs/esdfs/mmap.c
+index 461b28fce9d..671370c13ba 100644
+--- a/fs/esdfs/mmap.c
++++ b/fs/esdfs/mmap.c
+@@ -3,6 +3,7 @@
+  * Copyright (c) 2009	   Shrikar Archak
+  * Copyright (c) 2003-2014 Stony Brook University
+  * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ * Copyright (C) 2013-2014 Motorola Mobility, LLC
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 as
+diff --git a/fs/esdfs/super.c b/fs/esdfs/super.c
+index 896734d965e..2fc61c128e9 100644
+--- a/fs/esdfs/super.c
++++ b/fs/esdfs/super.c
+@@ -3,6 +3,7 @@
+  * Copyright (c) 2009	   Shrikar Archak
+  * Copyright (c) 2003-2014 Stony Brook University
+  * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ * Copyright (C) 2013-2014 Motorola Mobility, LLC
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 as
+@@ -155,13 +156,40 @@ static void esdfs_umount_begin(struct super_block *sb)
+ 		lower_sb->s_op->umount_begin(lower_sb);
+ }
+ 
++static int esdfs_show_options(struct seq_file *seq, struct dentry *root)
++{
++	struct esdfs_sb_info *sbi = ESDFS_SB(root->d_sb);
++
++	if (sbi->lower_perms.uid != ESDFS_DEFAULT_LOWER_UID ||
++	    sbi->lower_perms.gid != ESDFS_DEFAULT_LOWER_GID ||
++	    sbi->lower_perms.fmask != ESDFS_DEFAULT_LOWER_FMASK ||
++	    sbi->lower_perms.dmask != ESDFS_DEFAULT_LOWER_DMASK)
++		seq_printf(seq, ",lower=%u:%u:%ho:%ho",
++				sbi->lower_perms.uid,
++				sbi->lower_perms.gid,
++				sbi->lower_perms.fmask,
++				sbi->lower_perms.dmask);
++
++	if (sbi->upper_perms.uid != ESDFS_DEFAULT_UPPER_UID ||
++	    sbi->upper_perms.gid != ESDFS_DEFAULT_UPPER_GID ||
++	    sbi->upper_perms.fmask != ESDFS_DEFAULT_UPPER_FMASK ||
++	    sbi->upper_perms.dmask != ESDFS_DEFAULT_UPPER_DMASK)
++		seq_printf(seq, ",upper=%u:%u:%ho:%ho",
++				sbi->upper_perms.uid,
++				sbi->upper_perms.gid,
++				sbi->upper_perms.fmask,
++				sbi->upper_perms.dmask);
++
++	return 0;
++}
++
+ const struct super_operations esdfs_sops = {
+ 	.put_super	= esdfs_put_super,
+ 	.statfs		= esdfs_statfs,
+ 	.remount_fs	= esdfs_remount_fs,
+ 	.evict_inode	= esdfs_evict_inode,
+ 	.umount_begin	= esdfs_umount_begin,
+-	.show_options	= generic_show_options,
++	.show_options	= esdfs_show_options,
+ 	.alloc_inode	= esdfs_alloc_inode,
+ 	.destroy_inode	= esdfs_destroy_inode,
+ 	.drop_inode	= generic_delete_inode,
+-- 
+2.11.0
+

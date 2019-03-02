@@ -1,0 +1,38 @@
+From 2ee5fc9252500f3ad10557fd1f356683095d41ce Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Wed, 23 Sep 2015 09:53:34 -0500
+Subject: [PATCH 356/959] IKSWM-3234: fs: esdfs: Remove the optimization to
+ skip hash lookup.
+
+Remove the optimization to avoid hash table lookup, since this
+fails for certain cases where files are copied to the root of
+the storage.
+
+Change-Id: I0952e7b9691c19e35bb7e8089fbc2bf737651d3a
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/785655
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Russell Knize <rknize@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/esdfs/derive.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/fs/esdfs/derive.c b/fs/esdfs/derive.c
+index 5a3e0c75017..4970bbedb95 100644
+--- a/fs/esdfs/derive.c
++++ b/fs/esdfs/derive.c
+@@ -537,8 +537,6 @@ int esdfs_check_derived_permission(struct inode *inode, int mask)
+ 		/* If we don't need to confine, we're done. */
+ 		if (!test_opt(ESDFS_SB(inode->i_sb), DERIVE_CONFINE))
+ 			return 0;
+-		/* If we do, we can still skip the hash lookup. */
+-		access = HAS_SDCARD_RW;
+ 	}
+ 
+ 	cred = current_cred();
+-- 
+2.11.0
+

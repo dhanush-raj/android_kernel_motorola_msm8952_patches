@@ -1,0 +1,270 @@
+From 0cea89c3589584e543ac4b7732d536dc35db1165 Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Fri, 22 Aug 2014 11:13:20 -0500
+Subject: [PATCH 069/959] IKLOCSEN-1634:misc:stml0xx: prevent recursive
+ reset_and_init calls
+
+Make sure reset_and_init uses "no_reset" functions when
+initializing the stm so that we do not end up in a infinite
+recursion
+
+Change-Id: I92ea153e9bd5465d6935bd166142c4c3539b6923
+Signed-off-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/665509
+Tested-by: Jira Key <jirakey@motorola.com>
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_led.c   |  8 +++++++-
+ drivers/misc/stml0xx/stml0xx_reset.c | 36 ++++++++++++++++++++++++------------
+ drivers/misc/stml0xx/stml0xx_spi.c   | 34 ++++++++++++++++++++++++++++------
+ include/linux/stml0xx.h              | 10 ++++++++++
+ 4 files changed, 69 insertions(+), 19 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_led.c b/drivers/misc/stml0xx/stml0xx_led.c
+index 0f2e08069ea..4b393495d8e 100644
+--- a/drivers/misc/stml0xx/stml0xx_led.c
++++ b/drivers/misc/stml0xx/stml0xx_led.c
+@@ -25,6 +25,11 @@
+ 
+ int stml0xx_led_set(struct led_classdev *led_cdev)
+ {
++	return stml0xx_led_set_reset(led_cdev, RESET_ALLOWED);
++}
++
++int stml0xx_led_set_reset(struct led_classdev *led_cdev, uint8_t allow_reset)
++{
+ 	unsigned char buf[SPI_MSG_SIZE];
+ 	int err;
+ 
+@@ -43,7 +48,8 @@ int stml0xx_led_set(struct led_classdev *led_cdev)
+ 	buf[10] = (led_cdev->blink_delay_off >> 8) & 0xFF;
+ 	buf[11] = led_cdev->blink_delay_off & 0xFF;
+ 
+-	err = stml0xx_spi_send_write_reg(LED_NOTIF_CONTROL, buf, 12);
++	err = stml0xx_spi_send_write_reg_reset(LED_NOTIF_CONTROL, buf, 12,
++		allow_reset);
+ 	if (err < 0)
+ 		return err;
+ 
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index 970ea94dc2e..adb115b61ea 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -76,7 +76,8 @@ int stml0xx_reset_and_init(void)
+ 	stml0xx_wake(stml0xx_misc_data);
+ 
+ 	buf[0] = stml0xx_g_acc_delay;
+-	err = stml0xx_spi_send_write_reg(ACCEL_UPDATE_RATE, buf, 1);
++	err = stml0xx_spi_send_write_reg_reset(ACCEL_UPDATE_RATE, buf,
++			1, RESET_NOT_ALLOWED);
+ 	if (err < 0)
+ 		ret_err = err;
+ 
+@@ -90,29 +91,34 @@ int stml0xx_reset_and_init(void)
+ 	buf[0] = stml0xx_g_nonwake_sensor_state & 0xFF;
+ 	buf[1] = (stml0xx_g_nonwake_sensor_state >> 8) & 0xFF;
+ 	buf[2] = stml0xx_g_nonwake_sensor_state >> 16;
+-	err = stml0xx_spi_send_write_reg(NONWAKESENSOR_CONFIG, buf, 3);
++	err = stml0xx_spi_send_write_reg_reset(NONWAKESENSOR_CONFIG, buf,
++			3, RESET_NOT_ALLOWED);
+ 	if (err < 0)
+ 		ret_err = err;
+ 
+ 	buf[0] = stml0xx_g_wake_sensor_state & 0xFF;
+ 	buf[1] = stml0xx_g_wake_sensor_state >> 8;
+-	err = stml0xx_spi_send_write_reg(WAKESENSOR_CONFIG, buf, 2);
++	err = stml0xx_spi_send_write_reg_reset(WAKESENSOR_CONFIG, buf,
++			2, RESET_NOT_ALLOWED);
+ 	if (err < 0)
+ 		ret_err = err;
+ 
+ 	buf[0] = stml0xx_g_algo_state & 0xFF;
+ 	buf[1] = stml0xx_g_algo_state >> 8;
+-	err = stml0xx_spi_send_write_reg(ALGO_CONFIG, buf, 2);
++	err = stml0xx_spi_send_write_reg_reset(ALGO_CONFIG, buf, 2,
++			RESET_NOT_ALLOWED);
+ 	if (err < 0)
+ 		ret_err = err;
+ 
+ 	buf[0] = stml0xx_g_motion_dur;
+-	err = stml0xx_spi_send_write_reg(MOTION_DUR, buf, 1);
++	err = stml0xx_spi_send_write_reg_reset(MOTION_DUR, buf,
++			1, RESET_NOT_ALLOWED);
+ 	if (err < 0)
+ 		ret_err = err;
+ 
+ 	buf[0] = stml0xx_g_zmotion_dur;
+-	err = stml0xx_spi_send_write_reg(ZRMOTION_DUR, buf, 1);
++	err = stml0xx_spi_send_write_reg_reset(ZRMOTION_DUR, buf,
++			1, RESET_NOT_ALLOWED);
+ 	if (err < 0)
+ 		ret_err = err;
+ 
+@@ -122,16 +128,20 @@ int stml0xx_reset_and_init(void)
+ 			       stml0xx_g_algo_requst[i].data,
+ 			       stml0xx_g_algo_requst[i].size);
+ 			err =
+-			    stml0xx_spi_send_write_reg(stml0xx_algo_info
++			    stml0xx_spi_send_write_reg_reset(
++						       stml0xx_algo_info
+ 						       [i].req_register, buf,
+ 						       stml0xx_g_algo_requst
+-						       [i].size);
++						       [i].size,
++						       RESET_NOT_ALLOWED);
+ 			if (err < 0)
+ 				ret_err = err;
+ 		}
+ 	}
+-	err = stml0xx_spi_send_read_reg(INTERRUPT_STATUS, buf, 3);
+-	err = stml0xx_spi_send_read_reg(WAKESENSOR_STATUS, buf, 2);
++	err = stml0xx_spi_send_read_reg_reset(INTERRUPT_STATUS, buf,
++			3, RESET_NOT_ALLOWED);
++	err = stml0xx_spi_send_read_reg_reset(WAKESENSOR_STATUS, buf,
++			2, RESET_NOT_ALLOWED);
+ 
+ 	buf[0] = (pdata->ct406_detect_threshold >> 8) & 0xff;
+ 	buf[1] = pdata->ct406_detect_threshold & 0xff;
+@@ -140,14 +150,16 @@ int stml0xx_reset_and_init(void)
+ 	buf[4] = (pdata->ct406_recalibrate_threshold >> 8) & 0xff;
+ 	buf[5] = pdata->ct406_recalibrate_threshold & 0xff;
+ 	buf[6] = pdata->ct406_pulse_count & 0xff;
+-	err = stml0xx_spi_send_write_reg(PROX_SETTINGS, buf, 7);
++	err = stml0xx_spi_send_write_reg_reset(PROX_SETTINGS, buf,
++			7, RESET_NOT_ALLOWED);
+ 	if (err < 0) {
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+ 			"unable to write proximity settings %d", err);
+ 		ret_err = err;
+ 	}
+ 
+-	err = stml0xx_led_set(&stml0xx_misc_data->led_cdev);
++	err = stml0xx_led_set_reset(&stml0xx_misc_data->led_cdev,
++			RESET_NOT_ALLOWED);
+ 	if (err < 0)
+ 		ret_err =  err;
+ 
+diff --git a/drivers/misc/stml0xx/stml0xx_spi.c b/drivers/misc/stml0xx/stml0xx_spi.c
+index 8506876fcb0..4625dccb961 100644
+--- a/drivers/misc/stml0xx/stml0xx_spi.c
++++ b/drivers/misc/stml0xx/stml0xx_spi.c
+@@ -467,6 +467,14 @@ EXIT:
+ int stml0xx_spi_send_write_reg(unsigned char reg_type,
+ 			       unsigned char *reg_data, int reg_size)
+ {
++	return stml0xx_spi_send_write_reg_reset(reg_type, reg_data,
++	    reg_size, RESET_ALLOWED);
++}
++
++int stml0xx_spi_send_write_reg_reset(unsigned char reg_type,
++			       unsigned char *reg_data, int reg_size,
++			       uint8_t reset_allowed)
++{
+ 	int tries;
+ 	int reset_retries;
+ 	int ret = -EIO;
+@@ -489,16 +497,19 @@ int stml0xx_spi_send_write_reg(unsigned char reg_type,
+ 		}
+ 
+ 		if (ret < 0) {
+-			stml0xx_reset_and_init();
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+-				"stml0xx_spi_send_write_reg SPI transfer error [%d], retries left [%d]",
++				"stml0xx_spi_send_write_reg_reset SPI transfer error [%d], retries left [%d]",
+ 				ret, reset_retries);
++			if (reset_allowed)
++				stml0xx_reset_and_init();
++			else
++				break;
+ 		}
+ 	}
+ 
+ 	if (reset_retries == RESET_RETRIES) {
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+-			"stml0xx_spi_send_write_reg spi failure");
++			"stml0xx_spi_send_write_reg_reset spi failure");
+ 	}
+ 
+ 	return ret;
+@@ -574,6 +585,14 @@ EXIT:
+ int stml0xx_spi_send_read_reg(unsigned char reg_type,
+ 			      unsigned char *reg_data, int reg_size)
+ {
++	return stml0xx_spi_send_read_reg_reset(reg_type, reg_data,
++	    reg_size, RESET_ALLOWED);
++}
++
++int stml0xx_spi_send_read_reg_reset(unsigned char reg_type,
++			      unsigned char *reg_data, int reg_size,
++			      uint8_t reset_allowed)
++{
+ 	int tries;
+ 	int reset_retries;
+ 	int ret = -EIO;
+@@ -597,16 +616,19 @@ int stml0xx_spi_send_read_reg(unsigned char reg_type,
+ 		}
+ 
+ 		if (ret < 0) {
+-			stml0xx_reset_and_init();
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+-				"stml0xx_spi_send_read_reg SPI transfer error [%d], retries left [%d]",
++				"stml0xx_spi_send_read_reg_reset SPI transfer error [%d], retries left [%d]",
+ 				ret, reset_retries);
++			if (reset_allowed)
++				stml0xx_reset_and_init();
++			else
++				break;
+ 		}
+ 	}
+ 
+ 	if (reset_retries == RESET_RETRIES) {
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+-			"stml0xx_spi_send_read_reg spi failure");
++			"stml0xx_spi_send_read_reg_reset spi failure");
+ 	}
+ 
+ 	return ret;
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 1f14357ac32..7e469ce670c 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -486,6 +486,9 @@ struct stm_response {
+ #define STML0XX_LED_HALF_BRIGHTNESS 0x007F7F7F
+ #define STML0XX_LED_OFF 0x00000000
+ 
++#define RESET_ALLOWED 1
++#define RESET_NOT_ALLOWED 0
++
+ /* The following macros are intended to be called with the stm IRQ handlers */
+ /* only and refer to local variables in those functions. */
+ #define STM16_TO_HOST(x) ((short) be16_to_cpu( \
+@@ -630,8 +633,14 @@ int stml0xx_spi_write(unsigned char *buf, int len);
+ int stml0xx_spi_transfer(unsigned char *tx_buf, unsigned char *rx_buf, int len);
+ int stml0xx_spi_send_write_reg(unsigned char reg_type,
+ 			       unsigned char *reg_data, int reg_data_size);
++int stml0xx_spi_send_write_reg_reset(unsigned char reg_type,
++			       unsigned char *reg_data, int reg_data_size,
++			       uint8_t reset_allowed);
+ int stml0xx_spi_send_read_reg(unsigned char reg_type,
+ 			      unsigned char *reg_data, int reg_data_size);
++int stml0xx_spi_send_read_reg_reset(unsigned char reg_type,
++			      unsigned char *reg_data, int reg_data_size,
++			      uint8_t reset_allowed);
+ void stml0xx_spi_swap_bytes(unsigned char *data, int size);
+ unsigned short stml0xx_spi_calculate_crc(unsigned char *data, int len);
+ void stml0xx_spi_append_crc(unsigned char *data, int len);
+@@ -654,6 +663,7 @@ int switch_stml0xx_mode(enum stm_mode mode);
+ int stml0xx_bootloadermode(struct stml0xx_data *ps_stml0xx);
+ 
+ int stml0xx_led_set(struct led_classdev *led_cdev);
++int stml0xx_led_set_reset(struct led_classdev *led_cdev, uint8_t allow_reset);
+ void stml0xx_brightness_set(struct led_classdev *led_cdev,
+ 	enum led_brightness value);
+ enum led_brightness stml0xx_brightness_get(struct led_classdev *led_cdev);
+-- 
+2.11.0
+

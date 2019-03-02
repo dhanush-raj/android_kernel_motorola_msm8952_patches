@@ -1,0 +1,284 @@
+From 52fd75dc4f1ddd71fa21718081a8655f0a05ebee Mon Sep 17 00:00:00 2001
+From: "Russ W. Knize" <Russ.Knize@motorola.com>
+Date: Thu, 16 Oct 2014 16:44:53 -0500
+Subject: [PATCH 349/959] IKSWL-1135: esdfs: improve support for SELinux
+
+Propagated from IKXLUPGRD-1796, IKXLUPGRD-1928, and IKXLUPGRD-6554.
+
+With an ever tightening sepolicy, esdfs needs to use the correct
+SID for any VFS calls that it makes.  The Linux security API does
+not provide an elegant way to do this, so its done with brute force.
+The security context is hard-coded in the lower half, for security
+reasons.
+
+Change-Id: I8096df5ddd69bc773368ad44c540e9c3dfa102ed
+Signed-off-by: Russ Knize <Russ.Knize@motorola.com>
+Reviewed-on: http://gerrit.mot.com/688932
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/esdfs/esdfs.h | 33 +++++++++++++++++++++++++++++++++
+ fs/esdfs/file.c  | 25 +++++++++++++++++++++++++
+ fs/esdfs/inode.c | 19 +++++++++++++++----
+ fs/esdfs/main.c  |  7 ++++++-
+ 4 files changed, 79 insertions(+), 5 deletions(-)
+
+diff --git a/fs/esdfs/esdfs.h b/fs/esdfs/esdfs.h
+index c72ff9098dc..dd63615a738 100644
+--- a/fs/esdfs/esdfs.h
++++ b/fs/esdfs/esdfs.h
+@@ -155,6 +155,7 @@ struct esdfs_dentry_info {
+ /* esdfs super-block data in memory */
+ struct esdfs_sb_info {
+ 	struct super_block *lower_sb;
++	u32 lower_secid;
+ 	struct esdfs_perms lower_perms;
+ 	struct esdfs_perms upper_perms;	/* root in derived mode */
+ 	struct dentry *obb_parent;	/* pinned dentry for obb link parent */
+@@ -438,6 +439,37 @@ static inline void esdfs_copy_attr(struct inode *dest, const struct inode *src)
+ 	esdfs_set_perms(dest);
+ }
+ 
++#ifdef CONFIG_SECURITY_SELINUX
++/*
++ * Hard-code the lower source context to prevent anyone with mount permissions
++ * from doing something nasty.
++ */
++#define ESDFS_LOWER_SECCTX "u:r:sdcardd:s0"
++
++/*
++ * Hack to be able to poke at the SID.  The Linux Security API does not provide
++ * a way to change just the SID in the creds (probably on purpose).
++ */
++struct task_security_struct {
++	u32 osid;		/* SID prior to last execve */
++	u32 sid;		/* current SID */
++	u32 exec_sid;		/* exec SID */
++	u32 create_sid;		/* fscreate SID */
++	u32 keycreate_sid;	/* keycreate SID */
++	u32 sockcreate_sid;	/* fscreate SID */
++};
++static inline void esdfs_override_secid(struct esdfs_sb_info *sbi,
++					struct cred *creds)
++{
++	struct task_security_struct *tsec = creds->security;
++
++	if (sbi->lower_secid)
++		tsec->sid = sbi->lower_secid;
++}
++#else
++static inline void esdfs_override_secid(struct esdfs_sb_info *sbi,
++					struct cred *creds) {}
++#endif
+ /*
+  * Based on nfs4_save_creds() and nfs4_reset_creds() in nfsd/nfs4recover.c.
+  * Returns NULL if prepare_creds() could not allocate heap, otherwise
+@@ -458,6 +490,7 @@ static inline const struct cred *esdfs_override_creds(
+ 
+ 	creds->fsuid = sbi->lower_perms.uid;
+ 	creds->fsgid = sbi->lower_perms.gid;
++	esdfs_override_secid(sbi, creds);
+ 
+ 	/* this installs the new creds into current, which we must destroy */
+ 	return override_creds(creds);
+diff --git a/fs/esdfs/file.c b/fs/esdfs/file.c
+index eb916bc3ea1..d727bf6f304 100644
+--- a/fs/esdfs/file.c
++++ b/fs/esdfs/file.c
+@@ -18,6 +18,10 @@ static ssize_t esdfs_read(struct file *file, char __user *buf,
+ 	int err;
+ 	struct file *lower_file;
+ 	struct dentry *dentry = file->f_path.dentry;
++	const struct cred *creds =
++			esdfs_override_creds(ESDFS_SB(dentry->d_sb), NULL);
++	if (!creds)
++		return -ENOMEM;
+ 
+ 	lower_file = esdfs_lower_file(file);
+ 	err = vfs_read(lower_file, buf, count, ppos);
+@@ -26,6 +30,7 @@ static ssize_t esdfs_read(struct file *file, char __user *buf,
+ 		fsstack_copy_attr_atime(dentry->d_inode,
+ 					lower_file->f_path.dentry->d_inode);
+ 
++	esdfs_revert_creds(creds, NULL);
+ 	return err;
+ }
+ 
+@@ -35,6 +40,10 @@ static ssize_t esdfs_write(struct file *file, const char __user *buf,
+ 	int err = 0;
+ 	struct file *lower_file;
+ 	struct dentry *dentry = file->f_path.dentry;
++	const struct cred *creds =
++			esdfs_override_creds(ESDFS_SB(dentry->d_sb), NULL);
++	if (!creds)
++		return -ENOMEM;
+ 
+ 	lower_file = esdfs_lower_file(file);
+ 	err = vfs_write(lower_file, buf, count, ppos);
+@@ -46,6 +55,7 @@ static ssize_t esdfs_write(struct file *file, const char __user *buf,
+ 				lower_file->f_path.dentry->d_inode);
+ 	}
+ 
++	esdfs_revert_creds(creds, NULL);
+ 	return err;
+ }
+ 
+@@ -54,6 +64,10 @@ static int esdfs_readdir(struct file *file, void *dirent, filldir_t filldir)
+ 	int err = 0;
+ 	struct file *lower_file = NULL;
+ 	struct dentry *dentry = file->f_path.dentry;
++	const struct cred *creds =
++			esdfs_override_creds(ESDFS_SB(dentry->d_sb), NULL);
++	if (!creds)
++		return -ENOMEM;
+ 
+ 	lower_file = esdfs_lower_file(file);
+ 	err = vfs_readdir(lower_file, filldir, dirent);
+@@ -61,6 +75,7 @@ static int esdfs_readdir(struct file *file, void *dirent, filldir_t filldir)
+ 	if (err >= 0)		/* copy the atime */
+ 		fsstack_copy_attr_atime(dentry->d_inode,
+ 					lower_file->f_path.dentry->d_inode);
++	esdfs_revert_creds(creds, NULL);
+ 	return err;
+ }
+ 
+@@ -169,6 +184,10 @@ static int esdfs_open(struct inode *inode, struct file *file)
+ 	int err = 0;
+ 	struct file *lower_file = NULL;
+ 	struct path lower_path;
++	const struct cred *creds =
++			esdfs_override_creds(ESDFS_SB(inode->i_sb), NULL);
++	if (!creds)
++		return -ENOMEM;
+ 
+ 	/* don't open unhashed/deleted files */
+ 	if (d_unhashed(file->f_path.dentry)) {
+@@ -203,6 +222,7 @@ static int esdfs_open(struct inode *inode, struct file *file)
+ 	else
+ 		esdfs_copy_attr(inode, esdfs_lower_inode(inode));
+ out_err:
++	esdfs_revert_creds(creds, NULL);
+ 	return err;
+ }
+ 
+@@ -240,6 +260,10 @@ static int esdfs_fsync(struct file *file, loff_t start, loff_t end,
+ 	struct file *lower_file;
+ 	struct path lower_path;
+ 	struct dentry *dentry = file->f_path.dentry;
++	const struct cred *creds =
++			esdfs_override_creds(ESDFS_SB(dentry->d_sb), NULL);
++	if (!creds)
++		return -ENOMEM;
+ 
+ 	err = generic_file_fsync(file, start, end, datasync);
+ 	if (err)
+@@ -249,6 +273,7 @@ static int esdfs_fsync(struct file *file, loff_t start, loff_t end,
+ 	err = vfs_fsync_range(lower_file, start, end, datasync);
+ 	esdfs_put_lower_path(dentry, &lower_path);
+ out:
++	esdfs_revert_creds(creds, NULL);
+ 	return err;
+ }
+ 
+diff --git a/fs/esdfs/inode.c b/fs/esdfs/inode.c
+index 31d65670002..0308e99c2f9 100644
+--- a/fs/esdfs/inode.c
++++ b/fs/esdfs/inode.c
+@@ -19,6 +19,7 @@ static int esdfs_create(struct inode *dir, struct dentry *dentry,
+ 	struct dentry *lower_dentry;
+ 	struct dentry *lower_parent_dentry = NULL;
+ 	struct path lower_path;
++	struct inode *lower_inode;
+ 	int mask;
+ 	const struct cred *creds;
+ 
+@@ -40,8 +41,8 @@ static int esdfs_create(struct inode *dir, struct dentry *dentry,
+ 
+ 	esdfs_set_lower_mode(ESDFS_SB(dir->i_sb), &mode);
+ 
+-	err = vfs_create(lower_parent_dentry->d_inode, lower_dentry, mode,
+-			 want_excl);
++	lower_inode = esdfs_lower_inode(dir);
++	err = vfs_create(lower_inode, lower_dentry, mode, want_excl);
+ 	if (err)
+ 		goto out;
+ 
+@@ -294,6 +295,7 @@ static int esdfs_setattr(struct dentry *dentry, struct iattr *ia)
+ 	struct inode *lower_inode;
+ 	struct path lower_path;
+ 	struct iattr lower_ia;
++	const struct cred *creds;
+ 
+ 	/* We don't allow chmod or chown, so skip those */
+ 	ia->ia_valid &= ~(ATTR_UID | ATTR_GID | ATTR_MODE);
+@@ -309,7 +311,11 @@ static int esdfs_setattr(struct dentry *dentry, struct iattr *ia)
+ 	 */
+ 	err = inode_change_ok(inode, ia);
+ 	if (err)
+-		goto out_err;
++		return err;
++
++	creds = esdfs_override_creds(ESDFS_SB(dentry->d_inode->i_sb), NULL);
++	if (!creds)
++		return -ENOMEM;
+ 
+ 	esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+@@ -364,7 +370,7 @@ static int esdfs_setattr(struct dentry *dentry, struct iattr *ia)
+ 
+ out:
+ 	esdfs_put_lower_path(dentry, &lower_path);
+-out_err:
++	esdfs_revert_creds(creds, NULL);
+ 	return err;
+ }
+ 
+@@ -376,6 +382,10 @@ static int esdfs_getattr(struct vfsmount *mnt, struct dentry *dentry,
+ 	struct kstat lower_stat;
+ 	struct inode *lower_inode;
+ 	struct inode *inode = dentry->d_inode;
++	const struct cred *creds =
++			esdfs_override_creds(ESDFS_SB(inode->i_sb), NULL);
++	if (!creds)
++		return -ENOMEM;
+ 
+ 	esdfs_get_lower_path(dentry, &lower_path);
+ 
+@@ -393,6 +403,7 @@ static int esdfs_getattr(struct vfsmount *mnt, struct dentry *dentry,
+ 
+ out:
+ 	esdfs_put_lower_path(dentry, &lower_path);
++	esdfs_revert_creds(creds, NULL);
+ 	return err;
+ }
+ 
+diff --git a/fs/esdfs/main.c b/fs/esdfs/main.c
+index af8d7c47366..b4d2c721791 100644
+--- a/fs/esdfs/main.c
++++ b/fs/esdfs/main.c
+@@ -13,6 +13,7 @@
+ #include "esdfs.h"
+ #include <linux/module.h>
+ #include <linux/parser.h>
++#include <linux/security.h>
+ 
+ /*
+  * Derived from first generation "ANDROID_EMU" glue in modifed F2FS driver.
+@@ -256,7 +257,11 @@ static int esdfs_read_super(struct super_block *sb, const char *dev_name,
+ 
+ 	/* set the lower dentries for s_root */
+ 	esdfs_set_lower_path(sb->s_root, &lower_path);
+-
++#ifdef CONFIG_SECURITY_SELINUX
++	security_secctx_to_secid(ESDFS_LOWER_SECCTX,
++				 strlen(ESDFS_LOWER_SECCTX),
++				 &sbi->lower_secid);
++#endif
+ 	/*
+ 	 * No need to call interpose because we already have a positive
+ 	 * dentry, which was instantiated by d_make_root.  Just need to
+-- 
+2.11.0
+

@@ -1,0 +1,130 @@
+From c254b0c70fbd7ba05d051da019f71a94bbfbed82 Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Mon, 10 Nov 2014 15:16:28 -0600
+Subject: [PATCH 094/959] IKLOCSEN-1586:drivers:misc:stml0xx: implement spi reg
+ offset
+
+Impletment the register read/write with an offset
+which will allow us to read/write registers that are
+larger than our spi message size.
+
+Change-Id: I52e13e6e87a5cc5b8c4db51e2968ecdcecdadc5e
+Signed-off-by: Dan Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/688132
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_spi.c | 61 ++++++++++++++++++++++----------------
+ 1 file changed, 36 insertions(+), 25 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_spi.c b/drivers/misc/stml0xx/stml0xx_spi.c
+index e81179e2225..b2de17e336b 100644
+--- a/drivers/misc/stml0xx/stml0xx_spi.c
++++ b/drivers/misc/stml0xx/stml0xx_spi.c
+@@ -523,45 +523,55 @@ static int stml0xx_spi_send_read_reg_no_retries(unsigned char reg_type,
+ 					 unsigned char *reg_data,
+ 					 int reg_size)
+ {
++	int data_offset = 0, data_size;
++	int remaining_data_size = reg_size;
+ 	unsigned short recv_crc, calc_crc;
+ 	int ret = 0;
+ 
+-	/* TODO: No support for offset for now */
+ 	if (!reg_data || reg_size <= 0 ||
+-	    reg_size > SPI_MAX_PAYLOAD_LEN) {
++	    reg_size > STML0XX_MAX_REG_LEN) {
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Invalid buffer or buffer size");
+ 		ret = -EFAULT;
+ 		goto EXIT;
+ 	}
+ 
+-	/* Clear buffer */
+-	memset(stml0xx_cmdbuff, 0, SPI_MSG_SIZE);
++	while (remaining_data_size > 0) {
++		/* Clear buffer */
++		memset(stml0xx_cmdbuff, 0, SPI_MSG_SIZE);
+ 
+-	/* Populate header */
+-	stml0xx_cmdbuff[0] = SPI_BARKER_1;
+-	stml0xx_cmdbuff[1] = SPI_BARKER_2;
+-	stml0xx_cmdbuff[2] = SPI_MSG_TYPE_READ_REG;
+-	stml0xx_cmdbuff[3] = reg_type;
+-	stml0xx_cmdbuff[4] = 0;	/* offset */
+-	stml0xx_cmdbuff[5] = reg_size;
++		/* Populate header */
++		stml0xx_cmdbuff[0] = SPI_BARKER_1;
++		stml0xx_cmdbuff[1] = SPI_BARKER_2;
++		stml0xx_cmdbuff[2] = SPI_MSG_TYPE_READ_REG;
++		stml0xx_cmdbuff[3] = reg_type;
++
++		/* Payload data offset */
++		stml0xx_cmdbuff[4] = data_offset;
++		data_size = (remaining_data_size < SPI_MAX_PAYLOAD_LEN) ?
++		    remaining_data_size : SPI_MAX_PAYLOAD_LEN;
++		stml0xx_cmdbuff[5] = data_size;
+ 
+-	/* Swap all bytes */
+-	stml0xx_spi_swap_bytes(stml0xx_cmdbuff, SPI_MSG_SIZE - SPI_CRC_LEN);
++		/* Swap all bytes */
++		stml0xx_spi_swap_bytes(stml0xx_cmdbuff,
++			SPI_MSG_SIZE - SPI_CRC_LEN);
+ 
+-	/* Append 2-byte CRC (unswapped) */
+-	stml0xx_spi_append_crc(stml0xx_cmdbuff, SPI_MSG_SIZE - SPI_CRC_LEN);
++		/* Append 2-byte CRC (unswapped) */
++		stml0xx_spi_append_crc(stml0xx_cmdbuff,
++			SPI_MSG_SIZE - SPI_CRC_LEN);
+ 
+-	/* Write read request to SPI */
+-	ret =
+-	    stml0xx_spi_write_no_reset_no_retries(stml0xx_cmdbuff,
+-						  SPI_MSG_SIZE);
++		/* Write read request to SPI */
++		ret = stml0xx_spi_write_no_reset_no_retries(stml0xx_cmdbuff,
++							  SPI_MSG_SIZE);
++		if (ret < 0)
++			goto EXIT;
+ 
+-	if (ret >= 0) {
+-		ret =
+-		    stml0xx_spi_read_no_reset_no_retries(stml0xx_readbuff,
++		ret = stml0xx_spi_read_no_reset_no_retries(stml0xx_readbuff,
+ 							 SPI_MSG_SIZE);
+ 
++		if (ret < 0)
++			goto EXIT;
++
+ 		/* Validate CRC */
+ 		recv_crc = (stml0xx_readbuff[30] << 8) | stml0xx_readbuff[31];
+ 		calc_crc = stml0xx_spi_calculate_crc(stml0xx_readbuff,
+@@ -580,7 +590,9 @@ static int stml0xx_spi_send_read_reg_no_retries(unsigned char reg_type,
+ 				       SPI_MSG_SIZE - SPI_CRC_LEN);
+ 
+ 		/* Extract payload */
+-		memcpy(reg_data, stml0xx_readbuff, reg_size);
++		memcpy(reg_data + data_offset, stml0xx_readbuff, data_size);
++		remaining_data_size -= data_size;
++		data_offset += data_size;
+ 	}
+ EXIT:
+ 	return ret;
+@@ -601,9 +613,8 @@ int stml0xx_spi_send_read_reg_reset(unsigned char reg_type,
+ 	int reset_retries;
+ 	int ret = -EIO;
+ 
+-	/* TODO: No support for offset for now */
+ 	if (!reg_data || reg_size <= 0 ||
+-	    reg_size > SPI_MAX_PAYLOAD_LEN) {
++	    reg_size > STML0XX_MAX_REG_LEN) {
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+ 			"Invalid buffer or buffer size");
+ 		ret = -EFAULT;
+-- 
+2.11.0
+

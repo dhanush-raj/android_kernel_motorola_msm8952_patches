@@ -1,0 +1,37 @@
+From f46bb8a40789c4fdf92a8ad0e2213fcd853656cf Mon Sep 17 00:00:00 2001
+From: Adam Brickman <Adam.Brickman@cirrus.com>
+Date: Mon, 23 Nov 2015 16:54:07 -0600
+Subject: [PATCH 652/959] IKSWM-15398: ASoC: cs35l34: Fixed improper MCLK_RATE
+
+Fixed proper internal mclk rate for 11.289MHz MCLK.
+
+Change-Id: I5868e5bca4b0ea9ac52642ab853fd7f584772c26
+Signed-off-by: Adam Brickman <Adam.Brickman@cirrus.com>
+Reviewed-on: http://gerrit.mot.com/816717
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/codecs/cs35l34.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/sound/soc/codecs/cs35l34.c b/sound/soc/codecs/cs35l34.c
+index bffca27f149..b0a92326f38 100644
+--- a/sound/soc/codecs/cs35l34.c
++++ b/sound/soc/codecs/cs35l34.c
+@@ -526,6 +526,10 @@ static int cs35l34_codec_set_sysclk(struct snd_soc_dai *dai,
+ 		cs35l34->mclk_int = freq;
+ 	break;
+ 	case CS35L34_MCLK_11289:
++		snd_soc_update_bits(codec, CS35L34_MCLK_CTL,
++				0xFF, 0x10);
++		cs35l34->mclk_int = freq/2;
++	break;
+ 	case CS35L34_MCLK_12:
+ 		snd_soc_update_bits(codec, CS35L34_MCLK_CTL,
+ 				0xFF, 0x11);
+-- 
+2.11.0
+

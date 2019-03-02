@@ -1,0 +1,52 @@
+From 4161c4415e9e33da45c4c11686a7cce57deb8ce1 Mon Sep 17 00:00:00 2001
+From: Liejun Tao <L.J.Tao@motorola.com>
+Date: Fri, 12 Oct 2012 10:58:08 -0500
+Subject: [PATCH 002/959] IKMAINJB-4105 fix mac module build
+
+Do module move and clean by looking for modules.order
+Mac has no depmod tool so modules.dep is not generated
+
+Change-Id: Ie712606db01f134d44741e3e04651a373b793a6c
+Signed-off-by: Liejun Tao <L.J.Tao@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/487398
+Tested-by: Jira Key <JIRAKEY@motorola.com>
+Reviewed-by: Check Patch <CHEKPACH@motorola.com>
+Reviewed-by: Klocwork kwcheck <klocwork-kwcheck@sourceforge.mot.com>
+Reviewed-by: Igor Kovalenko <Igor.Kovalenko@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/520344
+Reviewed-by: Dmitry Sokolov <ads047@motorola.com>
+Tested-by: Dmitry Sokolov <ads047@motorola.com>
+Submit-Approved: Dmitry Sokolov <ads047@motorola.com>
+(cherry picked from commit 893ffeff400be0ff9b84af76ce1878b64979f3fc)
+(cherry picked from commit 9df6d663ecf1d1aaa34e43015bd5e89a698c4e48)
+(cherry picked from commit a5b9515966e01982df28ab0b97197f98833a78a9)
+---
+ AndroidKernel.mk | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/AndroidKernel.mk b/AndroidKernel.mk
+index 88b042286b0..398791cc215 100644
+--- a/AndroidKernel.mk
++++ b/AndroidKernel.mk
+@@ -73,7 +73,7 @@ TARGET_PREBUILT_KERNEL := $(TARGET_PREBUILT_INT_KERNEL)
+ $(info TARGET_PREBUILT_KERNEL is $(TARGET_PREBUILT_KERNEL))
+ 
+ define mv-modules
+-mdpath=`find $(KERNEL_MODULES_OUT) -type f -name modules.dep`;\
++mdpath=`find $(KERNEL_MODULES_OUT) -type f -name modules.order`;\
+ if [ "$$mdpath" != "" ];then\
+ mpath=`dirname $$mdpath`;\
+ ko=`find $$mpath/kernel -type f -name *.ko`;\
+@@ -82,7 +82,7 @@ fi
+ endef
+ 
+ define clean-module-folder
+-mdpath=`find $(KERNEL_MODULES_OUT) -type f -name modules.dep`;\
++mdpath=`find $(KERNEL_MODULES_OUT) -type f -name modules.order`;\
+ if [ "$$mdpath" != "" ];then\
+ mpath=`dirname $$mdpath`; rm -rf $$mpath;\
+ fi
+-- 
+2.11.0
+

@@ -1,0 +1,59 @@
+From 056890f7e9a1475a78bd7acb229326ebb16c452c Mon Sep 17 00:00:00 2001
+From: Xiaofei Ma <xiaofei@motorola.com>
+Date: Thu, 17 Sep 2015 16:16:03 -0500
+Subject: [PATCH 153/959] IKQCOMSD1-2962: arm/dt: 8952: add VI sense support
+ via senary port
+
+Add mi2s dai entry for senary port in 8952 dtsi.
+qualcomm commit:
+f0e756e6618524de88522346babdb2040710555b
+
+Change the sound name to include TFA9890, so HAL
+can use it for some features.
+
+Change-Id: Iecf36c8c18d3c0a2d037992f607d7518e55cde40
+Signed-off-by: Xiaofei Ma <xiaofei@motorola.com>
+Reviewed-on: http://gerrit.mot.com/784376
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index d4f7e626ae0..c798e5d9c93 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -326,7 +326,7 @@
+ 
+ 	sound {
+ 		compatible = "qcom,msm8952-audio-codec";
+-		qcom,model = "msm8952-snd-card";
++		qcom,model = "msm8952-tfa9890-snd-card";
+ 		reg =   <0xc051000 0x4>,
+ 			<0xc051004 0x4>,
+ 			<0xc055000 0x4>,
+@@ -380,7 +380,7 @@
+ 				"msm-voice-svc";
+ 		asoc-cpu = <&dai_pri_auxpcm>, <&dai_hdmi>,
+ 				<&dai_mi2s0>, <&dai_mi2s1>, <&dai_mi2s2>, <&dai_mi2s3>,
+-				<&dai_mi2s5>,
++				<&dai_mi2s5>, <&dai_mi2s6>,
+ 				<&sb_0_rx>, <&sb_0_tx>, <&sb_1_rx>, <&sb_1_tx>,
+ 				<&sb_3_rx>, <&sb_3_tx>, <&sb_4_rx>, <&sb_4_tx>,
+ 				<&bt_sco_rx>, <&bt_sco_tx>, <&int_fm_rx>, <&int_fm_tx>,
+@@ -390,7 +390,7 @@
+ 		asoc-cpu-names = "msm-dai-q6-auxpcm.1", "msm-dai-q6-hdmi.8",
+ 				"msm-dai-q6-mi2s.0", "msm-dai-q6-mi2s.1",
+ 				"msm-dai-q6-mi2s.2", "msm-dai-q6-mi2s.3",
+-				"msm-dai-q6-mi2s.5",
++				"msm-dai-q6-mi2s.5", "msm-dai-q6-mi2s.6",
+ 				"msm-dai-q6-dev.16384", "msm-dai-q6-dev.16385",
+ 				"msm-dai-q6-dev.16386", "msm-dai-q6-dev.16387",
+ 				"msm-dai-q6-dev.16390", "msm-dai-q6-dev.16391",
+-- 
+2.11.0
+

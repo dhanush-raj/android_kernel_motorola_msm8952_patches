@@ -1,0 +1,131 @@
+From 631c6c2813604b6ec63ed20ae91db8b9b756df5a Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Wed, 13 Jan 2016 11:58:33 -0800
+Subject: [PATCH 615/959] IKKRNBSP-3567: msm: mdss: export CABC mode sysfs
+ interface
+
+Panel's CABC mode is able to be switched by sysfs.
+
+Change-Id: I5e521ff182e768e7ea32d991e463cf8e143028f6
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/807247
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 16 ++++++++++++++++
+ drivers/video/msm/mdss/mdss_fb.c        | 25 +++++++++++++++++++++++++
+ drivers/video/msm/mdss/mdss_panel.h     | 10 ++++++++++
+ 3 files changed, 51 insertions(+)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index 7e046ef216c..0e9caa8e541 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -912,6 +912,10 @@ end:
+ 	else
+ 		pr_info("%s[%d]-.\n", __func__, ctrl->ndx);
+ 
++	/* Default CABC mode is UI while turning on display */
++	mdss_dsi_panel_set_param(pdata,
++		PARAM_CABC_ID, CABC_UI_MODE, false);
++
+ 	pr_debug("%s:-\n", __func__);
+ 	return ret;
+ }
+@@ -1012,6 +1016,9 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
+ 	mdss_dsi_panel_off_in_prog_notify(pdata, pinfo);
+ 
+ end:
++	mdss_dsi_panel_set_param(pdata,
++		PARAM_CABC_ID, CABC_OFF_MODE, false);
++
+ 	pr_debug("%s:-\n", __func__);
+ 	return 0;
+ }
+@@ -1153,8 +1160,17 @@ static struct panel_param_val_map hbm_map[HBM_STATE_NUM] = {
+ 	{"1", "qcom,mdss-dsi-hbm-on-command"},
+ };
+ 
++static struct panel_param_val_map cabc_map[CABC_MODE_NUM] = {
++	{"UI", "qcom,mdss-dsi-cabc-ui-command"},
++	{"ST", NULL},
++	{"MV", "qcom,mdss-dsi-cabc-mv-command"},
++	{"DIS", "qcom,mdss-dsi-cabc-dis-command"},
++	{"OFF", NULL},
++};
++
+ static struct panel_param mdss_dsi_panel_param[PARAM_ID_NUM] = {
+ 	{"HBM", hbm_map, HBM_STATE_NUM, HBM_OFF_STATE, false},
++	{"CABC", cabc_map, CABC_MODE_NUM, CABC_UI_MODE, false},
+ };
+ 
+ static int mdss_panel_parse_param_prop(struct device_node *np,
+diff --git a/drivers/video/msm/mdss/mdss_fb.c b/drivers/video/msm/mdss/mdss_fb.c
+index 006ea3403df..cb02523b59a 100644
+--- a/drivers/video/msm/mdss/mdss_fb.c
++++ b/drivers/video/msm/mdss/mdss_fb.c
+@@ -1002,8 +1002,33 @@ static ssize_t hbm_store(struct device *dev,
+ 	return ret ? ret : count;
+ }
+ 
++static ssize_t cabc_show(struct device *dev,
++		struct device_attribute *attr, char *buf)
++{
++	const char *name;
++	ssize_t ret;
++
++	ret = mdss_fb_get_param(dev, PARAM_CABC_ID, &name);
++	if (ret < 0)
++		return ret;
++
++	return snprintf(buf, PAGE_SIZE, "%s\n", name);
++}
++
++static ssize_t cabc_store(struct device *dev,
++		struct device_attribute *attr,
++		const char *buf, size_t count)
++{
++	ssize_t ret;
++
++	ret = mdss_fb_set_param(dev, PARAM_CABC_ID, buf);
++	return ret ? ret : count;
++}
++
+ static struct device_attribute param_attrs[PARAM_ID_NUM] = {
+ 	__ATTR(hbm, S_IWUSR | S_IWGRP | S_IRUSR | S_IRGRP, hbm_show, hbm_store),
++	__ATTR(cabc_mode, S_IWUSR | S_IWGRP | S_IRUSR | S_IRGRP,
++		cabc_show, cabc_store),
+ };
+ 
+ static int mdss_fb_create_param_sysfs(struct msm_fb_data_type *mfd)
+diff --git a/drivers/video/msm/mdss/mdss_panel.h b/drivers/video/msm/mdss/mdss_panel.h
+index edd54b6d537..cd18beaf711 100644
+--- a/drivers/video/msm/mdss/mdss_panel.h
++++ b/drivers/video/msm/mdss/mdss_panel.h
+@@ -38,8 +38,18 @@ enum hbm_state {
+ 	HBM_STATE_NUM
+ };
+ 
++enum cabc_mode {
++	CABC_UI_MODE = 0,
++	CABC_ST_MODE,
++	CABC_MV_MODE,
++	CABC_DIS_MODE,
++	CABC_OFF_MODE,
++	CABC_MODE_NUM
++};
++
+ enum panel_param_id {
+ 	PARAM_HBM_ID = 0,
++	PARAM_CABC_ID,
+ 	PARAM_ID_NUM
+ };
+ 
+-- 
+2.11.0
+

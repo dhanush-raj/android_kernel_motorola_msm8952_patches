@@ -1,0 +1,56 @@
+From 490876a374fa92cccfa21c45d49b2c517980fd6e Mon Sep 17 00:00:00 2001
+From: Shengzhe Zhao <a18689@motorola.com>
+Date: Thu, 2 Jun 2016 17:13:45 -0700
+Subject: [PATCH 904/959] IKSWM-43184 exfat: use correct length for utf
+ conversion
+
+when call utf16s_to_utf8s, last parmater 'maxout' will be reduced
+with the returned value of utf32_to_utf8, the value reflects the
+size of one utf character, it could be 1~max charset size(3), so
+maxout should use MAX_NAME_LENGTH * MAX_CHARSET_SIZE
+when call utf8s_to_utf16s, the inlen will be reduced with the
+the returned value of utf8_to_utf32, so it should use
+MAX_NAME_LENGTH * MAX_CHARSET_SIZE or the lenghth of p_cstring whose
+max value is MAX_NAME_LENGTH * MAX_CHARSET_SIZE.
+
+Change-Id: I1892f3243f37a8d637c211b1762473dc9fa1a2e9
+Signed-off-by: Shengzhe Zhao <a18689@motorola.com>
+Reviewed-on: http://gerrit.mot.com/863700
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/864623
+---
+ fs/exfat/exfat_nls.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/fs/exfat/exfat_nls.c b/fs/exfat/exfat_nls.c
+index dedc212f6c9..4879b04a291 100644
+--- a/fs/exfat/exfat_nls.c
++++ b/fs/exfat/exfat_nls.c
+@@ -295,7 +295,9 @@ void nls_uniname_to_cstring(struct super_block *sb, u8 *p_cstring, UNI_NAME_T *p
+ 	struct nls_table *nls = EXFAT_SB(sb)->nls_io;
+ 
+ 	if (nls == NULL) {
+-		len = utf16s_to_utf8s(uniname, MAX_NAME_LENGTH, UTF16_HOST_ENDIAN, p_cstring, MAX_NAME_LENGTH);
++		len = utf16s_to_utf8s(uniname, MAX_NAME_LENGTH,
++			UTF16_HOST_ENDIAN, p_cstring,
++			MAX_NAME_LENGTH * MAX_CHARSET_SIZE);
+ 		if (len >= MAX_NAME_LENGTH * MAX_CHARSET_SIZE)
+ 			len--;
+ 
+@@ -359,7 +361,8 @@ void nls_cstring_to_uniname(struct super_block *sb, UNI_NAME_T *p_uniname, u8 *p
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(3,3,0)
+ 		i = utf8s_to_utf16s(p_cstring, MAX_NAME_LENGTH, uniname);
+ #else
+-		i = utf8s_to_utf16s(p_cstring, MAX_NAME_LENGTH, UTF16_HOST_ENDIAN, uniname, MAX_NAME_LENGTH);
++		i = utf8s_to_utf16s(p_cstring, MAX_NAME_LENGTH * MAX_CHARSET_SIZE,
++			UTF16_HOST_ENDIAN, uniname, MAX_NAME_LENGTH);
+ #endif
+ 		for (j = 0; j < i; j++)
+ 			SET16_A(upname + j * 2, nls_upper(sb, uniname[j]));
+-- 
+2.11.0
+

@@ -1,0 +1,73 @@
+From c414e01233288efccedfe28d6776688236157a9f Mon Sep 17 00:00:00 2001
+From: Yuanyuan Zhong <zyy@motorola.com>
+Date: Tue, 28 Jul 2015 15:12:39 -0500
+Subject: [PATCH 352/959] IKSWL-32765 esdfs: use vmalloc for big
+ package_list_buffer
+
+Use vmalloc if size of package_list_buffer is greater than PAGE_SIZE.
+
+Change-Id: I539d866f2dbca662c5c857538fa6cc282fafb331
+Signed-off-by: Yuanyuan Zhong <zyy@motorola.com>
+Reviewed-on: http://gerrit.mot.com/771149
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/esdfs/derive.c | 13 +++++++++----
+ 1 file changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/fs/esdfs/derive.c b/fs/esdfs/derive.c
+index cfa430118b6..f9a83061bc9 100644
+--- a/fs/esdfs/derive.c
++++ b/fs/esdfs/derive.c
+@@ -17,6 +17,7 @@
+ #include <linux/syscalls.h>
+ #include <linux/fcntl.h>
+ #include <linux/ctype.h>
++#include <linux/vmalloc.h>
+ #include <asm/uaccess.h>
+ #include "../internal.h"
+ #include "esdfs.h"
+@@ -195,7 +196,7 @@ next:
+ 	num_packages = count;
+ 	kfree(package_list);
+ 	package_list = pl;
+-	kfree(package_list_buffer);
++	kvfree(package_list_buffer);
+ 	package_list_buffer = buffer;
+ 	esdfs_package_list_version++;
+ 
+@@ -209,20 +210,24 @@ static ssize_t proc_packages_write(struct file *file, const char __user *chunk,
+ {
+ 	char *buffer;
+ 	int err;
++	size_t buf_size = count + raw_package_list_size;
+ 
+-	buffer = kmalloc(count + raw_package_list_size, GFP_KERNEL);
++	if (buf_size > PAGE_SIZE)
++		buffer = vmalloc(buf_size);
++	else
++		buffer = kmalloc(buf_size, GFP_KERNEL);
+ 	if (!buffer)
+ 		return -ENOMEM;
+ 
+ 	if (raw_package_list) {
+ 		memcpy(buffer, raw_package_list, raw_package_list_size);
+-		kfree(raw_package_list);
++		kvfree(raw_package_list);
+ 		raw_package_list_size = 0;
+ 		raw_package_list = NULL;
+ 	}
+ 
+ 	if (copy_from_user(buffer + raw_package_list_size, chunk, count)) {
+-		kfree(buffer);
++		kvfree(buffer);
+ 		pr_err("esdfs: %s: :(\n", __func__);
+ 		return -EFAULT;
+ 	}
+-- 
+2.11.0
+

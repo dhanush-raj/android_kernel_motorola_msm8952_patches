@@ -1,0 +1,80 @@
+From 871dc88f8cd20c7b7a937a778916cee50536da6e Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Wed, 4 Nov 2015 17:16:38 -0800
+Subject: [PATCH 445/959] IKKRNBSP-3488 arm/dts: 8952: set LGD panel as default
+ for P1 or later
+
+P1 or later hardware supports LGD and BOE panels only.
+
+Change-Id: I58b8d972528de5c0712bb4e5e7e5a12ddc962913
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/797533
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-athene_13mp-p1.dts  | 4 ----
+ arch/arm/boot/dts/qcom/msm8952-athene_16mp-p1.dts  | 4 ----
+ arch/arm/boot/dts/qcom/msm8952-athene_power-p1.dts | 4 ----
+ 3 files changed, 12 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene_13mp-p1.dts b/arch/arm/boot/dts/qcom/msm8952-athene_13mp-p1.dts
+index 5caaa152998..d2fe8904e33 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene_13mp-p1.dts
++++ b/arch/arm/boot/dts/qcom/msm8952-athene_13mp-p1.dts
+@@ -14,13 +14,9 @@
+ /dts-v1/;
+ 
+ #include "msm8952-athene.dtsi"
+-#include "dsi-panel-mot-tdi-546-1080p-cmd.dtsi"
+ 
+ / {
+ 	model = "Athene_13MP";
+ 	qcom,board-id = <0x42 0x81a0>, <0x42 0x81ad>;
+ };
+ 
+-&mdss_dsi0 {
+-	qcom,dsi-pref-prim-pan = <&mot_tdi_546_1080p_cmd_v0>;
+-};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene_16mp-p1.dts b/arch/arm/boot/dts/qcom/msm8952-athene_16mp-p1.dts
+index 0560a142866..9be186455e4 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene_16mp-p1.dts
++++ b/arch/arm/boot/dts/qcom/msm8952-athene_16mp-p1.dts
+@@ -14,13 +14,9 @@
+ /dts-v1/;
+ 
+ #include "msm8952-athene.dtsi"
+-#include "dsi-panel-mot-tdi-546-1080p-cmd.dtsi"
+ 
+ / {
+ 	model = "Athene_16MP";
+ 	qcom,board-id = <0x41 0x81a0>, <0x41 0x81ad>;
+ };
+ 
+-&mdss_dsi0 {
+-	qcom,dsi-pref-prim-pan = <&mot_tdi_546_1080p_cmd_v0>;
+-};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene_power-p1.dts b/arch/arm/boot/dts/qcom/msm8952-athene_power-p1.dts
+index ba2746e068e..2a0c28a553a 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene_power-p1.dts
++++ b/arch/arm/boot/dts/qcom/msm8952-athene_power-p1.dts
+@@ -14,13 +14,9 @@
+ /dts-v1/;
+ 
+ #include "msm8952-athene.dtsi"
+-#include "dsi-panel-mot-tdi-546-1080p-cmd.dtsi"
+ 
+ / {
+ 	model = "Athene_Power";
+ 	qcom,board-id = <0x43 0x81a0>;
+ };
+ 
+-&mdss_dsi0 {
+-	qcom,dsi-pref-prim-pan = <&mot_tdi_546_1080p_cmd_v0>;
+-};
+-- 
+2.11.0
+

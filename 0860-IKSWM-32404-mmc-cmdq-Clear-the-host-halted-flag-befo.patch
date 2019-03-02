@@ -1,0 +1,62 @@
+From 98c85383df9e511b9645e800cde66817b88f1d77 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Mon, 18 Apr 2016 18:22:47 -0700
+Subject: [PATCH 860/959] IKSWM-32404: mmc/cmdq: Clear the host halted flag
+ before enable CMDQ.
+
+ There is a small chance that cmdq is enabled but host halt flag
+ is not cleared on time. This will cause sdhci_irq skip the
+ cmdq_irq handler leading unexpected interrupt(0x4000).
+
+Solution:
+
+  Clear the host halt flag before enabling the CMDQ.
+
+Change-Id: Ic3f92f13db0067294b2462d239f560fb9854bf39
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/845655
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Yi-Wei Zhao <gbjc64@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/mmc/host/cmdq_hci.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/mmc/host/cmdq_hci.c b/drivers/mmc/host/cmdq_hci.c
+index 7d503937c58..b4df0bf6118 100644
+--- a/drivers/mmc/host/cmdq_hci.c
++++ b/drivers/mmc/host/cmdq_hci.c
+@@ -891,6 +891,7 @@ static int cmdq_halt(struct mmc_host *mmc, bool halt)
+ 	struct cmdq_host *cq_host = (struct cmdq_host *)mmc_cmdq_private(mmc);
+ 	u32 val;
+ 	int retries = 3;
++	unsigned long flags;
+ 
+ 	if (halt) {
+ 		while (retries) {
+@@ -911,6 +912,8 @@ static int cmdq_halt(struct mmc_host *mmc, bool halt)
+ 		}
+ 		return retries ? 0 : -ETIMEDOUT;
+ 	} else {
++
++		local_irq_save(flags);
+ 		if (cq_host->ops->set_transfer_params)
+ 			cq_host->ops->set_transfer_params(mmc);
+ 		if (cq_host->ops->set_block_size)
+@@ -919,8 +922,11 @@ static int cmdq_halt(struct mmc_host *mmc, bool halt)
+ 			cq_host->ops->set_data_timeout(mmc, 0xf);
+ 		if (cq_host->ops->clear_set_irqs)
+ 			cq_host->ops->clear_set_irqs(mmc, true);
++		/* clear the halt flag before we enable cmdq */
++		mmc_host_clr_halt(mmc);
+ 		cmdq_writel(cq_host, cmdq_readl(cq_host, CQCTL) & ~HALT,
+ 			    CQCTL);
++		local_irq_restore(flags);
+ 	}
+ 
+ 	return 0;
+-- 
+2.11.0
+

@@ -1,0 +1,38 @@
+From 86b5ba6bc6814420c54c8e91e5aef29937cf8598 Mon Sep 17 00:00:00 2001
+From: Jason Knopsnyder <jasonk@motorola.com>
+Date: Wed, 8 Apr 2015 16:49:33 -0500
+Subject: [PATCH 237/959] IKSWL-7266: qpnp-charger: Fix ESR workaround
+
+The ESR workaround should uses a charge current of 300mA
+not the max charge rate.
+
+Change-Id: I682aa091ed11e84ad982c4cf2c14044b2a2ad0ec
+Signed-off-by: Jason Knopsnyder <jasonk@motorola.com>
+Reviewed-on: http://gerrit.mot.com/733140
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 1d1c244f76a..0395eb86bf8 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -1679,8 +1679,7 @@ static int smbchg_sw_esr_pulse_en(struct smbchg_chip *chip, bool en)
+ 	int rc;
+ 
+ 	chip->sw_esr_pulse_en = en;
+-	rc = smbchg_set_fastchg_current_raw(chip,
+-			chip->target_fastchg_current_ma);
++	rc = smbchg_set_fastchg_current(chip, chip->target_fastchg_current_ma);
+ 	if (rc)
+ 		return rc;
+ 	rc = smbchg_parallel_usb_charging_en(chip, !en);
+-- 
+2.11.0
+

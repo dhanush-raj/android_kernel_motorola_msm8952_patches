@@ -1,0 +1,39 @@
+From 2fb440bea2a8aae7fe118cd8d701d0f2896eab3f Mon Sep 17 00:00:00 2001
+From: Xuehui Ye <yexh1@motorola.com>
+Date: Tue, 16 Feb 2016 16:23:37 +0800
+Subject: [PATCH 683/959] IKSWM-18293 usb: otg: report power supply type as usb
+ by default
+
+If power supply type is "Unknown" when framework is coming up, it
+completely ignores all reports to power supply type and does not indicate
+charging status correctly in the UI.
+
+Change-Id: Ife3bb7e82237a877f733e0569441ea9c456d4e39
+Signed-off-by: Xuehui Ye <yexh1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/822354
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Hujun Liao <liaohj@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/usb/phy/phy-msm-usb.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/usb/phy/phy-msm-usb.c b/drivers/usb/phy/phy-msm-usb.c
+index af7eb3c3e1b..3bf425a629e 100644
+--- a/drivers/usb/phy/phy-msm-usb.c
++++ b/drivers/usb/phy/phy-msm-usb.c
+@@ -5084,6 +5084,7 @@ static int otg_power_set_property_usb(struct power_supply *psy,
+ 			break;
+ 		default:
+ 			motg->chg_type = USB_INVALID_CHARGER;
++			psy->type = POWER_SUPPLY_TYPE_USB;
+ 			break;
+ 		}
+ 
+-- 
+2.11.0
+

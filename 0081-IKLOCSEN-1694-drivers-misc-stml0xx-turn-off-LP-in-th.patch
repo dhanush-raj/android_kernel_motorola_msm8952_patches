@@ -1,0 +1,120 @@
+From b907ca5b52ed17eaeec0def29a2f18499541857e Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Thu, 2 Oct 2014 08:53:06 -0500
+Subject: [PATCH 081/959] IKLOCSEN-1694:drivers:misc:stml0xx: turn off LP in
+ the SH
+
+Write to the sensorhub lowpower register to
+completely turn off the low power mode in the hub.
+
+This will allow for better testing of current
+drain.
+
+Change-Id: Idf229e0f0a1b0b5b76ffd9d945a1ef3c95c8b00a
+Signed-off-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/675388
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c  | 28 ++++++++++++++++++++++++++++
+ drivers/misc/stml0xx/stml0xx_ioctl.c |  6 ++++++
+ include/linux/stml0xx.h              |  9 ++++++++-
+ 3 files changed, 42 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index c790e590b90..8f1e685ca05 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -193,6 +193,34 @@ void stml0xx_detect_lowpower_mode(void)
+ 	}
+ }
+ 
++uint8_t stml0xx_set_lowpower_mode(enum lowpower_mode lp_type,
++		enum reset_option reset)
++{
++	uint8_t lp_buf[STML0XX_POWER_REG_SIZE] = {0};
++	uint8_t err = 0;
++
++	err = stml0xx_spi_send_read_reg_reset(LOWPOWER_REG, lp_buf,
++			STML0XX_POWER_REG_SIZE, reset);
++	if (err < 0) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"stml0xx_set_lowpower_mode: read_reg");
++		err = -EFAULT;
++		goto EXIT;
++	}
++
++	lp_buf[0] = lp_type;
++	err = stml0xx_spi_send_write_reg_reset(LOWPOWER_REG, lp_buf,
++			STML0XX_POWER_REG_SIZE, reset);
++	if (err < 0) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"stml0xx_set_lowpower_mode: write_reg");
++		err = -EFAULT;
++		goto EXIT;
++	}
++EXIT:
++	return err;
++}
++
+ static int stml0xx_hw_init(struct stml0xx_data *ps_stml0xx)
+ {
+ 	int err = 0;
+diff --git a/drivers/misc/stml0xx/stml0xx_ioctl.c b/drivers/misc/stml0xx/stml0xx_ioctl.c
+index 1043b1c8b15..d56099187d5 100644
+--- a/drivers/misc/stml0xx/stml0xx_ioctl.c
++++ b/drivers/misc/stml0xx/stml0xx_ioctl.c
+@@ -638,10 +638,16 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 
+ 		err = 0;
+ 		if (buf[0] != 0 && lowpower_mode == 0) {
++			stml0xx_set_lowpower_mode(LOWPOWER_ENABLED,
++					RESET_ALLOWED);
++
+ 			/* allow sensorhub to sleep */
+ 			stml0xx_sleep(ps_stml0xx);
+ 			lowpower_mode = buf[0];
+ 		} else if (buf[0] == 0 && lowpower_mode == 1) {
++			stml0xx_set_lowpower_mode(LOWPOWER_DISABLED,
++					RESET_ALLOWED);
++
+ 			/* keep sensorhub awake */
+ 			stml0xx_wake(ps_stml0xx);
+ 			lowpower_mode = buf[0];
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 569940edd42..0a90275af4f 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -296,11 +296,16 @@ enum stm_commands {
+ 	CRC_CHECK
+ };
+ 
+-enum {
++enum reset_option {
+ 	RESET_NOT_ALLOWED,
+ 	RESET_ALLOWED
+ };
+ 
++enum lowpower_mode {
++	LOWPOWER_DISABLED,
++	LOWPOWER_ENABLED
++};
++
+ struct stm_response {
+ 	/* 0x0080 */
+ 	unsigned short header;
+@@ -689,6 +694,8 @@ void stml0xx_brightness_set(struct led_classdev *led_cdev,
+ enum led_brightness stml0xx_brightness_get(struct led_classdev *led_cdev);
+ int stml0xx_blink_set(struct led_classdev *led_cdev,
+ 	unsigned long *delay_on, unsigned long *delay_off);
++uint8_t stml0xx_set_lowpower_mode(enum lowpower_mode lp_type,
++		enum reset_option reset);
+ 
+ extern struct stml0xx_data *stml0xx_misc_data;
+ 
+-- 
+2.11.0
+

@@ -1,0 +1,51 @@
+From ddc6c0aae5779d97f440c93247023d732913ddb5 Mon Sep 17 00:00:00 2001
+From: Sahitya Tummala <stummala@codeaurora.org>
+Date: Wed, 27 Apr 2016 16:17:44 +0530
+Subject: [PATCH 942/959] mmc: core: Fix the timing related checks in
+ partial_init
+
+If the card (which is a eMMC 5.1 complaint card) is scaled down
+to HS200, then the current logic in partial_init doesn't invoke
+tuning due to these invalid checks.
+
+Backported from kernel 3.18.
+
+CRs-fixed: IKSWN-14590
+Change-Id: I1e5cbb6a2dfff129acdb27e27ea090d58197f41c
+Signed-off-by: Sahitya Tummala <stummala@codeaurora.org>
+Reviewed-on: https://gerrit.mot.com/922652
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+SLTApproved: Vignesh Mahadevan <vignesh@motorola.com>
+Reviewed-by: Russell Knize <rknize@motorola.com>
+---
+ drivers/mmc/core/mmc.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/mmc/core/mmc.c b/drivers/mmc/core/mmc.c
+index 4a2d28e0992..0b22d3df0a4 100644
+--- a/drivers/mmc/core/mmc.c
++++ b/drivers/mmc/core/mmc.c
+@@ -2234,13 +2234,13 @@ static int mmc_partial_init(struct mmc_host *host)
+ 
+ 	mmc_host_clk_hold(host);
+ 
+-	if (mmc_card_hs200(card) || mmc_card_hs400(card)) {
++	if (mmc_card_hs400(card)) {
+ 		if (card->ext_csd.raw_strobe_support &&
+ 		    host->ops->enhanced_strobe)
+ 			err = host->ops->enhanced_strobe(host);
+-		else
+-			err = host->ops->execute_tuning(host,
+-				MMC_SEND_TUNING_BLOCK_HS200);
++	} else if (mmc_card_hs200(card) && host->ops->execute_tuning) {
++		err = host->ops->execute_tuning(host,
++			MMC_SEND_TUNING_BLOCK_HS200);
+ 		if (err)
+ 			pr_warn("%s: %s: tuning execution failed (%d)\n",
+ 				mmc_hostname(host), __func__, err);
+-- 
+2.11.0
+

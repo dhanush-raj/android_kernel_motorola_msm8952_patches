@@ -1,0 +1,72 @@
+From c657350c652ca484dd4164ee55497f07de074975 Mon Sep 17 00:00:00 2001
+From: lixh10 <lixh10@motorola.com>
+Date: Tue, 9 Aug 2016 17:49:33 +0800
+Subject: [PATCH 912/959] IKSWM-42985:  msm: vibrator: Add SOL vibration
+
+Move SOL vibration from BL to avoid possible device brick.
+if qcom,vib-boot-up-vib-ms provided, device vibrates that amount.
+
+Change-Id: I842ad3036456ca4ea2d15753f2e711e36cae2d4d
+Signed-off-by: lixh10 <lixh10@motorola.com>
+Reviewed-on: http://gerrit.mot.com/885649
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ .../devicetree/bindings/platform/msm/qpnp-haptic.txt          |  1 +
+ drivers/platform/msm/qpnp-haptic.c                            | 11 +++++++++++
+ 2 files changed, 12 insertions(+)
+
+diff --git a/Documentation/devicetree/bindings/platform/msm/qpnp-haptic.txt b/Documentation/devicetree/bindings/platform/msm/qpnp-haptic.txt
+index 702d4887755..5c153638ca6 100644
+--- a/Documentation/devicetree/bindings/platform/msm/qpnp-haptic.txt
++++ b/Documentation/devicetree/bindings/platform/msm/qpnp-haptic.txt
+@@ -16,6 +16,7 @@ Required Properties:
+ Optional Properties:
+  - qcom,timeout-ms: timeout in ms.
+  - qcom,vmax-mv : maximum output voltage in milli volts
++ - mmi,vib-boot-up-vib-ms: boot up vibration, in ms. Default 0 ms
+  - qcom,ilim-ma : maximum output current limit threshold in milli amps
+  - qcom,int-pwm-freq-khz : frequency for internal pwm
+  - qcom,en-brake : specify to enable internal reverse braking
+diff --git a/drivers/platform/msm/qpnp-haptic.c b/drivers/platform/msm/qpnp-haptic.c
+index 79ff8753956..88534b46244 100644
+--- a/drivers/platform/msm/qpnp-haptic.c
++++ b/drivers/platform/msm/qpnp-haptic.c
+@@ -322,6 +322,7 @@ struct qpnp_hap {
+ 	u8 lra_res_cal_period;
+ 	u8 sc_duration;
+ 	u8 ext_pwm_dtest_line;
++	int boot_up_vib;
+ 	bool state;
+ 	bool use_play_irq;
+ 	bool use_sc_irq;
+@@ -2123,6 +2124,13 @@ static int qpnp_hap_parse_dt(struct qpnp_hap *hap)
+ 		return rc;
+ 	}
+ 
++	rc = of_property_read_u32(spmi->dev.of_node,
++			"mmi,vib-boot-up-vib-ms", &temp);
++	if (!rc)
++		hap->boot_up_vib = temp;
++	else
++		hap->boot_up_vib = 0;
++
+ 	hap->ilim_ma = QPNP_HAP_ILIM_MIN_MV;
+ 	rc = of_property_read_u32(spmi->dev.of_node,
+ 			"qcom,ilim-ma", &temp);
+@@ -2306,6 +2314,9 @@ static int qpnp_haptic_probe(struct spmi_device *spmi)
+ 		hap->vcc_pon = vcc_pon;
+ 	}
+ 
++	if (hap->boot_up_vib)
++		qpnp_hap_td_enable(&hap->timed_dev, hap->boot_up_vib);
++
+ 	ghap = hap;
+ 
+ 	return 0;
+-- 
+2.11.0
+

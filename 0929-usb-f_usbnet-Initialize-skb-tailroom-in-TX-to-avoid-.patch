@@ -1,0 +1,67 @@
+From dca5dace9b13d56221728c176a88af65b91bb1f8 Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Mon, 3 Oct 2016 13:26:52 -0500
+Subject: [PATCH 929/959] usb: f_usbnet: Initialize skb tailroom in TX to avoid
+ information leaks.
+
+In the usb_ether_xmit function, a buffer is allocated but not initialized
+potentially leading to information leak.
+The fix is designed to initialize the memory to zero to prevent the potential
+information leak.
+
+Mot-CRs-fixed: IKSECURITY-1439
+
+Change-Id: I3a732b6e726f6d0a012a8708f96f71be3dd1bc8e
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: https://gerrit.mot.com/905189
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/usb/gadget/f_usbnet.c | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/usb/gadget/f_usbnet.c b/drivers/usb/gadget/f_usbnet.c
+index 2b521fd6429..188d52ec45e 100644
+--- a/drivers/usb/gadget/f_usbnet.c
++++ b/drivers/usb/gadget/f_usbnet.c
+@@ -336,6 +336,7 @@ static int usb_ether_xmit(struct sk_buff *skb, struct net_device *dev)
+ 	struct usb_request *req;
+ 	unsigned long flags;
+ 	unsigned len;
++	unsigned pad;
+ 	int rc;
+ 
+ 	req = usb_get_xmit_request(STOP_QUEUE, dev);
+@@ -347,16 +348,23 @@ static int usb_ether_xmit(struct sk_buff *skb, struct net_device *dev)
+ 	}
+ 
+ 	/* Add 4 bytes CRC */
+-	skb->len += 4;
++	pad = 4;
+ 
+ 	/* ensure that we end with a short packet */
+-	len = skb->len;
++	len = skb->len + pad;
+ 	if (!(len & 63) || !(len & 511))
+-		len++;
++		pad++;
++
++	/* ensure the added bytes are 0'd out */
++	if (skb_tailroom(skb) < pad) {
++		USBNETDBG(context, "%s: could not add CRC\n", __func__);
++		return 1;
++	}
++	memset(skb_put(skb, pad), 0, pad);
+ 
+ 	req->context = skb;
+ 	req->buf = skb->data;
+-	req->length = len;
++	req->length = skb->len;
+ 
+ 	rc = usb_ep_queue(context->bulk_in, req, GFP_KERNEL);
+ 	if (rc != 0) {
+-- 
+2.11.0
+

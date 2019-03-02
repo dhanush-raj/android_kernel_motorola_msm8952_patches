@@ -1,0 +1,139 @@
+From 8c84705f70b69a83c034948d4d8583ab5ba302d3 Mon Sep 17 00:00:00 2001
+From: Thomas Merrell-ATM098 <thomasmerrell@motorola.com>
+Date: Sun, 3 Apr 2016 05:30:43 -0500
+Subject: [PATCH 841/959] IKFPS-746 input: FPC: Add events to inform framework
+ of user input
+
+To be used in current and planned UX
+
+Change-Id: Ice7cca39098f1d456687fa3e443bac43496778f6
+Signed-off-by: Thomas Merrell-ATM098 <thomasmerrell@motorola.com>
+Reviewed-on: http://gerrit.mot.com/840713
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Dmitry Ornatsky <ornatsky@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/fpc1020_tee.c | 65 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 65 insertions(+)
+
+diff --git a/drivers/input/misc/fpc1020_tee.c b/drivers/input/misc/fpc1020_tee.c
+index 7b81e1d41a3..f8f0600669a 100644
+--- a/drivers/input/misc/fpc1020_tee.c
++++ b/drivers/input/misc/fpc1020_tee.c
+@@ -23,6 +23,12 @@
+ #include <linux/wakelock.h>
+ #include <linux/notifier.h>
+ 
++#define FPC_DOWN_EVENT_ID 48
++#define FPC_UP_EVENT_ID   49
++
++#define KEY_FPS_DOWN 614
++#define KEY_FPS_UP   615
++
+ struct vreg_config {
+ 	char *name;
+ 	unsigned long vmin;
+@@ -134,6 +140,8 @@ struct fpc1020_data {
+ 
+ 	struct notifier_block nb;
+ 
++	struct input_dev *input;
++
+ 	int irq_gpio;
+ 	int rst_gpio;
+ 	int irq_num;
+@@ -289,10 +297,41 @@ static ssize_t irq_get(struct device *device,
+ }
+ static DEVICE_ATTR(irq, S_IRUSR | S_IRGRP, irq_get, NULL);
+ 
++static ssize_t nav_set(struct device *dev,
++		struct device_attribute *attr, const char *buf, size_t count)
++{
++	struct  fpc1020_data *fpc1020 = dev_get_drvdata(dev);
++
++	if (fpc1020->input == NULL)
++		return 1;
++
++	/* Based on the input value generate the approrate key events */
++	switch (*buf) {
++	case FPC_DOWN_EVENT_ID:
++		input_report_key(fpc1020->input,
++				 KEY_FPS_DOWN, 1);
++		input_report_key(fpc1020->input,
++				 KEY_FPS_DOWN, 0);
++		break;
++	case FPC_UP_EVENT_ID:
++		input_report_key(fpc1020->input,
++				 KEY_FPS_UP, 1);
++		input_report_key(fpc1020->input,
++				 KEY_FPS_UP, 0);
++		break;
++	default:
++		break;
++	}
++	input_sync(fpc1020->input);
++	return 1;
++}
++static DEVICE_ATTR(nav, S_IWUSR | S_IWGRP, NULL, nav_set);
++
+ static struct attribute *attributes[] = {
+ 	&dev_attr_dev_enable.attr,
+ 	&dev_attr_clk_enable.attr,
+ 	&dev_attr_irq.attr,
++	&dev_attr_nav.attr,
+ 	NULL
+ };
+ 
+@@ -326,6 +365,26 @@ static int fpc1020_request_named_gpio(struct fpc1020_data *fpc1020,
+ 	return 0;
+ }
+ 
++static int fpc1020_input_dev_init(struct fpc1020_data *fpc1020)
++{
++	fpc1020->input = input_allocate_device();
++	if (!(fpc1020->input)) {
++		dev_err(fpc1020->dev, "ERROR creating input device\n");
++		goto exit;
++	}
++	fpc1020->input->name = "fpc1020";
++	set_bit(EV_KEY, fpc1020->input->evbit);
++	input_set_capability(fpc1020->input, EV_KEY, KEY_WAKEUP);
++	input_set_capability(fpc1020->input, EV_KEY, KEY_FPS_DOWN);
++	input_set_capability(fpc1020->input, EV_KEY, KEY_FPS_UP);
++	if (input_register_device(fpc1020->input)) {
++		dev_err(fpc1020->dev, "ERROR couldn't register input device\n");
++		fpc1020->input = NULL;
++	}
++exit:
++	return 0;
++}
++
+ static int fpc1020_probe(struct spi_device *spi)
+ {
+ 	struct device *dev = &spi->dev;
+@@ -405,6 +464,9 @@ static int fpc1020_probe(struct spi_device *spi)
+ 		set_clks(fpc1020, true);
+ 	}
+ 
++	fpc1020_input_dev_init(fpc1020);
++
++
+ 	dev_info(dev, "%s: ok\n", __func__);
+ exit:
+ 	return rc;
+@@ -414,6 +476,9 @@ static int fpc1020_remove(struct spi_device *spi)
+ {
+ 	struct  fpc1020_data *fpc1020 = dev_get_drvdata(&spi->dev);
+ 
++	if (fpc1020->input != NULL)
++		input_free_device(fpc1020->input);
++
+ 	sysfs_remove_group(&spi->dev.kobj, &attribute_group);
+ 	(void)vreg_setup(fpc1020, "vdd_io", false);
+ 	(void)vreg_setup(fpc1020, "vcc_spi", false);
+-- 
+2.11.0
+

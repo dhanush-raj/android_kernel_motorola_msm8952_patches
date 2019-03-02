@@ -1,0 +1,43 @@
+From b0ca8b76aa1deadb49cfd9bc20c123033a0951b9 Mon Sep 17 00:00:00 2001
+From: Zac Crosby <zac@motorola.com>
+Date: Mon, 11 Aug 2014 18:03:02 -0500
+Subject: [PATCH 163/959] IKKRNBSP-3366: msm: mdss: Change display ESD check
+ interval to 8 seconds
+
+Change display ESD check interval to 8 seconds.
+
+'commit 2d68674edbd7 ("IKKRNBSP-2622: msm: mdss: Change display
+ESD check interval to 8 seconds")'
+Signed-off-by: Zac Crosby <zac@motorola.com>
+Signed-off-by: Parasuraman <parasur@motorola.com>
+Change-Id: I1979675e30ce671a9e17a7f2f5c1c9a5237d3946
+Reviewed-on: http://gerrit.mot.com/784116
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_status.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_status.c b/drivers/video/msm/mdss/mdss_dsi_status.c
+index d8fc6db5d72..3db2bfcb268 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_status.c
++++ b/drivers/video/msm/mdss/mdss_dsi_status.c
+@@ -30,8 +30,8 @@
+ #include "mdss_panel.h"
+ #include "mdss_mdp.h"
+ 
+-#define STATUS_CHECK_INTERVAL_MS 5000
+-#define STATUS_CHECK_INTERVAL_MIN_MS 50
++#define STATUS_CHECK_INTERVAL_MS 8000
++#define STATUS_CHECK_INTERVAL_MIN_MS 200
+ #define DSI_STATUS_CHECK_INIT -1
+ #define DSI_STATUS_CHECK_DISABLE 1
+ 
+-- 
+2.11.0
+

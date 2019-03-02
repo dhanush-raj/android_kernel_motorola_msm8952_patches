@@ -1,0 +1,61 @@
+From 214c552e1a508cc9c671023aedaae8e280261eec Mon Sep 17 00:00:00 2001
+From: Yuanyuan Zhong <zyy@motorola.com>
+Date: Fri, 10 Apr 2015 10:41:08 -0500
+Subject: [PATCH 713/959] IKSWM-20197 ion: cma_heap: free mem if fail to create
+ sg_table
+
+Initial version of ion_cma_heap.c in qcom baseline seems integrated a
+patch under review. Part of the error handling for ion_cma_allocate()
+in upstream version of ion_cma_heap.c is missing. Add back the missing
+code to ensure the mem is freed when sg_table can't be created.
+
+Change-Id: I421998dc4c1c372fdd183787df30c5fb48b46af9
+Signed-off-by: Yuanyuan Zhong <zyy@motorola.com>
+Reviewed-on: http://gerrit.mot.com/740223
+Reviewed-by: Fred Fettinger <fettinge@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+(cherry picked from commit 801bd1a3a9a51f06b3dde7e35bac44954c4f7fb2)
+Reviewed-on: http://gerrit.mot.com/826389
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/staging/android/ion/ion_cma_heap.c | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/staging/android/ion/ion_cma_heap.c b/drivers/staging/android/ion/ion_cma_heap.c
+index 6d21aecce8e..aeb3b7b82a8 100644
+--- a/drivers/staging/android/ion/ion_cma_heap.c
++++ b/drivers/staging/android/ion/ion_cma_heap.c
+@@ -87,19 +87,24 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
+ 	info->table = kmalloc(sizeof(struct sg_table), GFP_KERNEL);
+ 	if (!info->table) {
+ 		dev_err(dev, "Fail to allocate sg table\n");
+-		goto err;
++		goto free_mem;
+ 	}
+ 
+ 	info->is_cached = ION_IS_CACHED(flags);
+ 
+-	ion_cma_get_sgtable(dev,
+-			info->table, info->cpu_addr, info->handle, len);
++	if (ion_cma_get_sgtable(dev,
++			info->table, info->cpu_addr, info->handle, len))
++		goto free_table;
+ 
+ 	/* keep this for memory release */
+ 	buffer->priv_virt = info;
+ 	dev_dbg(dev, "Allocate buffer %pK\n", buffer);
+ 	return 0;
+ 
++free_table:
++	kfree(info->table);
++free_mem:
++	dma_free_coherent(dev, len, info->cpu_addr, info->handle);
+ err:
+ 	kfree(info);
+ 	return ION_CMA_ALLOCATE_FAILED;
+-- 
+2.11.0
+

@@ -1,0 +1,41 @@
+From f26b4e493e27f593f87aa0bcd89517fccce44a0a Mon Sep 17 00:00:00 2001
+From: Tarciano Facco Pegoraro <tarciano@motorola.com>
+Date: Mon, 22 Aug 2016 13:36:05 -0300
+Subject: [PATCH 913/959] IKSWM-56579 arm/dt: 8952: Add channel id for ACG and
+ LRA
+
+Change-Id: Ie09b42ed2d4a5e1f6a1e5a4b5d360ea4a2601ad6
+Signed-off-by: Tarciano Facco Pegoraro <tarciano@motorola.com>
+Reviewed-on: http://gerrit.mot.com/890521
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Regina Mitsue Azuma <reginaazuma@motorola.com>
+Reviewed-by: Maria Mannes <mlmannes@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi b/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
+index 309d6fad6bf..87b32920a7d 100644
+--- a/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
++++ b/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
+@@ -160,10 +160,10 @@
+ 		"rcica",	/* 143 */
+ 		"wndca",	/* 144 */
+ 		"dmc",		/* 145 */
+-		"bby",  	/* 146 */
++		"bby",		/* 146 */
+ 		"amz",		/* 147 */
+-		"undefined",	/* 148 */
+-		"undefined",	/* 149 */
++		"acg",		/* 148 */
++		"lra",		/* 149 */
+ 		"undefined",	/* 150 */
+ 		"undefined",	/* 151 */
+ 		"undefined",	/* 152 */
+-- 
+2.11.0
+

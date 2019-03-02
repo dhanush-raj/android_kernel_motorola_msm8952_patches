@@ -1,0 +1,68 @@
+From 531b781ef0e81650815a1efb3de8cdcd3ef54015 Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Thu, 4 Sep 2014 10:02:08 -0500
+Subject: [PATCH 071/959] IKLOCSEN-1657:misc:stml0xx: Change reset define to be
+ an enum
+
+One spi call in reset_and_init was allowing resets,
+change that to not allow resets
+
+Change RESET defines to be an enum
+
+Change-Id: Iea89b39cbc9df5634ed2bfa49cd3c6def41b4688
+Signed-off-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/668157
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_reset.c | 3 ++-
+ include/linux/stml0xx.h              | 8 +++++---
+ 2 files changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index adb115b61ea..2c4f9377e9c 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -82,7 +82,8 @@ int stml0xx_reset_and_init(void)
+ 		ret_err = err;
+ 
+ 	buf[0] = stml0xx_g_acc2_delay;
+-	err = stml0xx_spi_send_write_reg(ACCEL2_UPDATE_RATE, buf, 1);
++	err = stml0xx_spi_send_write_reg_reset(ACCEL2_UPDATE_RATE, buf,
++			1, RESET_NOT_ALLOWED);
+ 	if (err < 0)
+ 		ret_err = err;
+ 
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 2715e2c2062..c00e94ab486 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -293,6 +293,11 @@ enum stm_commands {
+ 	CRC_CHECK
+ };
+ 
++enum {
++	RESET_NOT_ALLOWED,
++	RESET_ALLOWED
++};
++
+ struct stm_response {
+ 	/* 0x0080 */
+ 	unsigned short header;
+@@ -486,9 +491,6 @@ struct stm_response {
+ #define STML0XX_LED_HALF_BRIGHTNESS 0x007F7F7F
+ #define STML0XX_LED_OFF 0x00000000
+ 
+-#define RESET_ALLOWED 1
+-#define RESET_NOT_ALLOWED 0
+-
+ /* The following macros are intended to be called with the stm IRQ handlers */
+ /* only and refer to local variables in those functions. */
+ #define STM16_TO_HOST(x) ((short) be16_to_cpu( \
+-- 
+2.11.0
+

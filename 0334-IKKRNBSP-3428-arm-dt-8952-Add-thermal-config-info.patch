@@ -1,0 +1,36 @@
+From 8392e2f40311fe1721024bd824041aef79075d99 Mon Sep 17 00:00:00 2001
+From: Jason Knopsnyder <jasonk@motorola.com>
+Date: Fri, 2 Oct 2015 11:45:53 -0500
+Subject: [PATCH 334/959] IKKRNBSP-3428: arm/dt: 8952: Add thermal config-info
+
+Set the config-info field in msm-thermal to athene.
+
+Change-Id: Ideb359fb8871b623836b74a61f364e58e4787cc8
+Signed-off-by: Jason Knopsnyder <jasonk@motorola.com>
+Reviewed-on: http://gerrit.mot.com/788000
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index e81e1d642ba..269c9a245ab 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -569,6 +569,10 @@
+ 			qcom,scaling-factor = <1000>;
+ 		};
+ 	};
++
++	qcom,msm-thermal {
++		qcom,config-info = "athene";
++	};
+ };
+ 
+ &sdhc_1 {
+-- 
+2.11.0
+

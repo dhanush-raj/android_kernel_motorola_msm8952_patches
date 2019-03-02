@@ -1,0 +1,91 @@
+From 7936a0e619aeef08771cef01fc58f80506234ad5 Mon Sep 17 00:00:00 2001
+From: Zac Crosby <zac@motorola.com>
+Date: Mon, 5 Oct 2015 10:03:48 -0500
+Subject: [PATCH 539/959] IKSWM-12005 arm/dt: msm8952: LG and BOE display power
+ sequence updates
+
+Update the LG and BOE display power sequence due to new requirements:
+- Remove VDDIO delays
+- Make VDDIO always on
+
+Change-Id: I099a3d161faec27d154427eca2dc0cc6213bcb2d
+Signed-off-by: daiss1 <daiss1@motorola.com>
+(cherry picked from commit a64c95812a228d132b99d11f54a75a98a9c185c3)
+Reviewed-on: http://gerrit.mot.com/802389
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ .../dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi    |  3 ++-
+ .../dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi    |  3 ++-
+ arch/arm/boot/dts/qcom/msm8952-athene.dtsi                  | 13 ++++++++++++-
+ 3 files changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+index 39976882c17..5299eeea9c1 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+@@ -117,10 +117,11 @@ qcom,panel-supply-entries {
+ 		qcom,supply-max-voltage = <1800000>;
+ 		qcom,supply-enable-load = <300000>;
+ 		qcom,supply-disable-load = <100>;
++		/* This is always on, no delays needed */
+ 		qcom,supply-pre-on-sleep = <0>;
+ 		qcom,supply-post-on-sleep = <0>;
+ 		qcom,supply-pre-off-sleep = <0>;
+-		qcom,supply-post-off-sleep = <1>;
++		qcom,supply-post-off-sleep = <0>;
+ 	};
+ 
+ 	qcom,panel-supply-entry@1 {
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+index 7bb967fb7d0..9f14e7b927d 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -114,10 +114,11 @@ qcom,panel-supply-entries {
+ 		qcom,supply-max-voltage = <1800000>;
+ 		qcom,supply-enable-load = <300000>;
+ 		qcom,supply-disable-load = <100>;
++		/* This is always on, no delays needed */
+ 		qcom,supply-pre-on-sleep = <0>;
+ 		qcom,supply-post-on-sleep = <0>;
+ 		qcom,supply-pre-off-sleep = <0>;
+-		qcom,supply-post-off-sleep = <1>;
++		qcom,supply-post-off-sleep = <0>;
+ 	};
+ 
+ 	qcom,panel-supply-entry@1 {
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene.dtsi b/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+index 8b5dfeef02c..dba36c856bc 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+@@ -22,9 +22,20 @@
+ 			"qcom,msm8952";
+ };
+ 
++&soc {
++	vddio_disp_vreg: vddio_disp_vreg {
++		compatible = "regulator-fixed";
++		regulator-name = "vddio_disp";
++		vin-supply = <&pm8950_l6>;
++		startup-delay-us = <300>;
++		regulator-boot-on;
++		regulator-always-on;
++	};
++};
++
+ &mdss_dsi0 {
+ 	qcom,dsi-pref-prim-pan = <&mot_lgd_546_1080p_cmd_v0>;
+-	vddio_disp-supply = <&pm8950_l6>;
++	vddio_disp-supply = <&vddio_disp_vreg>;
+ 	vsp_disp-supply = <&lab_regulator>;
+ 	vsn_disp-supply = <&ibb_regulator>;
+ };
+-- 
+2.11.0
+

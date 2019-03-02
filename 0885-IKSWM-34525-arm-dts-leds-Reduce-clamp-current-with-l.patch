@@ -1,0 +1,45 @@
+From 2e023e8042f87de37d746d0e21f6c6286dab40da Mon Sep 17 00:00:00 2001
+From: Andrew Lenart <w16741@motorola.com>
+Date: Thu, 12 May 2016 13:33:59 -0500
+Subject: [PATCH 885/959] IKSWM-34525: arm/dts: leds: Reduce clamp current with
+ lower Vin Thresh
+
+Set led strobe clamp currents to 75mA each and Vin threshold to 3.0V
+
+Change-Id: Ia2c54807302c425c41a1f9d8d82e7ec2103fd51d
+Signed-off-by: Andrew Lenart <w16741@motorola.com>
+Reviewed-on: http://gerrit.mot.com/855836
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm-pmi8950.dtsi | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi b/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi
+index 618c0665fbe..e380a643710 100644
+--- a/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi
++++ b/arch/arm/boot/dts/qcom/msm-pmi8950.dtsi
+@@ -534,7 +534,7 @@
+ 			label = "flash";
+ 			qcom,headroom = <500>;
+ 			qcom,startup-dly = <128>;
+-			qcom,clamp-curr = <200>;
++			qcom,clamp-current = <75>;
+ 			qcom,pmic-charger-support;
+ 			qcom,self-check-enabled;
+ 			qcom,thermal-derate-enabled;
+@@ -544,7 +544,7 @@
+ 			qcom,ramp_up_step = "6P7_US";
+ 			qcom,ramp_dn_step = "6P7_US";
+ 			qcom,vph-pwr-droop-enabled;
+-			qcom,vph-pwr-droop-threshold = <3200>;
++			qcom,vph-pwr-droop-threshold = <3000>;
+ 			qcom,vph-pwr-droop-debounce-time = <10>;
+ 			qcom,headroom-sense-ch0-enabled;
+ 			qcom,headroom-sense-ch1-enabled;
+-- 
+2.11.0
+

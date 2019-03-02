@@ -1,0 +1,56 @@
+From db786b6489e6ba20864b8c179021a8fe664b7a9d Mon Sep 17 00:00:00 2001
+From: Vidyadhar Gurram <rnh786@motorola.com>
+Date: Fri, 5 Jun 2015 14:17:57 -0500
+Subject: [PATCH 263/959] IKSWL-17442: power: smbcharger-mmi: Mask DC Present &
+ Online status.
+
+When the temperature is in Out of temperature conditions, broadcast the
+DC ONLINE & PRESENT properties as Not Present.
+
+Change-Id: I75d8771e2c5780ded515aee0c495f6d4125079b2
+Signed-off-by: Vidyadhar Gurram <rnh786@motorola.com>
+Reviewed-on: http://gerrit.mot.com/754966
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 14 +++++++++++---
+ 1 file changed, 11 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 8c91805b2a2..6e97f45a68e 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -3072,16 +3072,24 @@ static int smbchg_dc_get_property(struct power_supply *psy,
+ 
+ 	switch (prop) {
+ 	case POWER_SUPPLY_PROP_PRESENT:
+-		val->intval = is_dc_present(chip);
++		if ((chip->temp_state == POWER_SUPPLY_HEALTH_OVERHEAT) ||
++		    (chip->temp_state == POWER_SUPPLY_HEALTH_COLD))
++			val->intval = 0;
++		else
++			val->intval = is_dc_present(chip);
+ 		break;
+ 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
+ 		val->intval = chip->dc_suspended == 0;
+ 		break;
+ 	case POWER_SUPPLY_PROP_ONLINE:
+ 		/* return if dc is charging the battery */
+-		val->intval = (smbchg_get_pwr_path(chip) == PWR_PATH_DC)
++		if ((chip->temp_state == POWER_SUPPLY_HEALTH_OVERHEAT) ||
++		    (chip->temp_state == POWER_SUPPLY_HEALTH_COLD))
++			val->intval = 0;
++		else
++			val->intval = (smbchg_get_pwr_path(chip) == PWR_PATH_DC)
+ 				&& (get_prop_batt_status(chip)
+-					== POWER_SUPPLY_STATUS_CHARGING);
++				    == POWER_SUPPLY_STATUS_CHARGING);
+ 		break;
+ 	case POWER_SUPPLY_PROP_CURRENT_MAX:
+ 		val->intval = chip->dc_max_current_ma * 1000;
+-- 
+2.11.0
+

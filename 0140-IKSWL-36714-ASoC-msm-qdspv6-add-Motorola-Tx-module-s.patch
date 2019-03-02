@@ -1,0 +1,51 @@
+From 0e07c46baad3635c526193ea139715239dd30e54 Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Tue, 1 Sep 2015 15:15:07 -0500
+Subject: [PATCH 140/959] IKSWL-36714 ASoC: msm: qdspv6: add Motorola Tx module
+ sample rate control
+
+Add Motorola Custom Tx module (0x1000E004) for sample rate configuration.
+SiENCS supports only 8K and 16K, sample rate should be adjusted.
+
+Change-Id: I39acb6aa6a200c1f216ac2e983ea055e32c2b8d7
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/780701
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ include/sound/apr_audio-v2.h  | 1 +
+ sound/soc/msm/qdsp6v2/q6adm.c | 3 ++-
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/include/sound/apr_audio-v2.h b/include/sound/apr_audio-v2.h
+index e6ead2a6b4e..0bf1ebb16e4 100644
+--- a/include/sound/apr_audio-v2.h
++++ b/include/sound/apr_audio-v2.h
+@@ -2532,6 +2532,7 @@ struct afe_lpass_core_shared_clk_config_command {
+ #define VPM_TX_DM_FLUENCE_COPP_TOPOLOGY			0x00010F72
+ #define VPM_TX_QMIC_FLUENCE_COPP_TOPOLOGY		0x00010F75
+ #define VPM_TX_DM_RFECNS_COPP_TOPOLOGY			0x00010F86
++#define VPM_TX_MOT_COPP_TOPOLOGY			0x1000E004
+ #define ADM_CMD_COPP_OPEN_TOPOLOGY_ID_DTS_HPX		0x10015002
+ #define ADM_CMD_COPP_OPEN_TOPOLOGY_ID_AUDIOSPHERE	0x10028000
+ 
+diff --git a/sound/soc/msm/qdsp6v2/q6adm.c b/sound/soc/msm/qdsp6v2/q6adm.c
+index 362a5599fad..3a06b2139cb 100644
+--- a/sound/soc/msm/qdsp6v2/q6adm.c
++++ b/sound/soc/msm/qdsp6v2/q6adm.c
+@@ -2085,7 +2085,8 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
+ 
+ 	if ((topology == VPM_TX_SM_ECNS_COPP_TOPOLOGY) ||
+ 	    (topology == VPM_TX_DM_FLUENCE_COPP_TOPOLOGY) ||
+-	    (topology == VPM_TX_DM_RFECNS_COPP_TOPOLOGY))
++	    (topology == VPM_TX_DM_RFECNS_COPP_TOPOLOGY) ||
++	    (topology == VPM_TX_MOT_COPP_TOPOLOGY))
+ 		rate = 16000;
+ 
+ 	copp_idx = adm_get_idx_if_copp_exists(port_idx, topology, perf_mode,
+-- 
+2.11.0
+

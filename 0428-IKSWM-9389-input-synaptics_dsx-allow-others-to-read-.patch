@@ -1,0 +1,48 @@
+From 590cdd8fab322c1d393a98cbebf26d576d319fff Mon Sep 17 00:00:00 2001
+From: Alexander Filonenko <alexf@motorola.com>
+Date: Mon, 26 Oct 2015 15:48:14 -0500
+Subject: [PATCH 428/959] IKSWM-9389 input: synaptics_dsx: allow others to read
+ F54 attrs
+
+Set world read permissions for Synaptics F54 attributes to enable access from
+applications.
+
+Change-Id: I0d12c0c6503dc489736bb638e4d6efe4bf9ed2a3
+Signed-off-by: Alexander Filonenko <alexf@motorola.com>
+Reviewed-on: http://gerrit.mot.com/794549
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/795548
+Reviewed-by: Konstantin Makariev <kmakariev@motorola.com>
+---
+ drivers/input/touchscreen/synaptics_dsx_test_reporting.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_test_reporting.c b/drivers/input/touchscreen/synaptics_dsx_test_reporting.c
+index a1077937153..e7716d36b0e 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_test_reporting.c
++++ b/drivers/input/touchscreen/synaptics_dsx_test_reporting.c
+@@ -77,7 +77,7 @@ struct device_attribute dev_attr_##propname =\
+ 		synaptics_rmi4_store_error);
+ 
+ #define show_prototype(propname)\
+-	show_prototype_ext(propname, S_IRUSR | S_IRGRP)
++	show_prototype_ext(propname, S_IRUSR | S_IRGRP | S_IROTH)
+ 
+ #define store_prototype(propname)\
+ static ssize_t concat(synaptics_rmi4_f54, _##propname##_store)(\
+@@ -108,7 +108,7 @@ struct device_attribute dev_attr_##propname =\
+ 
+ #define show_store_prototype(propname)\
+ 	show_store_prototype_ext(propname, \
+-		S_IRUSR | S_IRGRP | S_IWUSR | S_IWGRP)
++		S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR | S_IWGRP)
+ 
+ #define simple_show_func(rtype, propname, fmt)\
+ static ssize_t concat(synaptics_rmi4_f54, _##propname##_show)(\
+-- 
+2.11.0
+

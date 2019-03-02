@@ -1,0 +1,74 @@
+From ec62f407c3cc6beae2c539c10ec4dd484dda85cd Mon Sep 17 00:00:00 2001
+From: Ravi Chebolu <arc095@motorola.com>
+Date: Wed, 18 Nov 2015 16:06:29 -0600
+Subject: [PATCH 512/959] IKKRNBSP-3534 cpuidle: lpm_levels: Print enabled
+ clocks in idle path
+
+To assist in debugging XOSD issues in the idle path, add a
+debug interface to dynamically dump the active clocks in the
+idle path.
+
+echo 4 > /sys/module/lpm_levels/parameters/debug_mask
+echo 1 > /d/clk/debug_suspend
+to dump the active clocks.
+
+Change-Id: I3cb3029841e139a61f447df346f56e1286f6bed0
+Signed-off-by: Ravi Chebolu <arc095@motorola.com>
+Reviewed-on: http://gerrit.mot.com/801249
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/cpuidle/lpm-levels.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/drivers/cpuidle/lpm-levels.c b/drivers/cpuidle/lpm-levels.c
+index 6330e74bf62..b41302b6ca7 100644
+--- a/drivers/cpuidle/lpm-levels.c
++++ b/drivers/cpuidle/lpm-levels.c
+@@ -62,6 +62,7 @@ static remote_spinlock_t scm_handoff_lock;
+ enum {
+ 	MSM_LPM_LVL_DBG_SUSPEND_LIMITS = BIT(0),
+ 	MSM_LPM_LVL_DBG_IDLE_LIMITS = BIT(1),
++	MSM_LPM_LVL_DBG_IDLE_CLK = BIT(2),
+ };
+ 
+ enum debug_event {
+@@ -150,6 +151,11 @@ static bool sleep_disabled;
+ module_param_named(sleep_disabled,
+ 	sleep_disabled, bool, S_IRUGO | S_IWUSR | S_IWGRP);
+ 
++static int lpm_level_debug_mask;
++module_param_named(
++	debug_mask, lpm_level_debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP
++);
++
+ s32 msm_cpuidle_get_deep_idle_latency(void)
+ {
+ 	return 10;
+@@ -1335,6 +1341,7 @@ static int lpm_cpuidle_enter(struct cpuidle_device *dev,
+ 	int idx = cpu_power_select(dev, cluster->cpu, &index);
+ 	const struct cpumask *cpumask = get_cpu_mask(dev->cpu);
+ 	struct power_params *pwr_params;
++	struct lpm_cluster_level *level;
+ 
+ 	if (idx < 0) {
+ 		local_irq_enable();
+@@ -1357,6 +1364,12 @@ static int lpm_cpuidle_enter(struct cpuidle_device *dev,
+ 
+ 	cluster_prepare(cluster, cpumask, idx, true);
+ 	lpm_stats_cpu_enter(idx);
++
++	level = &cluster->parent->levels[cluster->parent->last_level];
++	if ((lpm_level_debug_mask & MSM_LPM_LVL_DBG_IDLE_CLK) &&
++	    !strcmp(level->level_name, "system-cci-pc"))
++		clock_debug_print_enabled();
++
+ 	if (idx > 0)
+ 		update_debug_pc_event(CPU_ENTER, idx, 0xdeaffeed,
+ 			gic_return_irq_pending(), true);
+-- 
+2.11.0
+

@@ -1,0 +1,153 @@
+From dd1068db03635b22a63a611ea500d69585d1c431 Mon Sep 17 00:00:00 2001
+From: Yuanyuan Zhong <zyy@motorola.com>
+Date: Mon, 2 May 2016 15:17:00 -0500
+Subject: [PATCH 878/959] IKSWM-31344 esdfs: store lower file in vm_file for
+ mmap
+
+When esdfs file mapping is created, the esdfs file is stored in
+vma->vm_file. The vma is linked into esdfs inode address space.
+But all pages used by the mapping are allocated for lower file and
+added to lower inode address space. As the result, kernel can't find
+the vma mapping for a page used by the file, thus can't reclaim mem
+for pages used by esdfs file mapping.
+Use lower file for vma->vm_file directly to fix the breakage.
+
+Change-Id: I167adeb18b42d6cd9d39e93c6152c22e2105974e
+Signed-off-by: Yuanyuan Zhong <zyy@motorola.com>
+Reviewed-on: http://gerrit.mot.com/852202
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/esdfs/file.c |  6 +++++-
+ fs/esdfs/mmap.c | 59 +++++++++++++++++----------------------------------------
+ 2 files changed, 22 insertions(+), 43 deletions(-)
+
+diff --git a/fs/esdfs/file.c b/fs/esdfs/file.c
+index f0e7dbda620..e937abaaed5 100644
+--- a/fs/esdfs/file.c
++++ b/fs/esdfs/file.c
+@@ -3,7 +3,7 @@
+  * Copyright (c) 2009	   Shrikar Archak
+  * Copyright (c) 2003-2014 Stony Brook University
+  * Copyright (c) 2003-2014 The Research Foundation of SUNY
+- * Copyright (C) 2013-2014 Motorola Mobility, LLC
++ * Copyright (C) 2013-2014, 2016 Motorola Mobility, LLC
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 as
+@@ -189,6 +189,10 @@ static int esdfs_mmap(struct file *file, struct vm_area_struct *vma)
+ 	if (!ESDFS_F(file)->lower_vm_ops) /* save for our ->fault */
+ 		ESDFS_F(file)->lower_vm_ops = saved_vm_ops;
+ 
++	vma->vm_private_data = file;
++	fput(file);
++	get_file(lower_file);
++	vma->vm_file = lower_file;
+ out:
+ 	esdfs_revert_creds(creds, NULL);
+ 	return err;
+diff --git a/fs/esdfs/mmap.c b/fs/esdfs/mmap.c
+index ee5c1bf1099..cf7dce9a62e 100644
+--- a/fs/esdfs/mmap.c
++++ b/fs/esdfs/mmap.c
+@@ -3,7 +3,7 @@
+  * Copyright (c) 2009	   Shrikar Archak
+  * Copyright (c) 2003-2014 Stony Brook University
+  * Copyright (c) 2003-2014 The Research Foundation of SUNY
+- * Copyright (C) 2013-2014 Motorola Mobility, LLC
++ * Copyright (C) 2013-2014, 2016 Motorola Mobility, LLC
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 as
+@@ -15,33 +15,20 @@
+ static int esdfs_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+ {
+ 	int err;
+-	struct file *file, *lower_file;
++	struct file *file;
+ 	const struct vm_operations_struct *lower_vm_ops;
+-	struct vm_area_struct lower_vma;
+-	struct esdfs_sb_info *sbi = ESDFS_SB(vma->vm_file->f_path.dentry->d_sb);
+-	const struct cred *creds = esdfs_override_creds(sbi, NULL);
++	struct esdfs_sb_info *sbi;
++	const struct cred *creds;
++
++	file = (struct file *)vma->vm_private_data;
++	sbi = ESDFS_SB(file->f_path.dentry->d_sb);
++	creds = esdfs_override_creds(sbi, NULL);
+ 	if (!creds)
+ 		return -ENOMEM;
+ 
+-	memcpy(&lower_vma, vma, sizeof(struct vm_area_struct));
+-	file = lower_vma.vm_file;
+ 	lower_vm_ops = ESDFS_F(file)->lower_vm_ops;
+ 	BUG_ON(!lower_vm_ops);
+-
+-	lower_file = esdfs_lower_file(file);
+-	/*
+-	 * XXX: vm_ops->fault may be called in parallel.  Because we have to
+-	 * resort to temporarily changing the vma->vm_file to point to the
+-	 * lower file, a concurrent invocation of esdfs_fault could see a
+-	 * different value.  In this workaround, we keep a different copy of
+-	 * the vma structure in our stack, so we never expose a different
+-	 * value of the vma->vm_file called to us, even temporarily.  A
+-	 * better fix would be to change the calling semantics of ->fault to
+-	 * take an explicit file pointer.
+-	 */
+-	lower_vma.vm_file = lower_file;
+-	err = lower_vm_ops->fault(&lower_vma, vmf);
+-
++	err = lower_vm_ops->fault(vma, vmf);
+ 	esdfs_revert_creds(creds, NULL);
+ 	return err;
+ }
+@@ -50,35 +37,23 @@ static int esdfs_page_mkwrite(struct vm_area_struct *vma,
+ 			       struct vm_fault *vmf)
+ {
+ 	int err = 0;
+-	struct file *file, *lower_file;
++	struct file *file;
+ 	const struct vm_operations_struct *lower_vm_ops;
+-	struct vm_area_struct lower_vma;
+-	struct esdfs_sb_info *sbi = ESDFS_SB(vma->vm_file->f_path.dentry->d_sb);
+-	const struct cred *creds = esdfs_override_creds(sbi, NULL);
++	struct esdfs_sb_info *sbi;
++	const struct cred *creds;
++
++	file = (struct file *)vma->vm_private_data;
++	sbi = ESDFS_SB(file->f_path.dentry->d_sb);
++	creds = esdfs_override_creds(sbi, NULL);
+ 	if (!creds)
+ 		return -ENOMEM;
+ 
+-	memcpy(&lower_vma, vma, sizeof(struct vm_area_struct));
+-	file = lower_vma.vm_file;
+ 	lower_vm_ops = ESDFS_F(file)->lower_vm_ops;
+ 	BUG_ON(!lower_vm_ops);
+ 	if (!lower_vm_ops->page_mkwrite)
+ 		goto out;
+ 
+-	lower_file = esdfs_lower_file(file);
+-	/*
+-	 * XXX: vm_ops->page_mkwrite may be called in parallel.
+-	 * Because we have to resort to temporarily changing the
+-	 * vma->vm_file to point to the lower file, a concurrent
+-	 * invocation of esdfs_page_mkwrite could see a different
+-	 * value.  In this workaround, we keep a different copy of the
+-	 * vma structure in our stack, so we never expose a different
+-	 * value of the vma->vm_file called to us, even temporarily.
+-	 * A better fix would be to change the calling semantics of
+-	 * ->page_mkwrite to take an explicit file pointer.
+-	 */
+-	lower_vma.vm_file = lower_file;
+-	err = lower_vm_ops->page_mkwrite(&lower_vma, vmf);
++	err = lower_vm_ops->page_mkwrite(vma, vmf);
+ out:
+ 	esdfs_revert_creds(creds, NULL);
+ 	return err;
+-- 
+2.11.0
+

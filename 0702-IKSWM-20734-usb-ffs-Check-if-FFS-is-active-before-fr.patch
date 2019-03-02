@@ -1,0 +1,87 @@
+From ccfd35fee8fce355817395766d0eda51dbc879ce Mon Sep 17 00:00:00 2001
+From: Xuehui Ye <yexh1@motorola.com>
+Date: Wed, 24 Feb 2016 11:02:54 +0800
+Subject: [PATCH 702/959] IKSWM-20734: usb: ffs: Check if FFS is active before
+ freeing.
+
+Fix a race between ffs unmounting triggered from userspace and
+de-enumeration triggered in kernel as a part of the reboot.
+Unmount causes the ffs->eps_count to be cleared and
+when the ffs_func_free() runs it could potentially free
+unallocated endpoints and triggering an oops.
+
+Change-Id: I93171024a0e2fc7b9a969f37ce017051986c422b
+Signed-off-by: Xuehui Ye <yexh1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/825256
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/usb/gadget/f_fs.c | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/drivers/usb/gadget/f_fs.c b/drivers/usb/gadget/f_fs.c
+index 7f7acc4c41a..e158b2a4a41 100644
+--- a/drivers/usb/gadget/f_fs.c
++++ b/drivers/usb/gadget/f_fs.c
+@@ -242,6 +242,7 @@ struct ffs_data {
+ 	 * destroyed by ffs_epfiles_destroy().
+ 	 */
+ 	struct ffs_epfile		*epfiles;
++	unsigned short			eps_pending_free_count;
+ };
+ 
+ /* Reference counter handling */
+@@ -1484,6 +1485,7 @@ static void ffs_data_reset(struct ffs_data *ffs)
+ 
+ 	ffs->strings_count = 0;
+ 	ffs->interfaces_count = 0;
++	ffs->eps_pending_free_count = ffs->eps_count;
+ 	ffs->eps_count = 0;
+ 
+ 	ffs->ev.count = 0;
+@@ -1639,6 +1641,15 @@ static void ffs_func_free(struct ffs_function *func)
+ 
+ 	ENTER();
+ 
++	if (!count) {
++		if (!func->ffs->eps_pending_free_count) {
++			pr_err("%s - ffs eps already freed\n", __func__);
++			return;
++		}
++
++		count = func->ffs->eps_pending_free_count;
++	}
++
+ 	/* cleanup after autoconfig */
+ 	spin_lock_irqsave(&func->ffs->eps_lock, flags);
+ 	do {
+@@ -1648,6 +1659,7 @@ static void ffs_func_free(struct ffs_function *func)
+ 		ep->ep = NULL;
+ 		++ep;
+ 	} while (--count);
++	func->ffs->eps_pending_free_count = 0;
+ 	spin_unlock_irqrestore(&func->ffs->eps_lock, flags);
+ 
+ 	ffs_data_put(func->ffs);
+@@ -1669,6 +1681,15 @@ static void ffs_func_eps_disable(struct ffs_function *func)
+ 	unsigned count            = func->ffs->eps_count;
+ 	unsigned long flags;
+ 
++	if (!count) {
++		if (!func->ffs->eps_pending_free_count) {
++			pr_err("%s - ffs eps already disabled\n", __func__);
++			return;
++		}
++
++		count = func->ffs->eps_pending_free_count;
++	}
++
+ 	spin_lock_irqsave(&func->ffs->eps_lock, flags);
+ 	do {
+ 		atomic_set(&epfile->error, 1);
+-- 
+2.11.0
+

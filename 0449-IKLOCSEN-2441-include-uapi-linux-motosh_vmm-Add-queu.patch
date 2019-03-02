@@ -1,0 +1,42 @@
+From 8c42610712e873abe1ccc09d377dcaeffb3e304f Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Wed, 4 Nov 2015 13:38:56 -0600
+Subject: [PATCH 449/959] IKLOCSEN-2441 include/uapi/linux: motosh_vmm: Add
+ queue test limit
+
+Add a new vmm register to be used for the sensor hub
+streaming sensor fill level test.
+
+Change-Id: Iebaa9dd44d55d2273938584a411164a9f5207afa
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/797419
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Gabriel Burca <Gabriel.Burca@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ include/uapi/linux/motosh_vmm.h | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/include/uapi/linux/motosh_vmm.h b/include/uapi/linux/motosh_vmm.h
+index e14d5df987f..efcbd51fc47 100644
+--- a/include/uapi/linux/motosh_vmm.h
++++ b/include/uapi/linux/motosh_vmm.h
+@@ -76,9 +76,9 @@ VMM_ENTRY(0x0E, UNUSED_0E,						FALSE,
+ VMM_ENTRY(0x0F, UNUSED_0F,						FALSE,
+ 		0, /* vmm_p_display_color */
+ 		0)
+-VMM_ENTRY(0x10, UNUSED_10,						FALSE,
+-		0,
+-		0)
++VMM_ENTRY(0x10, QUEUE_TEST_LIMIT,					TRUE,
++		&vmm_queue_test_limit,
++		sizeof(vmm_queue_test_limit))
+ VMM_ENTRY(0x11, LED_NOTIF_DATA,						TRUE,
+ 		vmm_led_notif_data,
+ 		sizeof(vmm_led_notif_data))
+-- 
+2.11.0
+

@@ -1,0 +1,30 @@
+From ede02aca78747bbf6c99e101d56915505bc50399 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Mon, 24 Aug 2015 10:35:32 -0500
+Subject: [PATCH 280/959] IKKRNBSP-3341: power: qpnp-smbcharger-mmi: No
+ Parallel
+
+Disable Parallel charging capabilities from the probe.
+
+Change-Id: I78081a4bf6b14bbba9bc28b8873e9d746b80c2c0
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index b1880bf9873..70a1b2c9898 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -7353,7 +7353,7 @@ static int smbchg_probe(struct spmi_device *spmi)
+ 
+ 	chip->usb_online = -EINVAL;
+ 	chip->stepchg_state = STEP_NONE;
+-	smbchg_parallel_en = 1;
++	smbchg_parallel_en = 0; /* Disable Parallel Charging Capabilities */
+ 	chip->charger_rate =  POWER_SUPPLY_CHARGE_RATE_NONE;
+ 	dev_set_drvdata(&spmi->dev, chip);
+ 
+-- 
+2.11.0
+

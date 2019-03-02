@@ -1,0 +1,48 @@
+From a62f78e51f724c5e73f5b789d16867152caf58cf Mon Sep 17 00:00:00 2001
+From: German Monroy <german.monroy@intel.com>
+Date: Thu, 29 Sep 2011 17:39:30 -0700
+Subject: [PATCH 016/959] merge of reated changes kernel build: add Android
+ makefile
+
+	So that this kernel can be compiled together with the rest of Android
+	(i.e. build automatically creates boot.bin)
+
+	Change-Id: I7f59d0d17ed267e101f0cee2f75a5893de5cfbcb
+
+	kbuild: add a make defoldconfig make option
+
+	The oldconfig option is asking user to choose when new config options are defined in KConfig files, and not in .config
+	This prevents automatic builds.
+
+	This make target will use default values for all options not specified in .config
+
+	xxChange - Id: I713a5cc248130056441060dccfcb492ad0d8acb5
+	Signed-off-by: Pierre Tardy <pierre.tardy@intel.com>
+
+Change-Id: I5f12ca9bc66ba7ac54bc205319c23d2875c0ea6f
+Reviewed-on: http://gerrit.pcs.mot.com/507161
+Tested-by: Jira Key <JIRAKEY@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+(cherry picked from commit 4822057684046234dee05de0619701adf72f2923)
+(cherry picked from commit 63bbc7b21c9ec6252fd475ac30c433871be71992)
+---
+ scripts/kconfig/Makefile | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/scripts/kconfig/Makefile b/scripts/kconfig/Makefile
+index 844bc9da08d..026e519f6be 100644
+--- a/scripts/kconfig/Makefile
++++ b/scripts/kconfig/Makefile
+@@ -32,6 +32,9 @@ nconfig: $(obj)/nconf
+ oldconfig: $(obj)/conf
+ 	$< --$@ $(Kconfig)
+ 
++defoldconfig: $(obj)/conf
++	$< --defconfig=.config $(Kconfig)
++
+ silentoldconfig: $(obj)/conf
+ 	$(Q)mkdir -p include/generated
+ 	$< --$@ $(Kconfig)
+-- 
+2.11.0
+

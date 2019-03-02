@@ -1,0 +1,232 @@
+From ed6bff6fcb30f1d18af1c8261be84e3d211e1739 Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Thu, 12 May 2016 09:34:32 -0700
+Subject: [PATCH 888/959] IKKRNBSP-3894: msm: mdss: set brightness at maximum
+ if enabling LCD HBM
+
+For LCD panel, set brightness at maximum while entering HBM and keep it
+same afterwards whatever user space brightness. Previous user space
+brightness is restored while exiting HBM. This change ensures LCD and
+OLED HBM behavior consistent.
+
+Change-Id: If91e4e519476bc15c2d5444a8d92d10e06805c44
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+(cherry picked from commit f9409d8414e7d6b43826bfe63cdb1ff03a1ae167)
+Reviewed-on: http://gerrit.mot.com/856303
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Patrick Auchter <auchter@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 57 +++++++++++++++++++++++++++++++++
+ drivers/video/msm/mdss/mdss_fb.c        | 14 +++++++-
+ drivers/video/msm/mdss/mdss_panel.h     | 34 ++++++++++++++++++++
+ 3 files changed, 104 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index 68dba99ce9c..9dfc9106dfa 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -291,6 +291,40 @@ static int mdss_dsi_panel_set_param(struct mdss_panel_data *pdata,
+ 	return 0;
+ }
+ 
++static bool mdss_dsi_panel_hbm_bl_ctrl(struct mdss_panel_data *pdata,
++							u32 *level)
++{
++	u32 bl_level;
++
++	if (pdata == NULL || level == NULL) {
++		pr_err("%s: Invalid input data\n", __func__);
++		return false;
++	}
++
++	if (!mdss_panel_param_is_supported(&pdata->panel_info, PARAM_HBM_ID))
++		return false;
++
++	bl_level = *level;
++	if (bl_level == BRIGHTNESS_HBM_ON || bl_level == BRIGHTNESS_HBM_OFF) {
++		if (pdata->panel_info.hbm_type == HBM_TYPE_OLED)
++			return true;
++		*level = bl_level == BRIGHTNESS_HBM_ON ?
++			pdata->panel_info.bl_max : pdata->panel_info.bl_hbm_off;
++		return false;
++	}
++
++	if (pdata->panel_info.hbm_type != HBM_TYPE_OLED) {
++		pdata->panel_info.bl_hbm_off = bl_level;
++		if (mdss_panel_param_is_hbm_on(&pdata->panel_info)) {
++			pr_debug("%s: Ignore setting brightness %d in LCD HBM mode\n",
++				__func__, bl_level);
++			return true;
++		}
++	}
++
++	return false;
++}
++
+ static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+ {
+ 	int rc = 0;
+@@ -815,6 +849,9 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
+ 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+ 				panel_data);
+ 
++	if (mdss_dsi_panel_hbm_bl_ctrl(pdata, &bl_level))
++		return;
++
+ 	/*
+ 	 * Some backlight controllers specify a minimum duty cycle
+ 	 * for the backlight brightness. If the brightness is less
+@@ -1201,11 +1238,28 @@ static int mdss_panel_parse_param_prop(struct device_node *np,
+ 	struct panel_param *param;
+ 	struct dsi_panel_cmds *cmds;
+ 	char *prop;
++	const char *data;
+ 
+ 	pinfo->hbm_restore = false;
+ 
+ 	for (i = 0; i < ARRAY_SIZE(mdss_dsi_panel_param); i++) {
+ 		param = &mdss_dsi_panel_param[i];
++
++		if (i == PARAM_HBM_ID) {
++			pinfo->bl_hbm_off = pinfo->bl_max;
++			data = of_get_property(np,
++				"qcom,mdss-dsi-hbm-type", NULL);
++
++			if (data && !strcmp(data, "lcd-dcs-wled"))
++				pinfo->hbm_type = HBM_TYPE_LCD_DCS_WLED;
++			else if (data && !strcmp(data, "lcd-dcs-only"))
++				pinfo->hbm_type = HBM_TYPE_LCD_DCS_ONLY;
++			else if (data && !strcmp(data, "lcd-wled-only"))
++				pinfo->hbm_type = HBM_TYPE_LCD_WLED_ONLY;
++			else
++				pinfo->hbm_type = HBM_TYPE_OLED;
++		}
++
+ 		cmds = kcalloc(param->val_max, sizeof(struct dsi_panel_cmds),
+ 				GFP_KERNEL);
+ 		if (cmds == NULL) {
+@@ -1240,6 +1294,9 @@ static int mdss_panel_parse_param_prop(struct device_node *np,
+ 		pinfo->param[i] = param;
+ 		pr_info("%s: %s feature enabled with %d dt cmds\n",
+ 				__func__, param->param_name, cmd_num);
++		if (i == PARAM_HBM_ID)
++			pr_info("%s: HBM type = %d\n",
++				__func__, pinfo->hbm_type);
+ 	}
+ 
+ 	return rc;
+diff --git a/drivers/video/msm/mdss/mdss_fb.c b/drivers/video/msm/mdss/mdss_fb.c
+index 38f305baf09..8fffc5fccb3 100644
+--- a/drivers/video/msm/mdss/mdss_fb.c
++++ b/drivers/video/msm/mdss/mdss_fb.c
+@@ -974,6 +974,7 @@ static int __maybe_unused mdss_fb_set_param(struct device *dev,
+ 	struct fb_info *fbi = dev_get_drvdata(dev);
+ 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+ 	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
++        struct mdss_panel_data *pdata = dev_get_platdata(&mfd->pdev->dev);
+ 	struct panel_param *param;
+ 	const char *val_name;
+ 	int ret = -EINVAL;
+@@ -1001,9 +1002,15 @@ static int __maybe_unused mdss_fb_set_param(struct device *dev,
+ 		goto unlock;
+ 
+ 	if (id == PARAM_HBM_ID) {
+-		if (mdss_fb_is_power_on(mfd) && !mfd->panel_info->hbm_restore)
++		mutex_lock(&mfd->bl_lock);
++		if (mdss_fb_is_power_on(mfd) && !mfd->panel_info->hbm_restore) {
+ 			ret = mdss_fb_set_hw_param(mfd, id, value);
++			if (pdata && pdata->set_backlight)
++				pdata->set_backlight(pdata,
++					HBM_BRIGHTNESS(value));
++		}
+ 		param->value = value;
++		mutex_unlock(&mfd->bl_lock);
+                 goto unlock;
+ 	}
+ 
+@@ -1036,16 +1043,21 @@ static void mdss_fb_restore_param_hbm(struct msm_fb_data_type *mfd)
+ {
+ 	struct mdss_panel_info *pinfo = mfd->panel_info;
+ 	struct panel_param *param;
++        struct mdss_panel_data *pdata = dev_get_platdata(&mfd->pdev->dev);
+ 
+ 	param = pinfo->param[PARAM_HBM_ID];
+ 	if (!param || !pinfo->hbm_restore)
+ 		return;
+ 
+ 	mutex_lock(&mfd->param_lock);
++        mutex_lock(&mfd->bl_lock);
+ 
+ 	pinfo->hbm_restore = false;
+ 	mdss_fb_set_hw_param(mfd, PARAM_HBM_ID, param->value);
++	if (pdata && pdata->set_backlight)
++		pdata->set_backlight(pdata, HBM_BRIGHTNESS(param->value));
+ 
++        mutex_unlock(&mfd->bl_lock);
+ 	mutex_unlock(&mfd->param_lock);
+ }
+ 
+diff --git a/drivers/video/msm/mdss/mdss_panel.h b/drivers/video/msm/mdss/mdss_panel.h
+index 4f44fdbbb0c..a1661de2549 100644
+--- a/drivers/video/msm/mdss/mdss_panel.h
++++ b/drivers/video/msm/mdss/mdss_panel.h
+@@ -33,6 +33,28 @@ struct panel_id {
+ /* worst case prefill lines for all chipsets including all vertical blank */
+ #define MDSS_MDP_MAX_PREFILL_FETCH 25
+ 
++#define BRIGHTNESS_HBM_ON	0xFFFFFFFE
++#define BRIGHTNESS_HBM_OFF	(BRIGHTNESS_HBM_ON - 1)
++#define HBM_BRIGHTNESS(value) ((value) == HBM_ON_STATE ?\
++			BRIGHTNESS_HBM_ON : BRIGHTNESS_HBM_OFF)
++/* HBM implementation is different, depending on display and backlight hardware
++ * design, which is classified into the following types:
++ * HBM_TYPE_OLED: OLED panel, HBM is controlled by DSI register only, which
++ *     is independent on brightness.
++ * HBM_TYPE_LCD_DCS_WLED: LCD panel, HBM is controlled by DSI register, and
++ *     brightness is decided by WLED IC on I2C/SPI bus.
++ * HBM_TYPE_LCD_DCS_ONLY: LCD panel, brightness/HBM is controlled by DSI
++ *     register only.
++ * HBM_TYPE_LCD_WLED_ONLY: LCD panel, brightness/HBM is controlled by WLED
++ *     IC only.
++ *
++ * Note: brightness must be at maximum while enabling HBM for all LCD panels
++ */
++#define HBM_TYPE_OLED	0
++#define HBM_TYPE_LCD_DCS_WLED	1
++#define HBM_TYPE_LCD_DCS_ONLY	2
++#define HBM_TYPE_LCD_WLED_ONLY	3
++
+ enum hbm_state {
+ 	HBM_OFF_STATE = 0,
+ 	HBM_ON_STATE,
+@@ -640,6 +662,8 @@ struct mdss_panel_info {
+ 	bool blank_progress_notify_enabled;
+ 	struct panel_param *param[PARAM_ID_NUM];
+ 	bool hbm_restore;
++	u32 hbm_type;
++	u32 bl_hbm_off;
+ };
+ 
+ struct mdss_panel_timing {
+@@ -970,4 +994,14 @@ static inline bool mdss_panel_param_is_supported(struct mdss_panel_info *p,
+ 	return false;
+ };
+ 
++static inline bool mdss_panel_param_is_hbm_on(struct mdss_panel_info *p)
++{
++	u16 id = PARAM_HBM_ID;
++
++	if (mdss_panel_param_is_supported(p, id) &&
++		p->param[id]->value == HBM_ON_STATE)
++		return true;
++
++	return false;
++};
+ #endif /* MDSS_PANEL_H */
+-- 
+2.11.0
+

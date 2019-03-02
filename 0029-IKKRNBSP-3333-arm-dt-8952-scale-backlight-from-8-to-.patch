@@ -1,0 +1,38 @@
+From 9c028a3a46bd363dbb893006c0026e487c77e490 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Thu, 20 Aug 2015 10:09:24 -0500
+Subject: [PATCH 029/959] IKKRNBSP-3333 arm/dt: 8952: scale backlight from 8 to
+ 12 bits
+
+Framework has 8 bit backlight resolution, backlight driver uses
+12 bits scale. MDSS driver can scale brightness values before
+forwarding them to underlying backlight devices.
+
+Change-Id: I8843ddfd4b43247c3eb76036eca385f1645f0d31
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/778074
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
+index 403201f7a78..31f0bd434c6 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
+@@ -82,7 +82,7 @@ qcom,mdss-dsi-panel-timings = [d6 32 22 00 60 66 26 36 28 03 04 00];
+ qcom,mdss-dsi-t-clk-post = <0x1b>;
+ qcom,mdss-dsi-t-clk-pre = <0x28>;
+ qcom,mdss-dsi-bl-min-level = <1>;
+-qcom,mdss-dsi-bl-max-level = <255>;
++qcom,mdss-dsi-bl-max-level = <4095>;
+ qcom,mdss-dsi-bl-on-defer-delay = <40>;
+ qcom,mdss-dsi-dma-trigger = "trigger_sw";
+ qcom,mdss-dsi-mdp-trigger = "none";
+-- 
+2.11.0
+

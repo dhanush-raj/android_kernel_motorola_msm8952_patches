@@ -1,0 +1,249 @@
+From 6b76be74630d96dabe1cd84d3e324e3e4640208f Mon Sep 17 00:00:00 2001
+From: Bang Nguyen <bangnguyen@motorola.com>
+Date: Mon, 14 Sep 2015 16:17:47 -0500
+Subject: [PATCH 154/959] IKKRNBSP-3383: arm/dts: 8952: Support LGD 1080P 5.46
+ display
+
+Support LGD 1080P 5.46 MIPI DSI command mode display
+
+Change-Id: I2f0e06c62793c68dc659c7984477e19e40c6c60f
+Signed-off-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-on: http://gerrit.mot.com/783998
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ .../dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi    | 134 +++++++++++++++++++++
+ .../dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd.dtsi  |  17 +++
+ arch/arm/boot/dts/qcom/msm8952-athene-p0.dts       |   5 +
+ arch/arm/boot/dts/qcom/msm8952-athene-p0d.dts      |   5 +
+ arch/arm/boot/dts/qcom/msm8952-athene.dtsi         |   4 +-
+ 5 files changed, 163 insertions(+), 2 deletions(-)
+ create mode 100644 arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+ create mode 100644 arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd.dtsi
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+new file mode 100644
+index 00000000000..1b51ca190f9
+--- /dev/null
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -0,0 +1,134 @@
++/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++compatible = "qcom,mdss-dsi-panel";
++qcom,mdss-dsi-panel-name = "mipi_mot_cmd_lgd_1080p_546_v0";
++qcom,mdss-dsi-panel-supplier = "lgd";
++qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
++qcom,mdss-dsi-panel-framerate = <60>;
++qcom,mdss-dsi-virtual-channel-id = <0>;
++qcom,mdss-dsi-stream = <0>;
++qcom,mdss-dsi-panel-width = <1080>;
++qcom,mdss-dsi-panel-height = <1920>;
++qcom,mdss-pan-physical-width-dimension = <68>;
++qcom,mdss-pan-physical-height-dimension = <121>;
++
++qcom,mdss-dsi-panel-clockrate = <807549120>;
++qcom,mdss-dsi-h-front-porch = <24>;
++qcom,mdss-dsi-h-back-porch = <40>;
++qcom,mdss-dsi-h-pulse-width = <4>;
++qcom,mdss-dsi-h-sync-skew = <0>;
++qcom,mdss-dsi-v-back-porch = <16>;
++qcom,mdss-dsi-v-front-porch = <16>;
++qcom,mdss-dsi-v-pulse-width = <2>;
++qcom,mdss-dsi-h-left-border = <0>;
++qcom,mdss-dsi-h-right-border = <0>;
++qcom,mdss-dsi-v-top-border = <0>;
++qcom,mdss-dsi-v-bottom-border = <0>;
++qcom,mdss-dsi-bpp = <24>;
++qcom,mdss-dsi-underflow-color = <0xff>;
++qcom,mdss-dsi-border-color = <0>;
++qcom,mdss-dsi-on-command = [
++	05 01 00 00 78 00 01 11
++	23 01 00 00 00 00 02 B0 00       /* MCS Protect */
++	29 01 00 00 00 00 02 FA 20       /* CABC RGB full PWM */
++	/* CABC PWM setting */
++	29 01 00 00 00 00 18 CE 5D 40 43 49 55 62 71 82 94 A8 B9 CB DB E9 FE FE FF 03 15 04 04 00 00
++	/* CABC UI mode setting */
++	29 01 00 00 00 00 07 B8 07 8B 19 08 0C 21
++	/* CABC Moving Image mode setting */
++	29 01 00 00 00 00 07 BA 07 7A 64 18 30 8D
++	/* Set Max Brightness */
++	15 01 00 00 00 00 02 51 BD
++	/* Set Minimum Brightness */
++	15 01 00 00 00 00 02 5E 00
++	/* BLU control */
++	15 01 00 00 00 00 02 53 2C
++	/* set defaut CABC to UI mode */
++	15 01 00 00 00 00 02 55 01
++	05 01 00 00 00 00 01 29];	/* display on */
++qcom,mdss-dsi-off-command = [
++	05 01 00 00 0a 00 01 28		/* display_off */
++	05 01 00 00 55 00 01 10];	/* enter sleep mode */
++
++qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
++qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
++qcom,mdss-dsi-h-sync-pulse = <0>;
++qcom,mdss-dsi-traffic-mode = "burst_mode";
++qcom,mdss-dsi-bllp-eof-power-mode;
++qcom,mdss-dsi-bllp-power-mode;
++qcom,mdss-dsi-lane-0-state;
++qcom,mdss-dsi-lane-1-state;
++qcom,mdss-dsi-lane-2-state;
++qcom,mdss-dsi-lane-3-state;
++qcom,mdss-dsi-panel-timings = [d6 32 22 00 60 66 26 36 28 03 04 00];
++qcom,mdss-dsi-t-clk-post = <0x1b>;
++qcom,mdss-dsi-t-clk-pre = <0x28>;
++qcom,mdss-dsi-bl-min-level = <1>;
++qcom,mdss-dsi-bl-max-level = <4095>;
++qcom,mdss-dsi-bl-on-defer-delay = <30>;
++qcom,mdss-dsi-dma-trigger = "trigger_sw";
++qcom,mdss-dsi-mdp-trigger = "none";
++qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
++qcom,mdss-dsi-reset-sequence = <1 11>;
++qcom,mdss-dsi-dis-reset-sequence = <0 4>;
++qcom,mdss-dsi-lp11-init;
++qcom,mdss-dsi-tx-eot-append;
++
++qcom,mdss-dsi-te-pin-select = <1>;
++qcom,mdss-dsi-te-dcs-command = <1>;
++qcom,mdss-dsi-te-check-enable;
++qcom,mdss-dsi-te-using-te-pin;
++
++qcom,panel-supply-entries {
++	#address-cells = <1>;
++	#size-cells = <0>;
++
++	qcom,panel-supply-entry@0 {
++		reg = <0>;
++		qcom,supply-name = "vddio_disp";
++		qcom,supply-min-voltage = <1800000>;
++		qcom,supply-max-voltage = <1800000>;
++		qcom,supply-enable-load = <300000>;
++		qcom,supply-disable-load = <100>;
++		qcom,supply-pre-on-sleep = <0>;
++		qcom,supply-post-on-sleep = <1>;
++		qcom,supply-pre-off-sleep = <0>;
++		qcom,supply-post-off-sleep = <1>;
++	};
++
++	qcom,panel-supply-entry@1 {
++		reg = <1>;
++		qcom,supply-name = "vsp_disp";
++		qcom,supply-min-voltage = <4600000>;
++		qcom,supply-max-voltage = <6000000>;
++		qcom,supply-enable-load = <100000>;
++		qcom,supply-disable-load = <100>;
++		qcom,supply-pre-on-sleep = <0>;
++		qcom,supply-post-on-sleep = <2>;
++		qcom,supply-pre-off-sleep = <0>;
++		qcom,supply-post-off-sleep = <5>;
++	};
++
++	qcom,panel-supply-entry@2 {
++		reg = <2>;
++		qcom,supply-name = "vsn_disp";
++		qcom,supply-min-voltage = <4600000>;
++		qcom,supply-max-voltage = <6000000>;
++		qcom,supply-enable-load = <100000>;
++		qcom,supply-disable-load = <100>;
++		qcom,supply-pre-on-sleep = <0>;
++		qcom,supply-post-on-sleep = <2>;
++		qcom,supply-pre-off-sleep = <0>;
++		qcom,supply-post-off-sleep = <1>;
++	};
++};
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd.dtsi
+new file mode 100644
+index 00000000000..324f26df577
+--- /dev/null
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd.dtsi
+@@ -0,0 +1,17 @@
++/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++&mdss_mdp {
++	mot_lgd_546_1080p_cmd_v0: qcom,mdss_dsi_mot_lgd_546_1080p_cmd_v0 {
++		#include "dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi"
++	};
++};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+index 74bae27bf56..20e6e422ce4 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
++++ b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+@@ -14,7 +14,12 @@
+ /dts-v1/;
+ 
+ #include "msm8952-athene.dtsi"
++#include "dsi-panel-mot-tdi-546-1080p-cmd.dtsi"
+ 
+ / {
+ 	qcom,board-id = <0x41 0x8000>;
+ };
++
++&mdss_dsi0 {
++	qcom,dsi-pref-prim-pan = <&mot_tdi_546_1080p_cmd_v0>;
++};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene-p0d.dts b/arch/arm/boot/dts/qcom/msm8952-athene-p0d.dts
+index 8696ab886a4..5a019c5a88f 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene-p0d.dts
++++ b/arch/arm/boot/dts/qcom/msm8952-athene-p0d.dts
+@@ -15,7 +15,12 @@
+ 
+ #include "msm8952-athene.dtsi"
+ #include "msm8952-moto-dtv.dtsi"
++#include "dsi-panel-mot-tdi-546-1080p-cmd.dtsi"
+ 
+ / {
+ 	qcom,board-id = <0x41 0x800d>;
+ };
++
++&mdss_dsi0 {
++	qcom,dsi-pref-prim-pan = <&mot_tdi_546_1080p_cmd_v0>;
++};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene.dtsi b/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+index df0c23241cb..0c57550e3af 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+@@ -12,7 +12,7 @@
+ 
+ 
+ #include "msm8952-moto-common.dtsi"
+-#include "dsi-panel-mot-tdi-546-1080p-cmd.dtsi"
++#include "dsi-panel-mot-lgd-546-1080p-cmd.dtsi"
+ 
+ / {
+ 	model = "Athene";
+@@ -21,7 +21,7 @@
+ };
+ 
+ &mdss_dsi0 {
+-	qcom,dsi-pref-prim-pan = <&mot_tdi_546_1080p_cmd_v0>;
++	qcom,dsi-pref-prim-pan = <&mot_lgd_546_1080p_cmd_v0>;
+ 	vddio_disp-supply = <&pm8950_l6>;
+ 	vsp_disp-supply = <&lab_regulator>;
+ 	vsn_disp-supply = <&ibb_regulator>;
+-- 
+2.11.0
+

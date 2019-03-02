@@ -1,0 +1,64 @@
+From 57589b8651b59d3d494f051210d00c92af50991f Mon Sep 17 00:00:00 2001
+From: Tim Howe <tim.howe@cirrus.com>
+Date: Wed, 13 Apr 2016 18:40:47 -0500
+Subject: [PATCH 855/959] IKSWM-26899 ASoC: cs35l34: Fixed pop issue on mixer
+ change
+
+Change-Id: I5658562485cdf24ae169f1d814781af8f2461041
+Signed-off-by: Tim Howe <tim.howe@cirrus.com>
+Reviewed-on: http://gerrit.mot.com/844371
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Joseph Dwyer <josephdwyer@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/codecs/cs35l34.c | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/sound/soc/codecs/cs35l34.c b/sound/soc/codecs/cs35l34.c
+index 2ff8ea624ff..3a821ad914f 100644
+--- a/sound/soc/codecs/cs35l34.c
++++ b/sound/soc/codecs/cs35l34.c
+@@ -247,8 +247,7 @@ static int cs35l34_sdin_event(struct snd_soc_dapm_widget *w,
+ 
+ 	switch (event) {
+ 	case SND_SOC_DAPM_PRE_PMU:
+-		ret = regmap_update_bits(priv->regmap, CS35L34_PWRCTL1,
+-			 PDN_ALL, 0);
++		ret = regmap_update_bits(priv->regmap, CS35L34_PWRCTL2, 1, 0);
+ 		if (ret < 0) {
+ 			dev_err(codec->dev, "Cannot set Power bits %d\n", ret);
+ 			return ret;
+@@ -256,8 +255,7 @@ static int cs35l34_sdin_event(struct snd_soc_dapm_widget *w,
+ 		msleep(5);
+ 	break;
+ 	case SND_SOC_DAPM_POST_PMD:
+-		ret = regmap_update_bits(priv->regmap, CS35L34_PWRCTL1,
+-			 PDN_ALL, PDN_ALL);
++		ret = regmap_update_bits(priv->regmap, CS35L34_PWRCTL2, 1, 1);
+ 	break;
+ 	default:
+ 		pr_err("Invalid event = 0x%x\n", event);
+@@ -560,11 +558,16 @@ static int cs35l34_probe(struct snd_soc_codec *codec)
+ 	regmap_write(cs35l34->regmap, CS35L34_PROTECT_CTL, reg);
+ 
+ 	/* Set Power control registers 2 and 3 to have everyting
+-	 * powered down at initialization
++	*  powered down at initialization, dapm will power up.
+ 	*/
+ 	regmap_write(cs35l34->regmap, CS35L34_PWRCTL2, 0xFD);
+ 	regmap_write(cs35l34->regmap, CS35L34_PWRCTL3, 0x1F);
+ 
++	/* Make sure PDN_ALL is cleared on initialization.
++	*  Note: Avoid setting PDN_ALL in dapm events.
++	*/
++	regmap_update_bits(cs35l34->regmap, CS35L34_PWRCTL1, PDN_ALL, 0);
++
+ 	/* Set Platform Data */
+ 	if (cs35l34->pdata.boost_ctl)
+ 		regmap_update_bits(cs35l34->regmap, CS35L34_BST_CVTR_V_CTL,
+-- 
+2.11.0
+

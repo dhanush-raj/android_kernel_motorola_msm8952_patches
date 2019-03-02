@@ -1,0 +1,120 @@
+From b7ed019030317df6d692bbbe77cf0f7fe5c85d3b Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Mon, 21 Mar 2016 15:44:06 -0700
+Subject: [PATCH 813/959] IKSWM-26742: msm: mdss: init param_lock for all of fb
+ devices
+
+Ensure param_lock is initialized before use for all fb devices.
+
+Change-Id: I242238e1c8d45420aad2a319ff1405d06859de86
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/835618
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Fred Fettinger <fettinge@motorola.com>
+Reviewed-by: Patrick Auchter <auchter@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c |  2 --
+ drivers/video/msm/mdss/mdss_fb.c        | 10 +++++-----
+ drivers/video/msm/mdss/mdss_fb.h        |  1 +
+ drivers/video/msm/mdss/mdss_panel.h     |  1 -
+ 4 files changed, 6 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index 41668a2d701..c5c6bcc48d7 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -1202,8 +1202,6 @@ static int mdss_panel_parse_param_prop(struct device_node *np,
+ 	struct dsi_panel_cmds *cmds;
+ 	char *prop;
+ 
+-	mutex_init(&pinfo->param_lock);
+-
+ 	for (i = 0; i < ARRAY_SIZE(mdss_dsi_panel_param); i++) {
+ 		param = &mdss_dsi_panel_param[i];
+ 		cmds = kcalloc(param->val_max, sizeof(struct dsi_panel_cmds),
+diff --git a/drivers/video/msm/mdss/mdss_fb.c b/drivers/video/msm/mdss/mdss_fb.c
+index 3d1523dc54f..f92e4590061 100644
+--- a/drivers/video/msm/mdss/mdss_fb.c
++++ b/drivers/video/msm/mdss/mdss_fb.c
+@@ -954,7 +954,6 @@ static int __maybe_unused mdss_fb_set_param(struct device *dev,
+ 	struct fb_info *fbi = dev_get_drvdata(dev);
+ 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+ 	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
+-	struct mdss_panel_info *pinfo = mfd->panel_info;
+ 	struct panel_param *param;
+ 	const char *val_name;
+ 	int ret = -EINVAL;
+@@ -975,7 +974,7 @@ static int __maybe_unused mdss_fb_set_param(struct device *dev,
+ 			break;
+ 	}
+ 
+-	mutex_lock(&pinfo->param_lock);
++	mutex_lock(&mfd->param_lock);
+ 	mutex_lock(&ctl->offlock);
+ 	if (param->value != value) {
+ 		if (mdss_fb_is_power_on(mfd))
+@@ -983,7 +982,7 @@ static int __maybe_unused mdss_fb_set_param(struct device *dev,
+ 		param->value = value;
+ 	}
+ 	mutex_unlock(&ctl->offlock);
+-	mutex_unlock(&pinfo->param_lock);
++	mutex_unlock(&mfd->param_lock);
+ 
+ 	return ret;
+ }
+@@ -1008,14 +1007,14 @@ static void mdss_fb_restore_param(struct msm_fb_data_type *mfd)
+ 	struct panel_param *param;
+ 	int i;
+ 
+-	mutex_lock(&pinfo->param_lock);
++	mutex_lock(&mfd->param_lock);
+ 	for (i = 0; i < PARAM_ID_NUM; i++) {
+ 		param = pinfo->param[i];
+ 		if (!param || param->value == param->default_value)
+ 			continue;
+ 		mdss_fb_set_hw_param(mfd, i, param->value);
+ 	}
+-	mutex_unlock(&pinfo->param_lock);
++	mutex_unlock(&mfd->param_lock);
+ }
+ 
+ static ssize_t hbm_show(struct device *dev,
+@@ -1298,6 +1297,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
+ 
+ 	mutex_init(&mfd->bl_lock);
+ 	mutex_init(&mfd->switch_lock);
++	mutex_init(&mfd->param_lock);
+ 
+ 	fbi_list[fbi_list_index++] = fbi;
+ 
+diff --git a/drivers/video/msm/mdss/mdss_fb.h b/drivers/video/msm/mdss/mdss_fb.h
+index 39b2924e949..755839711f3 100644
+--- a/drivers/video/msm/mdss/mdss_fb.h
++++ b/drivers/video/msm/mdss/mdss_fb.h
+@@ -294,6 +294,7 @@ struct msm_fb_data_type {
+ 	bool allow_bl_update;
+ 	u32 bl_level_scaled;
+ 	struct mutex bl_lock;
++	struct mutex param_lock;
+ 
+ 	struct platform_device *pdev;
+ 
+diff --git a/drivers/video/msm/mdss/mdss_panel.h b/drivers/video/msm/mdss/mdss_panel.h
+index 19c986ef2f9..926799b8274 100644
+--- a/drivers/video/msm/mdss/mdss_panel.h
++++ b/drivers/video/msm/mdss/mdss_panel.h
+@@ -639,7 +639,6 @@ struct mdss_panel_info {
+ 	u32 disp_on_check_val;
+ 	bool blank_progress_notify_enabled;
+ 	struct panel_param *param[PARAM_ID_NUM];
+-	struct mutex param_lock;
+ };
+ 
+ struct mdss_panel_timing {
+-- 
+2.11.0
+

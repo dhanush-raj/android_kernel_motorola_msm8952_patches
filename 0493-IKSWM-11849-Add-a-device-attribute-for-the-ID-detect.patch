@@ -1,0 +1,67 @@
+From 5310c46aa16425ec54c5c9d8102c40ddb0af182c Mon Sep 17 00:00:00 2001
+From: maxina <maxina@motorola.com>
+Date: Thu, 19 Nov 2015 16:54:15 +0800
+Subject: [PATCH 493/959] IKSWM-11849: Add a device attribute for the ID
+ detection GPIO
+
+Add a device attribute for reading the ID detection gpio in sysfs.
+
+Change-Id: I5ee1bc4f25ece5a0cdc3b6aa6d76bae7a8f33f27
+Signed-off-by: maxina <maxina@motorola.com>
+Reviewed-on: http://gerrit.mot.com/801366
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/usb/phy/phy-msm-usb.c | 19 ++++++++++++++++++-
+ 1 file changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/usb/phy/phy-msm-usb.c b/drivers/usb/phy/phy-msm-usb.c
+index 6afb83c2ef7..e0c06096a80 100644
+--- a/drivers/usb/phy/phy-msm-usb.c
++++ b/drivers/usb/phy/phy-msm-usb.c
+@@ -5595,6 +5595,22 @@ static ssize_t dpdm_pulldown_enable_store(struct device *dev,
+ static DEVICE_ATTR(dpdm_pulldown_enable, S_IRUGO | S_IWUSR,
+ 		dpdm_pulldown_enable_show, dpdm_pulldown_enable_store);
+ 
++static ssize_t id_state_show(struct device *dev,
++		struct device_attribute *attr, char *buf)
++{
++	struct msm_otg *motg = the_msm_otg;
++	int id = 0;
++
++	if (motg->pdata->pmic_id_irq)
++		id = msm_otg_read_pmic_id_state(motg);
++	else if (motg->ext_id_irq)
++		id = gpio_get_value(motg->pdata->usb_id_gpio);
++	return snprintf(buf, PAGE_SIZE, "%d\n", !!id);
++}
++
++static DEVICE_ATTR(id_state, S_IRUGO, id_state_show, NULL);
++
++
+ struct msm_otg_platform_data *msm_otg_dt_to_pdata(struct platform_device *pdev)
+ {
+ 	struct device_node *node = pdev->dev.of_node;
+@@ -6312,6 +6328,7 @@ static int msm_otg_probe(struct platform_device *pdev)
+ 		motg->caps |= ALLOW_HOST_PHY_RETENTION;
+ 
+ 	device_create_file(&pdev->dev, &dev_attr_dpdm_pulldown_enable);
++	device_create_file(&pdev->dev, &dev_attr_id_state);
+ 
+ 	if (motg->pdata->enable_lpm_on_dev_suspend)
+ 		motg->caps |= ALLOW_LPM_ON_DEV_SUSPEND;
+@@ -6498,7 +6515,7 @@ static int msm_otg_remove(struct platform_device *pdev)
+ 		free_irq(motg->pdata->pmic_id_irq, motg);
+ 	usb_remove_phy(phy);
+ 	free_irq(motg->irq, motg);
+-
++	device_remove_file(&pdev->dev, &dev_attr_id_state);
+ 	if (motg->pdata->mpm_dpshv_int || motg->pdata->mpm_dmshv_int)
+ 		device_remove_file(&pdev->dev,
+ 				&dev_attr_dpdm_pulldown_enable);
+-- 
+2.11.0
+

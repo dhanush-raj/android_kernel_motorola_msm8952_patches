@@ -1,0 +1,81 @@
+From 857f462e367108055481b917066498f07047a853 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Mon, 22 Jun 2015 09:35:13 -0500
+Subject: [PATCH 271/959] IKSWL-23524: power: qpnp-smbcharger-mmi: Protect Weak
+
+Protect the Weak Charger Message by waiting until
+HVDCP detection and AICL are done.  This will prevent
+false trips of this message on HVDCP chargers.
+
+Change-Id: Iff4356408017548883cd11fae8de819c3ebca782
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/759215
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Reviewed-by: Vidyadhar Gurram <rnh786@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 73d4abaaad8..334b54614b5 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -285,6 +285,7 @@ struct smbchg_chip {
+ 	bool				batt_therm_wa;
+ 	struct notifier_block		smb_reboot;
+ 	int				aicl_wait_retries;
++	bool				hvdcp_det_done;
+ };
+ 
+ static struct smbchg_chip *the_chip;
+@@ -3468,7 +3469,8 @@ static void smbchg_rate_check(struct smbchg_chip *chip)
+ 			chip->charger_rate = POWER_SUPPLY_CHARGE_RATE_NORMAL;
+ 		else if (smbchg_hvdcp_det_check(chip))
+ 			chip->charger_rate = POWER_SUPPLY_CHARGE_RATE_TURBO;
+-		else if (smbchg_get_aicl_level_ma(chip) < WEAK_CHRG_THRSH)
++		else if (chip->hvdcp_det_done && chip->aicl_complete &&
++			 (smbchg_get_aicl_level_ma(chip) < WEAK_CHRG_THRSH))
+ 			chip->charger_rate = POWER_SUPPLY_CHARGE_RATE_WEAK;
+ 		else
+ 			chip->charger_rate = POWER_SUPPLY_CHARGE_RATE_NORMAL;
+@@ -4227,6 +4229,7 @@ static void smbchg_hvdcp_det_work(struct work_struct *work)
+ 	int rc;
+ 	u8 reg;
+ 
++	chip->hvdcp_det_done = true;
+ 	rc = smbchg_read(chip, &reg,
+ 			chip->usb_chgpth_base + USBIN_HVDCP_STS, 1);
+ 	if (rc < 0) {
+@@ -4402,6 +4405,7 @@ static void handle_usb_removal(struct smbchg_chip *chip)
+ 
+ 	cancel_delayed_work(&chip->usb_insertion_work);
+ 	chip->apsd_rerun_cnt = 0;
++	chip->hvdcp_det_done = false;
+ 
+ 	smbchg_aicl_deglitch_wa_check(chip);
+ 	if (chip->force_aicl_rerun) {
+@@ -4502,6 +4506,7 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
+ 					POWER_SUPPLY_HEALTH_GOOD, rc);
+ 		}
+ 		schedule_work(&chip->usb_set_online_work);
++		chip->hvdcp_det_done = false;
+ 		schedule_delayed_work(&chip->hvdcp_det_work,
+ 					msecs_to_jiffies(HVDCP_NOTIFY_MS));
+ 	}
+@@ -7324,6 +7329,7 @@ static int smbchg_probe(struct spmi_device *spmi)
+ 	chip->dev = &spmi->dev;
+ 	chip->usb_psy = usb_psy;
+ 	chip->demo_mode = false;
++	chip->hvdcp_det_done = false;
+ 	chip->test_mode_soc = DEFAULT_TEST_MODE_SOC;
+ 	chip->test_mode_temp = DEFAULT_TEST_MODE_TEMP;
+ 	chip->test_mode = qpnp_smbcharger_test_mode();
+-- 
+2.11.0
+

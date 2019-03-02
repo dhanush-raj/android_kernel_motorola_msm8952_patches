@@ -1,0 +1,36 @@
+From 712e7e04f90c18709e1370b9383c8cfccac42ebd Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Mon, 7 Mar 2016 13:27:50 -0800
+Subject: [PATCH 738/959] IKSWM-24143: mmc: limited CMDQ enabled logs
+
+ Replace the pr_info with printk_once for CMDQ
+ enabled log.
+
+Change-Id: I5a9d450edce34fa3f2cd212ca8b6cf2735ca7dd1
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830080
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/mmc/core/mmc.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/mmc/core/mmc.c b/drivers/mmc/core/mmc.c
+index a1547c0d230..4a1944bba7c 100644
+--- a/drivers/mmc/core/mmc.c
++++ b/drivers/mmc/core/mmc.c
+@@ -1503,7 +1503,7 @@ static int mmc_select_cmdq(struct mmc_card *card)
+ 		}
+ 	}
+ 	mmc_host_clk_release(card->host);
+-	pr_info("%s: CMDQ enabled on card\n", mmc_hostname(host));
++	printk_once("%s: CMDQ enabled on card\n", mmc_hostname(host));
+ out:
+ 	return ret;
+ }
+-- 
+2.11.0
+

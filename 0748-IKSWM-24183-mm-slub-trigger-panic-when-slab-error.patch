@@ -1,0 +1,51 @@
+From dc870c8d6aceab53b4387e73dbecb8cd9805456d Mon Sep 17 00:00:00 2001
+From: Yi-wei Zhao <gbjc64@motorola.com>
+Date: Tue, 16 Sep 2014 14:12:14 -0500
+Subject: [PATCH 748/959] IKSWM-24183 : mm: slub: trigger panic when slab error
+
+When SLUB_DEBUG detects slab error, it only dump backtrace as
+warning message.  It's not easy to detect the memory corruption
+issue.
+
+Add BUG() when there is slab error.
+Default Disable SLUB_DEBUG_ON since it has performance impact.
+
+Change-Id: Ibdaafe7190751b7f2f8694ad0599187e2bc273d2
+Signed-off-by: Yi-wei Zhao <gbjc64@motorola.com>
+Reviewed-on: http://gerrit.mot.com/672096
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830174
+SME-Granted: SME Approvals Granted
+---
+ mm/slub.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/mm/slub.c b/mm/slub.c
+index 18ec8711386..b7a4df5f23c 100644
+--- a/mm/slub.c
++++ b/mm/slub.c
+@@ -663,6 +663,9 @@ static void slab_err(struct kmem_cache *s, struct page *page, const char *fmt, .
+ 	print_page_info(page);
+ 	dump_stack();
+ 	slab_panic("slab error");
++#ifdef CONFIG_SLUB_DEBUG_ON
++	BUG();
++#endif
+ }
+ 
+ static void init_object(struct kmem_cache *s, void *object, u8 val)
+@@ -1160,6 +1163,9 @@ fail:
+ 	slab_unlock(page);
+ 	spin_unlock_irqrestore(&n->list_lock, *flags);
+ 	slab_fix(s, "Object at 0x%p not freed", object);
++#ifdef CONFIG_SLUB_DEBUG_ON
++	BUG();
++#endif
+ 	return NULL;
+ }
+ 
+-- 
+2.11.0
+

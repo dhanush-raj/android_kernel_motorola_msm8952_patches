@@ -1,0 +1,120 @@
+From c68aef2787fa9636a3b5b2408008854631509823 Mon Sep 17 00:00:00 2001
+From: "Russ W. Knize" <Russ.Knize@motorola.com>
+Date: Thu, 30 Jul 2015 08:13:23 -0500
+Subject: [PATCH 350/959] IKSWM-449: esdfs: remove split permission support
+
+Android added support for splitting the permissions for various media
+content types, but never actually used it for anything.  That support
+was removed in M, so there is no reason to keep it around.
+
+Change-Id: Id8385deafe65b72a30646b2a8ede74ca9219930a
+Signed-off-by: Russ Knize <Russ.Knize@motorola.com>
+Reviewed-on: http://gerrit.mot.com/772050
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+---
+ fs/esdfs/derive.c | 10 ----------
+ fs/esdfs/esdfs.h  |  3 ---
+ fs/esdfs/main.c   | 10 ----------
+ fs/esdfs/super.c  |  5 -----
+ 4 files changed, 28 deletions(-)
+
+diff --git a/fs/esdfs/derive.c b/fs/esdfs/derive.c
+index 6377e019924..a825bdacbc6 100644
+--- a/fs/esdfs/derive.c
++++ b/fs/esdfs/derive.c
+@@ -386,16 +386,6 @@ void esdfs_set_derived_perms(struct inode *inode)
+ 		inode->i_mode |= 0770;
+ 		break;
+ 
+-	case ESDFS_TREE_MEDIA_PICS:
+-		inode->i_gid = AID_SDCARD_PICS;
+-		inode->i_mode |= 0770;
+-		break;
+-
+-	case ESDFS_TREE_MEDIA_AV:
+-		inode->i_gid = AID_SDCARD_AV;
+-		inode->i_mode |= 0770;
+-		break;
+-
+ 	case ESDFS_TREE_ANDROID:
+ 	case ESDFS_TREE_ANDROID_DATA:
+ 	case ESDFS_TREE_ANDROID_OBB:
+diff --git a/fs/esdfs/esdfs.h b/fs/esdfs/esdfs.h
+index dd63615a738..ba8b42592f1 100644
+--- a/fs/esdfs/esdfs.h
++++ b/fs/esdfs/esdfs.h
+@@ -41,7 +41,6 @@
+ /* mount options */
+ #define ESDFS_MOUNT_DERIVE_LEGACY	0x00000001
+ #define ESDFS_MOUNT_DERIVE_UNIFIED	0x00000002
+-#define ESDFS_MOUNT_DERIVE_SPLIT	0x00000004
+ 
+ #define clear_opt(sbi, option)	(sbi->options &= ~ESDFS_MOUNT_##option)
+ #define set_opt(sbi, option)	(sbi->options |= ESDFS_MOUNT_##option)
+@@ -68,8 +67,6 @@ enum {
+ 	ESDFS_TREE_ROOT_LEGACY,		/* root for legacy emulated storage */
+ 	ESDFS_TREE_ROOT,		/* root for a user */
+ 	ESDFS_TREE_MEDIA,		/* per-user basic permissions */
+-	ESDFS_TREE_MEDIA_PICS,		/* .../DCIM, Pictures */
+-	ESDFS_TREE_MEDIA_AV,		/* .../Alarm, Movies, etc */
+ 	ESDFS_TREE_ANDROID,		/* .../Android */
+ 	ESDFS_TREE_ANDROID_DATA,	/* .../Android/data */
+ 	ESDFS_TREE_ANDROID_OBB,		/* .../Android/obb */
+diff --git a/fs/esdfs/main.c b/fs/esdfs/main.c
+index b4d2c721791..30d7c36f472 100644
+--- a/fs/esdfs/main.c
++++ b/fs/esdfs/main.c
+@@ -24,8 +24,6 @@ enum {
+ 	Opt_derive_none,
+ 	Opt_derive_legacy,
+ 	Opt_derive_unified,
+-	Opt_split,
+-	Opt_nosplit,
+ 	Opt_err
+ };
+ 
+@@ -35,8 +33,6 @@ static match_table_t esdfs_tokens = {
+ 	{Opt_derive_none, "derive=none"},
+ 	{Opt_derive_legacy, "derive=legacy"},
+ 	{Opt_derive_unified, "derive=unified"},
+-	{Opt_split, "split"},
+-	{Opt_nosplit, "nosplit"},
+ 	{Opt_err, NULL},
+ };
+ 
+@@ -155,12 +151,6 @@ static int parse_options(struct super_block *sb, char *options)
+ 			clear_opt(sbi, DERIVE_LEGACY);
+ 			set_opt(sbi, DERIVE_UNIFIED);
+ 			break;
+-		case Opt_split:
+-			set_opt(sbi, DERIVE_SPLIT);
+-			break;
+-		case Opt_nosplit:
+-			clear_opt(sbi, DERIVE_SPLIT);
+-			break;
+ 		default:
+ 			esdfs_msg(sb, KERN_ERR, "unrecognized mount option \"%s\" or missing value\n",
+ 				p);
+diff --git a/fs/esdfs/super.c b/fs/esdfs/super.c
+index 186058440f8..01c23534518 100644
+--- a/fs/esdfs/super.c
++++ b/fs/esdfs/super.c
+@@ -197,11 +197,6 @@ static int esdfs_show_options(struct seq_file *seq, struct dentry *root)
+ 	else
+ 		seq_puts(seq, ",derive=none");
+ 
+-	if (test_opt(sbi, DERIVE_SPLIT))
+-		seq_puts(seq, ",split");
+-	else
+-		seq_puts(seq, ",nosplit");
+-
+ 	return 0;
+ }
+ 
+-- 
+2.11.0
+

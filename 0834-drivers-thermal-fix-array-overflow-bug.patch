@@ -1,0 +1,55 @@
+From 0c82ccf9d415d1753f007b57905c00d5887d23dd Mon Sep 17 00:00:00 2001
+From: Andy Seah <andyseah@motorola.com>
+Date: Fri, 25 Mar 2016 15:25:03 -0700
+Subject: [PATCH 834/959] drivers: thermal: fix array overflow bug
+
+There is an array overflow on drivers/thermal/msm_thermal-dev.c for
+device /dev/msm_thermal_query.
+
+In this driver, in function msm_thermal_process_voltage_table_req,
+the value of "cluster_id" is passed from user space but there is no
+validation.
+
+Elevation of Privilege Vulnerability in Qualcomm Power Management component
+
+Mot-CRs-fixed: IKARCH-2249
+
+Bug: 26866053
+----
+
+Signed-off-by: Andy Seah <dntc46@motorola.com>
+Change-Id: Ibe2a49dde52136ff13a55b382c60627170480610
+Reviewed-on: http://gerrit.mot.com/838128
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Choon Lee Seah <andyseah@motorola.com>
+---
+ drivers/thermal/msm_thermal-dev.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/drivers/thermal/msm_thermal-dev.c b/drivers/thermal/msm_thermal-dev.c
+index ead9765666c..ab25987676f 100644
+--- a/drivers/thermal/msm_thermal-dev.c
++++ b/drivers/thermal/msm_thermal-dev.c
+@@ -100,6 +100,16 @@ static long validate_and_copy(unsigned int *cmd, unsigned long *arg,
+ 			goto validate_exit;
+ 		}
+ 		break;
++	case MSM_THERMAL_GET_CLUSTER_FREQUENCY_PLAN:
++		if (query->clock_freq.cluster_num >= NR_CPUS) {
++			ret = -EINVAL;
++			goto validate_exit;
++		}
++	case MSM_THERMAL_GET_CLUSTER_VOLTAGE_PLAN:
++		if (query->voltage.cluster_num >= NR_CPUS) {
++			ret = -EINVAL;
++			goto validate_exit;
++		}
+ 	default:
+ 		break;
+ 	}
+-- 
+2.11.0
+

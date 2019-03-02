@@ -1,0 +1,101 @@
+From 1aa38e077eb0b389151d92dcc2993fe73070f2e5 Mon Sep 17 00:00:00 2001
+From: Avi Shchislowski <avi.shchislowski@sandisk.com>
+Date: Tue, 18 Nov 2014 10:26:17 -0600
+Subject: [PATCH 470/959] Add eMMC5.0 ffu ext_csd fields.
+
+Change-Id: I7f1bc301879a3a058bf991e8f704ff520f916803
+Signed-off-by: Avi Shchislowski <avi.shchislowski@sandisk.com>
+Signed-off-by: Alex Lemberg <alex.lemberg@sandisk.com>
+Signed-off-by: Russ Knize <Russ.Knize@motorola.com>
+Reviewed-on: http://gerrit.mot.com/760189
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Russell Knize <rknize@motorola.com>
+Reviewed-on: http://gerrit.mot.com/764640
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+
+Change-Id: Ib2843ebba12ca9453b3510087d3d29722111b14e
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/799507
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+---
+ drivers/mmc/core/mmc.c   | 6 ++++++
+ include/linux/mmc/card.h | 2 ++
+ include/linux/mmc/mmc.h  | 9 +++++++++
+ 3 files changed, 17 insertions(+)
+
+diff --git a/drivers/mmc/core/mmc.c b/drivers/mmc/core/mmc.c
+index 5edad9f2cc6..3d6e63c5a20 100644
+--- a/drivers/mmc/core/mmc.c
++++ b/drivers/mmc/core/mmc.c
+@@ -626,6 +626,12 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
+ 		card->ext_csd.enhanced_rpmb_supported =
+ 			(card->ext_csd.rel_param &
+ 			 EXT_CSD_WR_REL_PARAM_EN_RPMB_REL_WR);
++
++		card->ext_csd.ffu_capable =
++			((ext_csd[EXT_CSD_SUPPORTED_MODE] & 0x1) == 0x1) &&
++			((ext_csd[EXT_CSD_FW_CONFIG] & 0x1) == 0x0);
++		card->ext_csd.ffu_mode_op = ext_csd[EXT_CSD_FFU_FEATURES];
++
+ 	} else {
+ 		card->ext_csd.cmdq_support = 0;
+ 		card->ext_csd.cmdq_depth = 0;
+diff --git a/include/linux/mmc/card.h b/include/linux/mmc/card.h
+index ae67bed6571..2e28332845c 100644
+--- a/include/linux/mmc/card.h
++++ b/include/linux/mmc/card.h
+@@ -88,6 +88,8 @@ struct mmc_ext_csd {
+ 	bool			hpi_en;			/* HPI enablebit */
+ 	bool			hpi;			/* HPI support bit */
+ 	unsigned int		hpi_cmd;		/* cmd used as HPI */
++	bool			ffu_capable;		/* FFU support */
++	bool			ffu_mode_op;		/* FFU mode operation */
+ 	bool			bkops;		/* background support bit */
+ 	u8			bkops_en;	/* background enable bits */
+ 	unsigned int            data_sector_size;       /* 512 bytes or 4KB */
+diff --git a/include/linux/mmc/mmc.h b/include/linux/mmc/mmc.h
+index 9285d72b2eb..9310e3b516b 100644
+--- a/include/linux/mmc/mmc.h
++++ b/include/linux/mmc/mmc.h
+@@ -221,6 +221,9 @@ struct _mmc_csd {
+  */
+ 
+ #define EXT_CSD_CMDQ			15	/* R/W */
++#define EXT_CSD_FFU_STATUS		26	/* R */
++#define EXT_CSD_MODE_OPERATION_CODES	29	/* W */
++#define EXT_CSD_MODE_CONFIG		30	/* R/W */
+ #define EXT_CSD_FLUSH_CACHE		32      /* W */
+ #define EXT_CSD_CACHE_CTRL		33      /* R/W */
+ #define EXT_CSD_POWER_OFF_NOTIFICATION	34	/* R/W */
+@@ -239,6 +242,7 @@ struct _mmc_csd {
+ #define EXT_CSD_SANITIZE_START		165     /* W */
+ #define EXT_CSD_WR_REL_PARAM		166	/* RO */
+ #define EXT_CSD_RPMB_MULT		168	/* RO */
++#define EXT_CSD_FW_CONFIG		169	/* R/W */
+ #define EXT_CSD_BOOT_WP			173	/* R/W */
+ #define EXT_CSD_ERASE_GROUP_DEF		175	/* R/W */
+ #define EXT_CSD_PART_CONFIG		179	/* R/W */
+@@ -279,8 +283,13 @@ struct _mmc_csd {
+ #define EXT_CSD_CACHE_SIZE		249	/* RO, 4 bytes */
+ #define EXT_CSD_PWR_CL_DDR_200_360	253	/* RO */
+ #define EXT_CSD_FW_VERSION		254	/* RO */
++#define EXT_CSD_NUM_OF_FW_SEC_PROG	302	/* RO, 4 bytes */
+ #define EXT_CSD_CMDQ_DEPTH		307	/* RO */
+ #define EXT_CSD_CMDQ_SUPPORT		308	/* RO */
++#define EXT_CSD_FFU_ARG			487	/* RO, 4 bytes */
++#define EXT_CSD_OPERATION_CODE_TIMEOUT	491	/* RO */
++#define EXT_CSD_FFU_FEATURES		492	/* RO */
++#define EXT_CSD_SUPPORTED_MODE		493	/* RO */
+ #define EXT_CSD_TAG_UNIT_SIZE		498	/* RO */
+ #define EXT_CSD_DATA_TAG_SUPPORT	499	/* RO */
+ #define EXT_CSD_MAX_PACKED_WRITES	500	/* RO */
+-- 
+2.11.0
+

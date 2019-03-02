@@ -1,0 +1,53 @@
+From e581d4a98bddd323532edf46a3263052a9c156cc Mon Sep 17 00:00:00 2001
+From: mguntaka <mguntaka@motorola.com>
+Date: Thu, 20 Nov 2014 17:33:24 -0600
+Subject: [PATCH 096/959] IKLOCSEN-1802:drivers:misc:stml0xx: Adding mutex Lock
+ to LED Spi data
+
+In order to avoid SPI CRC mismatch, we need to add mutex lock on
+spi led data transmission to avoid data corruption
+
+Change-Id: I8ecabd86dbf607de3aebc9f54661c3c322fd3713
+
+Signed-off-by: mguntaka <mguntaka@motorola.com>
+Change-Id: I2aeaef2f707f4a0235b8e286d272d41f78e48e10
+Reviewed-on: http://gerrit.mot.com/691373
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Vladimir Karpovich <vkarpovich@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_led.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_led.c b/drivers/misc/stml0xx/stml0xx_led.c
+index 791d30633c9..3baaf20df9d 100644
+--- a/drivers/misc/stml0xx/stml0xx_led.c
++++ b/drivers/misc/stml0xx/stml0xx_led.c
+@@ -49,16 +49,19 @@ int stml0xx_led_set_reset(struct led_classdev *led_cdev, uint8_t allow_reset)
+ 	buf[10] = (led_cdev->blink_delay_off >> 8) & 0xFF;
+ 	buf[11] = led_cdev->blink_delay_off & 0xFF;
+ 
++	mutex_lock(&ps_stml0xx->lock);
+ 	stml0xx_wake(ps_stml0xx);
+ 
+ 	err = stml0xx_spi_send_write_reg_reset(LED_NOTIF_CONTROL, buf, 12,
+ 		allow_reset);
+ 	if (err < 0)
+-		return err;
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"writing to led_notif_control failed");
+ 
+ 	stml0xx_sleep(ps_stml0xx);
++	mutex_unlock(&ps_stml0xx->lock);
+ 
+-	return 0;
++	return err;
+ }
+ 
+ static ssize_t notification_show_control(struct device *dev,
+-- 
+2.11.0
+

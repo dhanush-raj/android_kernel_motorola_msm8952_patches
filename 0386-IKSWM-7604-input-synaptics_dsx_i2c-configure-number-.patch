@@ -1,0 +1,90 @@
+From 9c3929a184f5c7253bc6c48c48352272e967154d Mon Sep 17 00:00:00 2001
+From: Konstantin Makariev <kmakariev@motorola.com>
+Date: Wed, 16 Sep 2015 16:46:49 -0500
+Subject: [PATCH 386/959] IKSWM-7604 input: synaptics_dsx_i2c: configure number
+ of fingers in AoD
+
+Number of fingers to handle in AoD becomes a configurable parameter.
+It can be set via new option synaptics,aod-multi-touch in touch device
+tree node. Once set, it'll be propagated to control access block
+SYN_DSX_DATA group to be communicated with Sensor Hub.
+
+Change-Id:dd I1d21e507f999648679edc35cd665276ec4422345
+---
+ drivers/input/touchscreen/synaptics_dsx_i2c.c | 29 ++++++++++++++++++---------
+ drivers/input/touchscreen/synaptics_dsx_i2c.h |  1 +
+ 2 files changed, 21 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.c b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+index 2f9b3babd71..ec6f4ad4953 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.c
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+@@ -1360,11 +1360,10 @@ static struct synaptics_dsx_platform_data *
+ 				struct synaptics_rmi4_data *rmi4_data)
+ {
+ 	int retval;
+-	unsigned key_codes[SYN_MAX_BUTTONS];
++	unsigned int u32_data, key_codes[SYN_MAX_BUTTONS];
+ 	struct synaptics_dsx_platform_data *pdata;
+ 	struct device_node *np = client->dev.of_node;
+ 	struct synaptics_dsx_cap_button_map *button_map = NULL;
+-	struct synaptics_clip_area clip_area;
+ 
+ 	rmi4_data->patching_enabled = 1;
+ 	retval = synaptics_dsx_dt_parse_mode(rmi4_data, "default",
+@@ -1451,12 +1450,21 @@ static struct synaptics_dsx_platform_data *
+ 		rmi4_data->charger_detection = true;
+ 	}
+ 
+-	retval = of_property_read_u32_array(np,
+-			"synaptics,touch-clip-area",
+-			(unsigned *)&clip_area, 4);
++	retval = of_property_read_u32(np,
++				"synaptics,aod-multi-touch", &u32_data);
+ 	if (!retval) {
+-		rmi4_data->clipa = kzalloc(sizeof(clip_area), GFP_KERNEL);
+-		if (!rmi4_data->clipa) {
++		pr_notice("using multi touch in aod\n");
++		rmi4_data->aod_mt = (unsigned char)u32_data;
++	} else {
++		pr_notice("using single touch in aod\n");
++		rmi4_data->aod_mt = 1;
++	}
++
++	if (of_property_read_bool(np, "synaptics,touch-clip-area")) {
++		struct synaptics_clip_area *clip_area;
++
++		clip_area = kzalloc(sizeof(*clip_area), GFP_KERNEL);
++		if (!clip_area) {
+ 			dev_err(&client->dev, "clip area allocation failure\n");
+ 			return NULL;
+ 		}
+@@ -5607,8 +5615,11 @@ static int control_access_block_update_static(
+ 
+ 	if (touch_data_size) {
+ 		control_access_block_zap(SYN_DSX_DATA);
+-		control_access_block_update_data(rmi4_data->f01_data_base_addr +
+-			rmi4_data->num_of_intr_regs + 1, touch_data_size);
++		control_access_block_update_data_mt(
++			rmi4_data->f01_data_base_addr +
++			rmi4_data->num_of_intr_regs + 1,
++			touch_data_size,
++			rmi4_data->aod_mt);
+ 	}
+ 
+ 	cab->do_sync = true;
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.h b/drivers/input/touchscreen/synaptics_dsx_i2c.h
+index 2c3eb43d368..a823424f491 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.h
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.h
+@@ -465,6 +465,7 @@ struct synaptics_rmi4_data {
+ 	unsigned char num_of_rx;
+ 	unsigned char num_of_tx;
+ 	unsigned char num_of_fingers;
++	unsigned char aod_mt;
+ 	unsigned char f01_ctrl_register_0;
+ 	unsigned char intr_mask[MAX_INTR_REGISTERS];
+ 	unsigned short num_of_intr_regs;
+-- 
+2.11.0
+

@@ -1,0 +1,92 @@
+From c4bbee5c008f87ed9cf26779594f443040a34d4c Mon Sep 17 00:00:00 2001
+From: Alberto97 <albertop2197@gmail.com>
+Date: Fri, 30 Dec 2016 15:13:55 +0000
+Subject: [PATCH 959/959] leds: leds-atc: Add LED blinking support
+
+Change-Id: Ic3ff799439f501f71336485f9a1b0d894ff67018
+---
+ drivers/leds/leds-atc.c | 54 +++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 54 insertions(+)
+
+diff --git a/drivers/leds/leds-atc.c b/drivers/leds/leds-atc.c
+index c7f7e6634a8..6e14e12f1a6 100644
+--- a/drivers/leds/leds-atc.c
++++ b/drivers/leds/leds-atc.c
+@@ -40,6 +40,23 @@ struct atc_led_data {
+ 	u8			mask;
+ };
+ 
++static ssize_t led_blink_show(struct device *dev,
++		struct device_attribute *attr, char *buf);
++
++static ssize_t led_blink_store(struct device *dev,
++		struct device_attribute *attr, const char *buf, size_t size);
++
++static DEVICE_ATTR(blink, 0644, led_blink_show, led_blink_store);
++
++static struct attribute *blink_dev_attrs[] = {
++	&dev_attr_blink.attr,
++	NULL,
++};
++
++static struct attribute_group blink_dev_attr_group = {
++	.attrs = blink_dev_attrs,
++};
++
+ static int
+ spmi_masked_write(struct atc_led_data *led, u16 addr, u8 mask, u8 val)
+ {
+@@ -154,6 +171,12 @@ static int atc_leds_probe(struct spmi_device *spmi)
+ 
+ 	dev_set_drvdata(&spmi->dev, led);
+ 	dev_info(&spmi->dev, "Probe success register value %#x\n", save);
++	rc = sysfs_create_group(&led->cdev.dev->kobj, &blink_dev_attr_group);
++	if (rc < 0) {
++		dev_err(&spmi->dev,
++			"couldn't register LED blinking attribute sysfs file\n");
++	}
++
+ 	return 0;
+ }
+ 
+@@ -167,6 +190,37 @@ static int atc_leds_remove(struct spmi_device *spmi)
+ 	return 0;
+ }
+ 
++static ssize_t led_blink_show(struct device *dev,
++		struct device_attribute *attr, char *buf)
++{
++	struct led_classdev *led_cdev = dev_get_drvdata(dev);
++
++	scnprintf(buf, PAGE_SIZE, "on=%lu,off=%lu\n",
++		led_cdev->blink_delay_on, led_cdev->blink_delay_off);
++
++	return strlen(buf);
++}
++
++static ssize_t led_blink_store(struct device *dev,
++		struct device_attribute *attr, const char *buf, size_t size)
++{
++	struct led_classdev *led_cdev = dev_get_drvdata(dev);
++	unsigned long ms_on = 0;
++	unsigned long ms_off = 0;
++
++	sscanf(buf, "%lu,%lu", &ms_on, &ms_off);
++
++	if(ms_on == 0 && ms_off == 0)
++	   led_set_brightness(led_cdev, LED_OFF);
++	else
++	   led_blink_set(led_cdev, &ms_on, &ms_off);
++
++	led_cdev->blink_delay_on = ms_on;
++	led_cdev->blink_delay_off = ms_off;
++
++	return size;
++}
++
+ #ifdef CONFIG_OF
+ static struct of_device_id spmi_match_table[] = {
+ 	{ .compatible = "qcom,leds-atc",},
+-- 
+2.11.0
+

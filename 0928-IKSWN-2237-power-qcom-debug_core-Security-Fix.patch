@@ -1,0 +1,42 @@
+From 7fb0be315c0c3998b804a20b3e29ea743b7ce20a Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Tue, 23 Aug 2016 15:01:21 -0500
+Subject: [PATCH 928/959] IKSWN-2237: power: qcom: debug_core: Security Fix
+
+A-28967028
+(Qualcomm ref#: CR#1032875)
+There is no bounds validation of the line variable passed
+to the split_ptable_args function resulting in a potential
+stack overflow.
+The fix is designed to add an additional argument to the
+split_ptable_args function that will have the maximum bound
+to prevent the potential stack overflow.
+
+Change-Id: I5af251d970b374c29310be671de59acabb60edd9
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: https://gerrit.mot.com/901110
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qcom/debug_core.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/power/qcom/debug_core.c b/drivers/power/qcom/debug_core.c
+index f0333cbcbf4..7a9d41c7118 100644
+--- a/drivers/power/qcom/debug_core.c
++++ b/drivers/power/qcom/debug_core.c
+@@ -20,7 +20,7 @@
+ #include <linux/ctype.h>
+ #include <linux/cpu.h>
+ 
+-#define MAX_PSTATES 20
++#define MAX_PSTATES 50
+ #define NUM_OF_PENTRY 3 /* number of variables for ptable node */
+ #define NUM_OF_EENTRY 2 /* number of variables for enable node */
+ 
+-- 
+2.11.0
+

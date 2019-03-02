@@ -1,0 +1,178 @@
+From f23911e9a1fbe710f96bd674a3a6508be8ff2e3a Mon Sep 17 00:00:00 2001
+From: Bang Nguyen <bangnguyen@motorola.com>
+Date: Mon, 24 Aug 2015 08:24:55 -0500
+Subject: [PATCH 054/959] IKSWL-35774: arm/dts: 8952: Clean up 1080p TDI
+ display device dts
+
+Clean up the 1080p TDI command mode panel by:
+- Move panel supply info to panel
+- Remove regulator-always-on properties in panel's regulators
+
+Change-Id: Icf60e733022f338af1b7eea2e0d91727ba31657d
+Signed-off-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-on: http://gerrit.mot.com/778685
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ .../dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi    | 44 +++++++++++++++++++++
+ arch/arm/boot/dts/qcom/msm8952-athene-p0.dts       | 12 ------
+ arch/arm/boot/dts/qcom/msm8952-athene.dtsi         | 45 +---------------------
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi    |  5 ---
+ 4 files changed, 45 insertions(+), 61 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
+index 31f0bd434c6..de5bf982e68 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
+@@ -95,3 +95,47 @@ qcom,mdss-dsi-te-pin-select = <1>;
+ qcom,mdss-dsi-te-dcs-command = <1>;
+ qcom,mdss-dsi-te-check-enable;
+ qcom,mdss-dsi-te-using-te-pin;
++
++qcom,panel-supply-entries {
++	#address-cells = <1>;
++	#size-cells = <0>;
++
++	qcom,panel-supply-entry@0 {
++		reg = <0>;
++		qcom,supply-name = "vddio_disp";
++		qcom,supply-min-voltage = <1800000>;
++		qcom,supply-max-voltage = <1800000>;
++		qcom,supply-enable-load = <300000>;
++		qcom,supply-disable-load = <100>;
++		qcom,supply-pre-on-sleep = <0>;
++		qcom,supply-post-on-sleep = <1>;
++		qcom,supply-pre-off-sleep = <0>;
++		qcom,supply-post-off-sleep = <1>;
++	};
++
++	qcom,panel-supply-entry@1 {
++		reg = <1>;
++		qcom,supply-name = "vsp_disp";
++		qcom,supply-min-voltage = <4600000>;
++		qcom,supply-max-voltage = <6000000>;
++		qcom,supply-enable-load = <100000>;
++		qcom,supply-disable-load = <100>;
++		qcom,supply-pre-on-sleep = <0>;
++		qcom,supply-post-on-sleep = <2>;
++		qcom,supply-pre-off-sleep = <0>;
++		qcom,supply-post-off-sleep = <5>;
++	};
++
++	qcom,panel-supply-entry@2 {
++		reg = <2>;
++		qcom,supply-name = "vsn_disp";
++		qcom,supply-min-voltage = <4600000>;
++		qcom,supply-max-voltage = <6000000>;
++		qcom,supply-enable-load = <100000>;
++		qcom,supply-disable-load = <100>;
++		qcom,supply-pre-on-sleep = <0>;
++		qcom,supply-post-on-sleep = <2>;
++		qcom,supply-pre-off-sleep = <0>;
++		qcom,supply-post-off-sleep = <1>;
++	};
++};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+index 46fb55fee73..74bae27bf56 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
++++ b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+@@ -18,15 +18,3 @@
+ / {
+ 	qcom,board-id = <0x41 0x8000>;
+ };
+-
+-&pm8950_l6 {
+-	regulator-always-on;
+-};
+-
+-&lab_regulator {
+-	regulator-always-on;
+-};
+-
+-&ibb_regulator {
+-	regulator-always-on;
+-};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene.dtsi b/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+index e1aca172949..df0c23241cb 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+@@ -27,6 +27,7 @@
+ 	vsn_disp-supply = <&ibb_regulator>;
+ };
+ 
++/* display boost and inverting boost regulators */
+ &labibb {
+ 	status = "ok";
+ 	qpnp,qpnp-labibb-mode = "lcd";
+@@ -35,47 +36,3 @@
+ &ibb_regulator {
+ 	qcom,qpnp-ibb-discharge-resistor = <32>;
+ };
+-
+-&dsi_panel_pwr_supply {
+-	#address-cells = <1>;
+-	#size-cells = <0>;
+-
+-	qcom,panel-supply-entry@0 {
+-		reg = <0>;
+-		qcom,supply-name = "vddio_disp";
+-		qcom,supply-min-voltage = <1800000>;
+-		qcom,supply-max-voltage = <1800000>;
+-		qcom,supply-enable-load = <300000>;
+-		qcom,supply-disable-load = <100>;
+-		qcom,supply-pre-on-sleep = <0>;
+-		qcom,supply-post-on-sleep = <1>;
+-		qcom,supply-pre-off-sleep = <0>;
+-		qcom,supply-post-off-sleep = <1>;
+-	};
+-
+-	qcom,panel-supply-entry@1 {
+-		reg = <1>;
+-		qcom,supply-name = "vsp_disp";
+-		qcom,supply-min-voltage = <4600000>;
+-		qcom,supply-max-voltage = <6000000>;
+-		qcom,supply-enable-load = <100000>;
+-		qcom,supply-disable-load = <100>;
+-		qcom,supply-pre-on-sleep = <0>;
+-		qcom,supply-post-on-sleep = <2>;
+-		qcom,supply-pre-off-sleep = <0>;
+-		qcom,supply-post-off-sleep = <5>;
+-	};
+-
+-	qcom,panel-supply-entry@2 {
+-		reg = <2>;
+-		qcom,supply-name = "vsn_disp";
+-		qcom,supply-min-voltage = <4600000>;
+-		qcom,supply-max-voltage = <6000000>;
+-		qcom,supply-enable-load = <100000>;
+-		qcom,supply-disable-load = <100>;
+-		qcom,supply-pre-on-sleep = <0>;
+-		qcom,supply-post-on-sleep = <2>;
+-		qcom,supply-pre-off-sleep = <0>;
+-		qcom,supply-post-off-sleep = <1>;
+-	};
+-};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 5c7c80d6240..0ab9220db18 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -143,11 +143,6 @@
+ 	};
+ 
+ 	qcom,pmi8950@3 {
+-		/* display boost and inverting boost regulators */
+-		labibb: qpnp-labibb-regulator {
+-			status = "ok";
+-			qpnp,qpnp-labibb-mode = "lcd";
+-		};
+ 		qcom,leds@d800 {
+ 			qcom,fs-curr-ua = <20000>;
+ 			/delete-property/ qcom,en-ext-pfet-sc-pro;
+-- 
+2.11.0
+

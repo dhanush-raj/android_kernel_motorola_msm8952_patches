@@ -1,0 +1,143 @@
+From 06c0f9af254d52353b44f449cb09a31c8241d79d Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Mon, 4 Feb 2013 10:31:19 -0600
+Subject: [PATCH 036/959] IKJB42MAIN-2382 drivers: misc: add new utag
+ definitions
+
+New utag definitition propagation
+
+Change-Id: Ib570f49a2f7c726fe3ff22e6d02d4c11e6db0de8
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/516167
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Check Patch <CHEKPACH@motorola.com>
+Reviewed-by: Klocwork kwcheck <klocwork-kwcheck@sourceforge.mot.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+(cherry picked from commit e8d919fee079f0758327ab5c0991f24236c5ddcb)
+---
+ drivers/misc/utag/utags.c | 12 ++++++++-
+ drivers/misc/utag/utags.h | 64 ++++++++++++++++++++++++++++++++++++++++++-----
+ 2 files changed, 69 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/misc/utag/utags.c b/drivers/misc/utag/utags.c
+index d80da9dde6d..3db12005297 100644
+--- a/drivers/misc/utag/utags.c
++++ b/drivers/misc/utag/utags.c
+@@ -41,10 +41,20 @@ static struct utag_node utag_tab[] = {
+ 	{UTAG_MSN, "msn", NULL, NULL, NULL, NULL},
+ 	{UTAG_MODELNO, "model", NULL, NULL, NULL, NULL},
+ 	{UTAG_CARRIER, "carrier", NULL, NULL, NULL, NULL},
+-	{UTAG_KERNEL_LOG_SWITCH, "log_switch", NULL, NULL, NULL, NULL},
++	{UTAG_CONSOLE_NAME, "log_switch", NULL, NULL, NULL, NULL},
+ 	{UTAG_BASEBAND, "baseband", NULL, NULL, NULL, NULL},
+ 	{UTAG_DISPLAY, "display", NULL, NULL, NULL, NULL},
+ 	{UTAG_BOOTMODE, "bootmode", NULL, NULL, NULL, NULL},
++	{UTAG_HWREV, "hwrev", NULL, NULL, NULL, NULL},
++	{UTAG_FLAGS, "flags", NULL, NULL, NULL, NULL},
++	{UTAG_VERSION_BASEBAND, "version_baseband", NULL, NULL, NULL, NULL},
++	{UTAG_VERSION_SYSTEM, "version_system", NULL, NULL, NULL, NULL},
++	{UTAG_VERSION_KERNEL, "version_kernel", NULL, NULL, NULL, NULL},
++	{UTAG_VERSION_WEBTOP, "webtop", NULL, NULL, NULL, NULL},
++	{UTAG_UNLOCKED, "unlocked", NULL, NULL, NULL, NULL},
++	{UTAG_BATTERY, "battery", NULL, NULL, NULL, NULL},
++	{UTAG_DLOAD_MODE, "dload", NULL, NULL, NULL, NULL},
++	{UTAG_IMEI, "imei", NULL, NULL, NULL, NULL},
+ 	{UTAG_END, "all", NULL, NULL, NULL, NULL},
+ 	{0, "", NULL, NULL, NULL, NULL},
+ };
+diff --git a/drivers/misc/utag/utags.h b/drivers/misc/utag/utags.h
+index 982c9fd5069..2da61899536 100644
+--- a/drivers/misc/utag/utags.h
++++ b/drivers/misc/utag/utags.h
+@@ -114,10 +114,11 @@ struct frozen_utag {
+ #define UTAG_CARRIER    0xCAFE0008
+ 
+ /*
+- * kernel log switch: store the kernel uart log switch status. If it is true,
+- *                    the kernel uart log is enabled, otherwise it is disabled.
++ * kernel log console: store the kernel uart console. If it is not used,
++ * the kernel uart console will be "/dev/null". Anything defined will be passed
++ * into kernel as console in command line.
+  */
+-#define UTAG_KERNEL_LOG_SWITCH  0xCAFE0009
++#define UTAG_CONSOLE_NAME  0xCAFE0009
+ 
+ /*
+  * baseband: indicates baseband type as an ASCII string ("cdma", "umts", etc)
+@@ -125,11 +126,11 @@ struct frozen_utag {
+ #define UTAG_BASEBAND   0xCAFE000A
+ 
+ /*
+- * display: high-level display type as an ASCII string, intended for hardware
++ * display: basic display type as an ASCII string, intended for hardware
+  * that can support wildly-different panels (such as mortables).  This tag is
+  * not indended for differentiating between panel sub-versions or 2nd source
+- * types because the factory cannot be expected to program this correctly for
+- * a single product.
++ * types because the factory cannot be expected to program this correctly over
++ * the lifespan of a product.
+  */
+ #define UTAG_DISPLAY    0xCAFE000B
+ 
+@@ -139,6 +140,57 @@ struct frozen_utag {
+  */
+ #define UTAG_BOOTMODE   0xCAFE000C
+ 
++/*
++ * hwrev: this string is used as an override for the board revision field in
++ * the FTI.
++ */
++#define UTAG_HWREV          0xCAFE000D
++
++/*
++ * flags: general purpose bit flags
++ */
++#define UTAG_FLAGS          0xCAFE000E
++
++/*
++ * baseband version
++ */
++#define UTAG_VERSION_BASEBAND   0xCAFE000F
++
++/*
++ * system version
++ */
++#define UTAG_VERSION_SYSTEM     0xCAFE0010
++
++/*
++ * kernel version
++ */
++#define UTAG_VERSION_KERNEL     0xCAFE0011
++
++/*
++ * webtop version
++ */
++#define UTAG_VERSION_WEBTOP     0xCAFE0012
++
++/*
++ * locked status
++ */
++#define UTAG_UNLOCKED       0xCAFE0013
++
++/*
++ * data for charging/battery
++ */
++#define UTAG_BATTERY      0xCAFE0014
++
++/*
++ * QCOM DLOAD mode enable/disable
++ */
++#define UTAG_DLOAD_MODE  0xCAFE0015
++
++/*
++ * IMEI: 14 decimal digits plus a check digit
++ */
++#define UTAG_IMEI  0xCAFE0016
++
+ extern struct utag *thaw_tags(size_t block_size, void *buf,
+ 			      enum utag_error *status);
+ extern void *freeze_tags(size_t block_size, const struct utag *tags,
+-- 
+2.11.0
+

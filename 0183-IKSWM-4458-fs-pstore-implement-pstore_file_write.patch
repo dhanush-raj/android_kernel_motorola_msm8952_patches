@@ -1,0 +1,119 @@
+From cc847e8e2543ceea654eeb56dd3edebd89fe8113 Mon Sep 17 00:00:00 2001
+From: Yi-wei Zhao <gbjc64@motorola.com>
+Date: Wed, 19 Nov 2014 22:10:50 -0600
+Subject: [PATCH 183/959] IKSWM-4458 fs:pstore: implement pstore_file_write()
+
+The function is to annotate system info to "annotation"
+persistent ram. those info will be appended to panic or
+watchdog kernel logs.
+
+Change-Id: Icc4577973c1bc9172246b1138c5bceb5f3d6bee7
+Signed-off-by: Yi-wei Zhao <gbjc64@motorola.com>
+Reviewed-on: http://gerrit.mot.com/689836
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sheng-Zhe Zhao <a18689@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/713668
+---
+ fs/pstore/inode.c    | 38 ++++++++++++++++++++++++++++++++++++++
+ fs/pstore/platform.c | 19 +++++++++++++++++++
+ 2 files changed, 57 insertions(+)
+
+diff --git a/fs/pstore/inode.c b/fs/pstore/inode.c
+index 527721fab2d..99dd6cfc073 100644
+--- a/fs/pstore/inode.c
++++ b/fs/pstore/inode.c
+@@ -131,6 +131,43 @@ static ssize_t pstore_file_read(struct file *file, char __user *userbuf,
+ 	return simple_read_from_buffer(userbuf, count, ppos, ps->data, ps->size);
+ }
+ 
++#define PSTORE_ANNOTATE_MAX_SIZE 0x100
++static ssize_t pstore_file_write(struct file *file, const char __user *userbuf,
++						 size_t count, loff_t *ppos)
++{
++	struct seq_file *sf = file->private_data;
++	struct pstore_private *ps = sf->private;
++	char *buffer;
++	ssize_t ret = 0;
++	ssize_t saved_count = count;
++
++	if (!count || !userbuf)
++		return 0;
++
++	if (ps->type != PSTORE_TYPE_ANNOTATE)
++		return count;
++
++	if (count > PSTORE_ANNOTATE_MAX_SIZE)
++		count = PSTORE_ANNOTATE_MAX_SIZE;
++
++	buffer = kmalloc(count + 1, GFP_KERNEL);
++	if (!buffer)
++		return -ENOMEM;
++
++	if (copy_from_user(buffer, userbuf, count)) {
++		ret = -EFAULT;
++		goto write_out;
++	}
++
++	buffer[count] = '\0';
++	pstore_annotate(buffer);
++	ret = saved_count;
++
++write_out:
++	kfree(buffer);
++	return ret;
++}
++
+ static int pstore_file_open(struct inode *inode, struct file *file)
+ {
+ 	struct pstore_private *ps = inode->i_private;
+@@ -163,6 +200,7 @@ static loff_t pstore_file_llseek(struct file *file, loff_t off, int whence)
+ static const struct file_operations pstore_file_operations = {
+ 	.open		= pstore_file_open,
+ 	.read		= pstore_file_read,
++	.write		= pstore_file_write,
+ 	.llseek		= pstore_file_llseek,
+ 	.release	= seq_release,
+ };
+diff --git a/fs/pstore/platform.c b/fs/pstore/platform.c
+index b4bcee8aff8..dcb60bbd8a8 100644
+--- a/fs/pstore/platform.c
++++ b/fs/pstore/platform.c
+@@ -381,6 +381,7 @@ void pstore_get_records(int quiet)
+ 	enum pstore_type_id	type;
+ 	struct timespec		time;
+ 	int			failed = 0, rc;
++	int			made_annotate_file = 0;
+ 
+ 	if (!psi)
+ 		return;
+@@ -397,7 +398,25 @@ void pstore_get_records(int quiet)
+ 		if (rc && (rc != -EEXIST || !quiet))
+ 			failed++;
+ 		pr_info("Found record type %d, psi name %s\n", type, psi->name);
++
++		if (type == PSTORE_TYPE_ANNOTATE)
++			made_annotate_file = 1;
++	}
++
++	/*
++	 * If there isn't annotation file created (e.g in cold reboot
++	 * or power up), create it now, since we need app to make annotation
++	 * during bootup.
++	 */
++	if (!made_annotate_file) {
++		rc = pstore_mkfile(PSTORE_TYPE_ANNOTATE, psi->name, 0, 0, NULL,
++					0, time, psi);
++		if (rc)
++			pr_err("annotate-%s  can't be created\n", psi->name);
++		else
++			pr_info("Created annotate-%s\n", psi->name);
+ 	}
++
+ 	if (psi->close)
+ 		psi->close(psi);
+ out:
+-- 
+2.11.0
+

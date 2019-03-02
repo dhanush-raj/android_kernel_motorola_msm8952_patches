@@ -1,0 +1,43 @@
+From f3d6cf90394ebc79ae4576e28cd7eb742818d4b9 Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Thu, 25 Aug 2016 15:57:23 -0700
+Subject: [PATCH 918/959] fs: esdfs: fix deadlock between rmdir and lookup
+
+Propagate from IKSWM-56618.
+
+The commit 453011e5a9de fix the deadlock between unlink
+and lookup, and looks like the fix is applicable to rmdir
+as well.
+
+Mot-CRs-fixed: IKSWN-2455
+Change-Id: I33dfd8df0c8b72af1393d3285a4b2dcc4e24be8d
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: https://gerrit.mot.com/892689
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/esdfs/inode.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/fs/esdfs/inode.c b/fs/esdfs/inode.c
+index 871df2fbb7f..e02d2f3a7e7 100644
+--- a/fs/esdfs/inode.c
++++ b/fs/esdfs/inode.c
+@@ -214,10 +214,10 @@ static int esdfs_rmdir(struct inode *dir, struct dentry *dentry)
+ 	else
+ 		esdfs_get_lower_path(dentry, &lower_path);
+ 	lower_dentry = lower_path.dentry;
+-	lower_dir_dentry = lock_parent(lower_dentry);
+ 
+ 	esdfs_drop_shared_icache(dir->i_sb, lower_dentry->d_inode);
+ 
++	lower_dir_dentry = lock_parent(lower_dentry);
+ 	err = vfs_rmdir(lower_dir_dentry->d_inode, lower_dentry);
+ 	if (err)
+ 		goto out;
+-- 
+2.11.0
+

@@ -1,0 +1,36 @@
+From 5a964da4955ce2632bc91f2620d6bb4e4b74e463 Mon Sep 17 00:00:00 2001
+From: Yi-wei Zhao <gbjc64@motorola.com>
+Date: Tue, 22 Mar 2016 15:37:12 -0500
+Subject: [PATCH 821/959] IKSWM-27157 fs/proc: user write only to
+ sched_group_id
+
+Fix the world-writable to sched_group_id.
+
+Change-Id: Id91077991dd7b277f31f254b723b5b793ad1365d
+Signed-off-by: Yi-wei Zhao <gbjc64@motorola.com>
+Reviewed-on: http://gerrit.mot.com/836266
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/proc/base.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/fs/proc/base.c b/fs/proc/base.c
+index 816a5477092..86afe258803 100644
+--- a/fs/proc/base.c
++++ b/fs/proc/base.c
+@@ -2912,7 +2912,7 @@ static const struct pid_entry tgid_base_stuff[] = {
+ #endif
+ #ifdef CONFIG_SCHED_HMP
+ 	REG("sched_init_task_load",      S_IRUGO|S_IWUSR, proc_pid_sched_init_task_load_operations),
+-	REG("sched_group_id",      S_IRUGO|S_IWUGO, proc_pid_sched_group_id_operations),
++	REG("sched_group_id",      S_IRUGO|S_IWUSR, proc_pid_sched_group_id_operations),
+ #endif
+ #ifdef CONFIG_SCHED_DEBUG
+ 	REG("sched",      S_IRUGO|S_IWUSR, proc_pid_sched_operations),
+-- 
+2.11.0
+

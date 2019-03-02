@@ -1,0 +1,69 @@
+From 77401d8a5adf77494f358c33a08128533d1297ab Mon Sep 17 00:00:00 2001
+From: Kevin Wells <kwells@motorola.com>
+Date: Mon, 9 Dec 2013 15:16:51 -0500
+Subject: [PATCH 010/959] IKVPREL2KK-318 build: allow multiple extra kernel
+ configs
+
+This change improves the functionality of the "extra config"
+capability implemented in defconfig.mk. Currently, only
+one extra configuration file can be specified for a given
+kernel (in addition to the debug config). This change
+makes it so that multiple configs can be specified.
+
+The reason behind the change is that the condor product
+has a need to build two different kernels: one with zram
+and low memory config options turned on, and one with them
+turned off. To avoid duplicating the entire
+msm8610_defconfig and forcing developers to submit their
+changes to two different files, a small snippet of
+additional config options is being created.
+
+Change-Id: I51acb754010aadcb473627febac52f8121da6a8e
+Signed-off-by: Kevin Wells <kwells@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/587915
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Check Patch <CHEKPACH@motorola.com>
+Reviewed-by: Christopher Fries <c.fries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+(cherry picked from commit 1f4bb5b80ab20b725666f1e4f3e4a49a08111cf1)
+---
+ defconfig.mk | 15 +++++----------
+ 1 file changed, 5 insertions(+), 10 deletions(-)
+
+diff --git a/defconfig.mk b/defconfig.mk
+index 313a949c9e5..ab031fdecaa 100644
+--- a/defconfig.mk
++++ b/defconfig.mk
+@@ -2,23 +2,18 @@ DEFCONFIGSRC			:= kernel/arch/arm/configs
+ LJAPDEFCONFIGSRC		:= ${DEFCONFIGSRC}/ext_config
+ PRODUCT_SPECIFIC_DEFCONFIGS	:= $(DEFCONFIGSRC)/$(KERNEL_DEFCONFIG)
+ TARGET_DEFCONFIG		:= $(KERNEL_OUT)/mapphone_defconfig
+-KERNEL_DEBUG_DEFCONFIG          := $(LJAPDEFCONFIGSRC)/debug-$(subst _defconfig,,$(KERNEL_DEFCONFIG)).config
+ 
+-ifneq ($(KERNEL_EXTRA_CONFIG),)
+-PRODUCT_SPECIFIC_DEFCONFIGS += $(LJAPDEFCONFIGSRC)/$(KERNEL_EXTRA_CONFIG).config
+-endif
+-
+-# build eng kernel for eng and userdebug Android variants
++# add debug config file for non-user build
+ ifneq ($(TARGET_BUILD_VARIANT), user)
+-ifneq ($(wildcard $(KERNEL_DEBUG_DEFCONFIG)),)
+-PRODUCT_SPECIFIC_DEFCONFIGS += $(KERNEL_DEBUG_DEFCONFIG)
++KERNEL_EXTRA_CONFIG +=debug-$(subst _defconfig,,$(KERNEL_DEFCONFIG))
+ endif
+ 
++# append all additional configs
+ ifneq ($(KERNEL_EXTRA_CONFIG),)
+-PRODUCT_SPECIFIC_DEFCONFIGS += $(LJAPDEFCONFIGSRC)/debug-$(KERNEL_EXTRA_CONFIG).config
+-endif
++PRODUCT_SPECIFIC_DEFCONFIGS += $(KERNEL_EXTRA_CONFIG:%=$(LJAPDEFCONFIGSRC)/%.config)
+ endif
+ 
++
+ define do-make-defconfig
+ 	$(hide) mkdir -p $(dir $(1))
+ 	( perl -le 'print "# This file was automatically generated from:\n#\t" . join("\n#\t", @ARGV) . "\n"' $(2) && cat $(2) ) > $(1) || ( rm -f $(1) && false )
+-- 
+2.11.0
+

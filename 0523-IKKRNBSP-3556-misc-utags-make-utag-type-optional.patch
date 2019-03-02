@@ -1,0 +1,37 @@
+From 296816825fa5d0e3de3f0fca0d7e452a22f01f1d Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Fri, 4 Dec 2015 11:51:41 -0600
+Subject: [PATCH 523/959] IKKRNBSP-3556 misc: utags: make utag type optional
+
+Build utag directory should complete for typeless utags.
+
+Change-Id: I4400813080a55cebea2f8d8199894eccd061d03e
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/805009
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/utag/utags.c | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/drivers/misc/utag/utags.c b/drivers/misc/utag/utags.c
+index 96ab899c63a..30ac4507a77 100644
+--- a/drivers/misc/utag/utags.c
++++ b/drivers/misc/utag/utags.c
+@@ -1319,10 +1319,6 @@ static void build_utags_directory(struct ctrl *ctrl)
+ 		memcpy(expendable, cur->name, MAX_UTAG_NAME);
+ 		parent = NULL, type = NULL;
+ 		num_names = full_split(expendable, names, &type);
+-		if (!type) {
+-			pr_err("undefined type\n");
+-			goto stop_building_utags;
+-		}
+ 
+ 		for (i = 0; i < num_names; i++) {
+ 			pr_debug("creating dir %s%s\n", names[i],
+-- 
+2.11.0
+

@@ -1,0 +1,31 @@
+From 3069c6a2297ad2aa6f617d52c31f6c26d5223628 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Mon, 24 Aug 2015 16:25:39 -0500
+Subject: [PATCH 052/959] IKKRNBSP-3333 configs: ext-config: enable utag driver
+
+Enable utag driver build
+
+Change-Id: I611939dfa3124e18faa876b32e005f713632b8dd
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/778842
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index d715d9bb0f6..134f6e6a878 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -22,3 +22,4 @@ CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_I2C=y
+ CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_RMI_DEV_MMI=y
+ CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_TEST_REPORTING=y
+ CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_MMI=y
++CONFIG_MOT_UTAG=y
+-- 
+2.11.0
+

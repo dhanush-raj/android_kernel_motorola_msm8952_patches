@@ -1,0 +1,46 @@
+From d5166063d09339752ea64cfa5b637cb690b139cf Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Wed, 23 Sep 2015 16:35:35 -0700
+Subject: [PATCH 171/959] IKKRNBSP-3414 msm: mdss: read bare board flag as bool
+
+The property "mmi,bare_board" is set as bool by LK, and "mmi,esd"
+as u32.
+
+Change-Id: Ie894c5ba8713b9c6caacf52003231a556a1b7a0c
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/785862
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 11 ++---------
+ 1 file changed, 2 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index 1053ba2d7c0..d1401e2da8a 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -482,15 +482,8 @@ int mdss_panel_parse_panel_config_dt(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+ 	} else
+ 		pconf->esd_enable = true;
+ 
+-	/*
+-	 * Enable bare board only if the prop "mmi,bare_board" exists and is
+-	 * equal to 1.
+-	 */
+-	if (!of_property_read_u32(np, "mmi,bare_board", &tmp) && tmp == 1) {
+-		pconf->bare_board = true;
+-		pr_warn("%s: bare board is enabled by UTAGS\n", __func__);
+-	} else
+-		pconf->bare_board = false;
++	/* Enable bare board only if the prop "mmi,bare_board" exists */
++	pconf->bare_board = of_property_read_bool(np, "mmi,bare_board");
+ 
+ 	pconf->panel_ver = MDSS_PANEL_DEFAULT_VER;
+ 	of_property_read_u64(np, "mmi,panel_ver", &pconf->panel_ver);
+-- 
+2.11.0
+

@@ -1,0 +1,53 @@
+From 18df1546170e4dbec1ce93eb47d37b785d2682d1 Mon Sep 17 00:00:00 2001
+From: Paul Handrigan <Paul.Handrigan@cirrus.com>
+Date: Tue, 8 Dec 2015 16:40:12 -0600
+Subject: [PATCH 535/959] ASoC: cs35l34: Check for A1 device id.
+
+We want to check for both A0 and A1 device ids.
+
+Signed-off-by: Paul Handrigan <Paul.Handrigan@cirrus.com>
+Change-Id: I29f57a12f7242f066778828d7df1c97aac4a4967
+Reviewed-on: http://gerrit.mot.com/805838
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ sound/soc/codecs/cs35l34.c | 6 +++---
+ sound/soc/codecs/cs35l34.h | 1 +
+ 2 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/sound/soc/codecs/cs35l34.c b/sound/soc/codecs/cs35l34.c
+index 9bee568225b..722ef03de73 100644
+--- a/sound/soc/codecs/cs35l34.c
++++ b/sound/soc/codecs/cs35l34.c
+@@ -792,10 +792,10 @@ static int cs35l34_i2c_probe(struct i2c_client *i2c_client,
+ 	ret = regmap_read(cs35l34->regmap, CS35L34_DEVID_E, &reg);
+ 	devid |= (reg & 0xF0) >> 4;
+ 
+-	if (devid != CS35L34_CHIP_ID) {
++	if (devid != CS35L34_CHIP_ID && devid != CS35L34_CHIP_ID_A1) {
+ 		dev_err(&i2c_client->dev,
+-			"CS35l34 Device ID (%X). Expected ID %X\n",
+-			devid, CS35L34_CHIP_ID);
++			"CS35l34 Device ID (%X).\n",
++			devid);
+ 		ret = -ENODEV;
+ 		goto err;
+ 	}
+diff --git a/sound/soc/codecs/cs35l34.h b/sound/soc/codecs/cs35l34.h
+index 00343c6df3f..6656285de67 100644
+--- a/sound/soc/codecs/cs35l34.h
++++ b/sound/soc/codecs/cs35l34.h
+@@ -17,6 +17,7 @@
+ #define CS35L34_FIRSTREG		0x01
+ #define CS35L34_LASTREG			0x7F
+ #define CS35L34_CHIP_ID			0x00035A25
++#define CS35L34_CHIP_ID_A1		0x00035A34
+ #define CS35L34_DEVID_AB		0x01	/* Device ID A & B [RO] */
+ #define CS35L34_DEVID_CD		0x02    /* Device ID C & D [RO] */
+ #define CS35L34_DEVID_E			0x03    /* Device ID E [RO] */
+-- 
+2.11.0
+

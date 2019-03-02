@@ -1,0 +1,43 @@
+From 96f584253eb2a21290b19c5d944230685e07419b Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Wed, 1 Jun 2016 11:55:58 -0700
+Subject: [PATCH 901/959] IKKRNBSP-3940: msm: mdss: correct "last" flag of DSI
+ command header
+
+Enforce "last" flag to 1 for "need-wait" or "last" DSI command if it's not.
+
+Port of 225cb88 on 8996.
+
+Change-Id: Ia6e0b0f917e09c4d617775b1641a424cd236fd8a
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/863159
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Patrick Auchter <auchter@motorola.com>
+Reviewed-by: Fred Fettinger <fettinge@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index 9dfc9106dfa..6f1cf622ebe 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -1185,6 +1185,11 @@ static int mdss_dsi_parse_dcs_cmds(struct device_node *np,
+ 		dchdr = (struct dsi_ctrl_hdr *)bp;
+ 		len -= sizeof(*dchdr);
+ 		bp += sizeof(*dchdr);
++		if ((dchdr->wait != 0 || i == (cnt - 1)) && dchdr->last == 0) {
++			pr_warn("%s: correct \"last\" flag of DSI cmd 0x%02X of %s\n",
++				__func__, *bp, cmd_key);
++			dchdr->last = 1;
++		}
+ 		pcmds->cmds[i].dchdr = *dchdr;
+ 		pcmds->cmds[i].payload = bp;
+ 		bp += dchdr->dlen;
+-- 
+2.11.0
+

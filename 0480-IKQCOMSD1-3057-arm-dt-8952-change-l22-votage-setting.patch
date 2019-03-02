@@ -1,0 +1,69 @@
+From 7c48d43fd5c9aca3f4849bb18513f03126cb5f30 Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Mon, 16 Nov 2015 13:16:10 -0600
+Subject: [PATCH 480/959] IKQCOMSD1-3057:arm/dt: 8952: change l22 votage
+ setting
+
+P1 hw used l22 for laser senosr
+
+Change-Id: I2fbaf9e4de0c0582f65a0f94f756866791f6639a
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/800345
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-athene-p0.dts    | 16 ++++++++++++++++
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 10 ++++++++++
+ 2 files changed, 26 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+index be9b57c2187..b23a7380b92 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
++++ b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+@@ -97,6 +97,22 @@
+ 	};
+ };
+ 
++&i2c_3 { /* BLSP1 QUP3 */
++	synaptics@20 {
++		touch_vdd-supply = <&pm8950_l22>;
++	};
++};
++
++&rpm_bus {
++	rpm-regulator-ldoa22 {
++		pm8950_l22: regulator-l22 {
++			regulator-min-microvolt = <2800000>;
++			regulator-max-microvolt = <2800000>;
++			qcom,init-voltage = <2800000>;
++		};
++	};
++};
++
+ &stml0xx{
+ 	sensor2-supply = <&pm8950_l17>;
+ };
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 8e87fda1558..bde093b3ee5 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -817,3 +817,13 @@
+ 		label = "msm_therm";
+ 	};
+ };
++
++&rpm_bus {
++	rpm-regulator-ldoa22 {
++		pm8950_l22: regulator-l22 {
++			regulator-min-microvolt = <2850000>;
++			regulator-max-microvolt = <2850000>;
++			qcom,init-voltage = <2850000>;
++		};
++	};
++};
+-- 
+2.11.0
+

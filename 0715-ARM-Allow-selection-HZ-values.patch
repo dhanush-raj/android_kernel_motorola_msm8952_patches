@@ -1,0 +1,91 @@
+From bad38fa0c842241b5b6578e343ea2ca731306131 Mon Sep 17 00:00:00 2001
+From: Russell King <rmk+kernel@arm.linux.org.uk>
+Date: Sat, 27 Apr 2013 23:31:10 +0100
+Subject: [PATCH 715/959] ARM: Allow selection HZ values
+
+Allow users to configure the Hz rate on implementations which do not have
+a fixed clock rate.
+
+Whenever HZ_FIXED is not set through one of its "default" settings, the
+user is allowed to select a tick rate from 100, 200, 250, 300, 500Hz
+and 1kHz.  This is slightly more choice than with the generic HZ
+selection in kernel/Kconfig.hz (which only does 100, 250, 300Hz and
+1kHz).  The reason for including 200Hz is that a greater number of other
+platforms want that via the fixed rate, and 500Hz just seemed to be a
+better middle value than 300Hz (which is of course very close to 250.)
+
+Signed-off-by: Russell King <rmk+kernel@arm.linux.org.uk>
+(cherry picked from commit c9218b163959fafa76ffbee0baa3ef269838f410)
+Mot-CRs-fixed: IKSWM-22509
+
+Change-Id: If46b32816212215bce0df0ac626ad119cd8335df
+Signed-off-by: Yuanyuan Zhong <zyy@motorola.com>
+Reviewed-on: http://gerrit.mot.com/826636
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/Kconfig | 40 ++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 38 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/Kconfig b/arch/arm/Kconfig
+index 1c47c172439..cb1fe8641da 100644
+--- a/arch/arm/Kconfig
++++ b/arch/arm/Kconfig
+@@ -1646,13 +1646,49 @@ config ARCH_NR_GPIO
+ 
+ source kernel/Kconfig.preempt
+ 
+-config HZ
++config HZ_FIXED
+ 	int
+ 	default 200 if ARCH_EBSA110 || ARCH_S3C24XX || ARCH_S5P64X0 || \
+ 		ARCH_S5PV210 || ARCH_EXYNOS4
+ 	default AT91_TIMER_HZ if ARCH_AT91
+ 	default SHMOBILE_TIMER_HZ if ARCH_SHMOBILE
+-	default 100
++
++choice
++	depends on !HZ_FIXED
++	prompt "Timer frequency"
++
++config HZ_100
++	bool "100 Hz"
++
++config HZ_200
++	bool "200 Hz"
++
++config HZ_250
++	bool "250 Hz"
++
++config HZ_300
++	bool "300 Hz"
++
++config HZ_500
++	bool "500 Hz"
++
++config HZ_1000
++	bool "1000 Hz"
++
++endchoice
++
++config HZ
++	int
++	default HZ_FIXED if HZ_FIXED
++	default 100 if HZ_100
++	default 200 if HZ_200
++	default 250 if HZ_250
++	default 300 if HZ_300
++	default 500 if HZ_500
++	default 1000
++
++config SCHED_HRTICK
++	def_bool HIGH_RES_TIMERS
+ 
+ config SCHED_HRTICK
+ 	def_bool HIGH_RES_TIMERS
+-- 
+2.11.0
+

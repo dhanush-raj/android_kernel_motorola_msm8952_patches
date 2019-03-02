@@ -1,0 +1,115 @@
+From 5c878fadeb2eb715f43b07dfe88aacc2ee1fe835 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Thu, 24 Sep 2015 19:34:47 -0500
+Subject: [PATCH 192/959] IKSWM-4458 arm:msm:mmi: add socinfo to panic log
+
+Annotate socinfo to apanic_console log.
+
+Merged from:
+1a939fcfdc817d2ddf66421e7fef19b526e2b0f5
+ec3df20d0e28316b300e318fef51254c0da3f58d
+503fe1ed5a07dc7bdc191d70a3e63d202ced3804
+
+Change-Id: Ib36605b6be0fdefc3c63d4e45438ae2a22d1621b
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ drivers/soc/qcom/mmi_soc_info.c | 43 ++++++++++++++++++++++++++++++++++++++---
+ include/soc/qcom/socinfo.h      |  1 +
+ 2 files changed, 41 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/soc/qcom/mmi_soc_info.c b/drivers/soc/qcom/mmi_soc_info.c
+index 20349bccc61..3a5faed0354 100644
+--- a/drivers/soc/qcom/mmi_soc_info.c
++++ b/drivers/soc/qcom/mmi_soc_info.c
+@@ -14,6 +14,7 @@
+ #include <linux/module.h>
+ #include <linux/proc_fs.h>
+ #include <soc/qcom/socinfo.h>
++#include <linux/pstore.h>
+ 
+ struct mmi_msm_bin {
+ 	int	set;
+@@ -30,14 +31,49 @@ static DEFINE_SPINLOCK(mmi_msm_bin_lock);
+ 
+ static inline void mmi_panic_annotate(const char *str)
+ {
++	pstore_annotate(str);
++}
++
++static void __init mmi_msm_annotate_socinfo(void)
++{
++	char socinfo[32];
++
++	snprintf(socinfo, sizeof(socinfo), "socinfo: id=%u, ",
++			socinfo_get_id());
++	mmi_panic_annotate(socinfo);
++
++	snprintf(socinfo, sizeof(socinfo), "ver=%u.%u, ",
++			SOCINFO_VERSION_MAJOR(socinfo_get_version()),
++			SOCINFO_VERSION_MINOR(socinfo_get_version()));
++	mmi_panic_annotate(socinfo);
++
++	snprintf(socinfo, sizeof(socinfo), "raw_id=%u, ",
++			socinfo_get_raw_id());
++	mmi_panic_annotate(socinfo);
++
++	snprintf(socinfo, sizeof(socinfo), "raw_ver=%u, ",
++			socinfo_get_raw_version());
++	mmi_panic_annotate(socinfo);
++
++	snprintf(socinfo, sizeof(socinfo), "hw_plat=%u, ",
++			socinfo_get_platform_type());
++	mmi_panic_annotate(socinfo);
++
++	snprintf(socinfo, sizeof(socinfo), "hw_plat_ver=%u, ",
++			socinfo_get_platform_version());
++	mmi_panic_annotate(socinfo);
++
++	snprintf(socinfo, sizeof(socinfo), "hw_plat_subtype=%u\n",
++			socinfo_get_platform_subtype());
++	mmi_panic_annotate(socinfo);
+ }
+ 
+ static ssize_t mmi_acpu_proc_read(struct file *file, char __user *buf,
+ 				size_t count, loff_t *ppos)
+ {
+-	int data = (int)PDE_DATA(file_inode(file));
++	void *data = PDE_DATA(file_inode(file));
+ 	char local_buf[8];
+-	int len = snprintf(local_buf, 2, "%1x", data);
++	int len = snprintf(local_buf, 2, "%1p", data);
+ 
+ 	return simple_read_from_buffer(buf, count, ppos, local_buf, len);
+ }
+@@ -86,7 +122,7 @@ static void __init mmi_msm_acpu_bin_export(void)
+ 	if (mmi_msm_bin_info.pvs != MMI_MSM_BIN_INVAL) {
+ 		proc = proc_create_data("cpu/msm_acpu_pvs",
+ 			(S_IFREG | S_IRUGO), NULL,
+-			&mmi_acpu_proc_fops, (void *)mmi_msm_bin_info.pvs);
++			&mmi_acpu_proc_fops, (void *)(uintptr_t)mmi_msm_bin_info.pvs);
+ 		if (!proc)
+ 			pr_err("Failed to create /proc/cpu/msm_acpu_pvs.\n");
+ 		else
+@@ -105,6 +141,7 @@ static void __init mmi_msm_acpu_bin_export(void)
+ 
+ static int __init init_mmi_soc_info(void)
+ {
++	mmi_msm_annotate_socinfo();
+ 	mmi_msm_acpu_bin_export();
+ 	return 0;
+ }
+diff --git a/include/soc/qcom/socinfo.h b/include/soc/qcom/socinfo.h
+index 3ef006aa8e4..43b7d9f4946 100644
+--- a/include/soc/qcom/socinfo.h
++++ b/include/soc/qcom/socinfo.h
+@@ -212,6 +212,7 @@ enum msm_cpu socinfo_get_msm_cpu(void);
+ uint32_t socinfo_get_id(void);
+ uint32_t socinfo_get_version(void);
+ uint32_t socinfo_get_raw_id(void);
++uint32_t socinfo_get_raw_version(void);
+ char *socinfo_get_build_id(void);
+ uint32_t socinfo_get_platform_type(void);
+ uint32_t socinfo_get_platform_subtype(void);
+-- 
+2.11.0
+

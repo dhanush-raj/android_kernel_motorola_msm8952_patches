@@ -1,0 +1,119 @@
+From ba2c8253e7aefed513294ff35f01d959cb05ea6a Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Tue, 1 Dec 2015 15:57:23 -0600
+Subject: [PATCH 522/959] IKLOCSEN-2456: drivers:misc:stml0xx: Add glance
+ sensor support
+
+Handle reading glance sensor data out of the wake irq
+and send the data up to the HAL.
+
+Change-Id: I1d31927f5a609a0c962ca5dec89c377a676378d1
+Signed-off-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/803896
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Eric Hefner <ehefner@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Gabriel Burca <Gabriel.Burca@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_wake_irq.c | 12 ++++++++++++
+ include/linux/stml0xx.h                 |  1 +
+ include/uapi/linux/motosh_vmm.h         | 12 ++++++------
+ include/uapi/linux/stml0xx.h            |  5 +++--
+ 4 files changed, 22 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index 4d8664ee67d..cef3d43e165 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -405,6 +405,18 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_GYRO_CAL,
+ 				NULL, 0, 0, stm_ws->ts_ns);
+ 	}
++	if (irq_status & M_GLANCE) {
++		stml0xx_as_data_buffer_write(
++			ps_stml0xx,
++			DT_GLANCE,
++			&buf[WAKE_IRQ_IDX_GLANCE],
++			2,
++			0,
++			stm_ws->ts_ns);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev, "Glance Gesture=%d\n",
++				SH_TO_H16(buf + WAKE_IRQ_IDX_GLANCE));
++	}
+ 	if (irq2_status & M_MMOVEME) {
+ 		unsigned char status;
+ 
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index c6b94dd0151..00310b678e9 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -131,6 +131,7 @@ enum vmm_ids {
+ #define WAKE_IRQ_IDX_MODALITY_ACCUM_MVMT   52
+ #define WAKE_IRQ_IDX_LOG_MSG               56
+ #define WAKE_IRQ_IDX_STOWED_ALS		(WAKE_IRQ_IDX_LOG_MSG + LOG_MSG_SIZE)
++#define WAKE_IRQ_IDX_GLANCE                (WAKE_IRQ_IDX_STOWED_ALS + 2)
+ 
+ /* Non-wake IRQ work function flags */
+ #define IRQ_WORK_FLAG_NONE                   0x00
+diff --git a/include/uapi/linux/motosh_vmm.h b/include/uapi/linux/motosh_vmm.h
+index efcbd51fc47..d894dcc580b 100644
+--- a/include/uapi/linux/motosh_vmm.h
++++ b/include/uapi/linux/motosh_vmm.h
+@@ -178,9 +178,9 @@ VMM_ENTRY(0x30, SWI_COUNTER_SIZE,					FALSE,
+ VMM_ENTRY(0x31, SWI_COUNTER,						FALSE,
+ 		vmm_swi_counter,
+ 		sizeof(vmm_swi_counter))
+-VMM_ENTRY(0x32, UNUSED_32,						FALSE,
+-		0,
+-		0)
++VMM_ENTRY(0x32, GLANCE_PARAMETERS,					TRUE,
++		vmm_glance_config,
++		sizeof(vmm_glance_config))
+ VMM_ENTRY(0x33, PROX_ALS_SETTINGS,					TRUE,
+ 		vmm_prox_als_settings,
+ 		sizeof(vmm_prox_als_settings))
+@@ -327,9 +327,9 @@ VMM_ENTRY(0x57, UNUSED_57,						FALSE,
+ VMM_ENTRY(0x5B, UNUSED_5B,						FALSE,
+ 		0,
+ 		0)
+-VMM_ENTRY(0x5C, UNUSED_5C,						FALSE,
+-		0,
+-		0)
++VMM_ENTRY(0x5C, GLANCE_REG,						FALSE,
++		vmm_glance_data,
++		sizeof(vmm_glance_data))
+ VMM_ENTRY(0x5D, ALGO_ACCUM_ALL_MODALITY,				FALSE,
+ 		vmm_algo_accum_all_modality,
+ 		sizeof(vmm_algo_accum_all_modality))
+diff --git a/include/uapi/linux/stml0xx.h b/include/uapi/linux/stml0xx.h
+index 426e84f2012..78a42d9c9ee 100644
+--- a/include/uapi/linux/stml0xx.h
++++ b/include/uapi/linux/stml0xx.h
+@@ -208,7 +208,7 @@
+ #define M_LOG_MSG               0x008000
+ #define M_CHOPCHOP              0x010000
+ #define M_UPDATE_GYRO_CAL       0x020000
+-/*#define M_UNUSED              0x040000*/
++#define M_GLANCE                0x040000
+ /*#define M_UNUSED              0x080000*/
+ /*#define M_UNUSED              0x100000*/
+ /*#define M_UNUSED              0x200000*/
+@@ -299,7 +299,8 @@ enum STML0XX_data_types {
+ 	DT_CHOPCHOP,
+ 	DT_GYRO_CAL,
+ 	DT_STEP_COUNTER,
+-	DT_STEP_DETECTOR
++	DT_STEP_DETECTOR,
++	DT_GLANCE
+ };
+ 
+ enum {
+-- 
+2.11.0
+

@@ -1,0 +1,43 @@
+From f149f83ae7cb0256c87fd5b1bec4312b899a3728 Mon Sep 17 00:00:00 2001
+From: molg1 <molg1@lenovo.com>
+Date: Thu, 7 Jul 2016 10:09:35 +0800
+Subject: [PATCH 927/959] IKSWM-58054: uapi/stml0xx_vmm: register for receiving
+ commands
+
+Entry for a vmm register that will be used for receiving
+factory commands
+
+Change-Id: I626f9aa99577d7bd442414fe4ee29b823fd443a9
+Signed-off-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-on: https://gerrit.mot.com/900900
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Eric Hefner <ehefner@motorola.com>
+Reviewed-by: Gabriel Burca <Gabriel.Burca@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ include/uapi/linux/stml0xx_vmm.h | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/include/uapi/linux/stml0xx_vmm.h b/include/uapi/linux/stml0xx_vmm.h
+index 289f6c19491..3882e67efaf 100644
+--- a/include/uapi/linux/stml0xx_vmm.h
++++ b/include/uapi/linux/stml0xx_vmm.h
+@@ -136,9 +136,9 @@ VMM_ENTRY(0x22, ZMOTION_DUR,						TRUE,
+ VMM_ENTRY(0x23, UNUSED_23,						FALSE,
+ 		0,
+ 		0)
+-VMM_ENTRY(0x24, UNUSED_24,						FALSE,
+-		0,
+-		0)
++VMM_ENTRY(0x24, BYPASS_MODE,						TRUE,
++		vmm_test_mode,
++		sizeof(vmm_test_mode))
+ VMM_ENTRY(0x25, UNUSED_25,						FALSE,
+ 		0,
+ 		0)
+-- 
+2.11.0
+

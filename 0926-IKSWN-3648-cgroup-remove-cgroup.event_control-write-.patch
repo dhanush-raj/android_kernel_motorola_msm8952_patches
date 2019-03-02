@@ -1,0 +1,37 @@
+From d26ea817176ba7ea8b8c938a985642d944b9fdc0 Mon Sep 17 00:00:00 2001
+From: jixj <jixj@motorola.com>
+Date: Tue, 13 Sep 2016 11:22:56 +0800
+Subject: [PATCH 926/959] IKSWN-3648 cgroup:  remove "cgroup.event_control"
+ write permission for other
+
+World writable file faults failed - /acct/*/cgroup.event_control
+
+Change-Id: Ie3eb5c7fc236eb97cf96ed6fc061937eb13d6115
+Signed-off-by: jixj <jixj@motorola.com>
+Reviewed-on: https://gerrit.mot.com/898411
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Yi-Wei Zhao <gbjc64@motorola.com>
+Reviewed-by: Jiang-Li Yuan <jlyuan@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ kernel/cgroup.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/kernel/cgroup.c b/kernel/cgroup.c
+index 7f26b05303e..9f654687b1f 100644
+--- a/kernel/cgroup.c
++++ b/kernel/cgroup.c
+@@ -4039,7 +4039,7 @@ static struct cftype files[] = {
+ 	{
+ 		.name = CGROUP_FILE_GENERIC_PREFIX "event_control",
+ 		.write_string = cgroup_write_event_control,
+-		.mode = S_IWUGO,
++		.mode = S_IWUSR | S_IWGRP,
+ 	},
+ 	{
+ 		.name = "cgroup.clone_children",
+-- 
+2.11.0
+

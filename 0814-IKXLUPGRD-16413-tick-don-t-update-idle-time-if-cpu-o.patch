@@ -1,0 +1,64 @@
+From 68638ef217d4c571cd88621251dae1741c79f521 Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Fri, 5 Dec 2014 15:29:09 -0800
+Subject: [PATCH 814/959] IKXLUPGRD-16413 tick: don't update idle time if cpu
+ offline
+
+An offline cpu still has ts->idle_active == 1, that cause
+off time is counted as idle time, and hence cause cpu load
+calculated wrongly.
+
+Check the cpu online status before updating the idle time to
+fix it.
+
+Change-Id: I00deb4cbcaec18f7625ee774bf4c3e643330dd5f
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/695764
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Signed-off-by: chenyb1 <chenyb1@lenovo.com>
+Signed-off-by: chenyb1 <chenyb1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/834077
+SME-Granted: SME Approvals Granted
+Reviewed-by: Lian-Wei Wang <lian-wei.wang@motorola.com>
+---
+ kernel/time/tick-sched.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/kernel/time/tick-sched.c b/kernel/time/tick-sched.c
+index 879fac99e34..a5a25634b98 100644
+--- a/kernel/time/tick-sched.c
++++ b/kernel/time/tick-sched.c
+@@ -439,7 +439,7 @@ update_ts_time_stats(int cpu, struct tick_sched *ts, ktime_t now, u64 *last_upda
+ {
+ 	ktime_t delta;
+ 
+-	if (ts->idle_active) {
++	if (ts->idle_active && cpu_online(cpu)) {
+ 		delta = ktime_sub(now, ts->idle_entrytime);
+ 		if (nr_iowait_cpu(cpu) > 0)
+ 			ts->iowait_sleeptime = ktime_add(ts->iowait_sleeptime, delta);
+@@ -498,7 +498,7 @@ u64 get_cpu_idle_time_us(int cpu, u64 *last_update_time)
+ 		update_ts_time_stats(cpu, ts, now, last_update_time);
+ 		idle = ts->idle_sleeptime;
+ 	} else {
+-		if (ts->idle_active && !nr_iowait_cpu(cpu)) {
++		if (ts->idle_active && !nr_iowait_cpu(cpu) && cpu_online(cpu)) {
+ 			ktime_t delta = ktime_sub(now, ts->idle_entrytime);
+ 
+ 			idle = ktime_add(ts->idle_sleeptime, delta);
+@@ -539,7 +539,7 @@ u64 get_cpu_iowait_time_us(int cpu, u64 *last_update_time)
+ 		update_ts_time_stats(cpu, ts, now, last_update_time);
+ 		iowait = ts->iowait_sleeptime;
+ 	} else {
+-		if (ts->idle_active && nr_iowait_cpu(cpu) > 0) {
++		if (ts->idle_active && nr_iowait_cpu(cpu) > 0 && cpu_online(cpu)) {
+ 			ktime_t delta = ktime_sub(now, ts->idle_entrytime);
+ 
+ 			iowait = ktime_add(ts->iowait_sleeptime, delta);
+-- 
+2.11.0
+

@@ -1,0 +1,327 @@
+From 2cf532e452e540db44996a4803c4bc591e75789b Mon Sep 17 00:00:00 2001
+From: Bang Nguyen <bnguyen1@motorola.com>
+Date: Wed, 2 Sep 2015 12:17:58 -0500
+Subject: [PATCH 143/959] IKKRNBSP-3358: msm: mdss Support disp_util tool
+
+Support the disp_util tool to set and get the register information from
+MIPI DSI display from user space.
+
+This is a port of multiple changes from 8992/8994:
+- c3451b4
+- 82b5b67
+- 3c95a41
+- http://gerrit.mot.com/#/c/780400/1
+
+Change-Id: Ibbea47c4843aac4b7227b89212e8cc7bb35ef6dc
+Signed-off-by: Parasuraman <parasur@motorola.com>
+Reviewed-on: http://gerrit.mot.com/780967
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi.c         |  27 +++++
+ drivers/video/msm/mdss/mdss_dsi.h         |   2 +
+ drivers/video/msm/mdss/mdss_dsi_panel.c   | 160 ++++++++++++++++++++++++++++++
+ drivers/video/msm/mdss/mdss_mdp.h         |   1 +
+ drivers/video/msm/mdss/mdss_mdp_overlay.c |  13 +++
+ include/uapi/linux/msm_mdp.h              |   9 ++
+ 6 files changed, 212 insertions(+)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi.c b/drivers/video/msm/mdss/mdss_dsi.c
+index ea8d3d4a901..e1c49d2363b 100644
+--- a/drivers/video/msm/mdss/mdss_dsi.c
++++ b/drivers/video/msm/mdss/mdss_dsi.c
+@@ -2303,6 +2303,33 @@ static struct device_node *mdss_dsi_pref_prim_panel(
+ 	return dsi_pan_node;
+ }
+ 
++int mdss_dsi_ioctl_handler(struct mdss_panel_data *pdata, u32 cmd, void *arg)
++{
++	int rc = -ENOSYS;
++	struct msmfb_reg_access reg_access;
++
++	if (mdss_panel_is_power_off(pdata->panel_info.panel_power_state)) {
++		pr_err("%s: Panel is off\n", __func__);
++		return -EPERM;
++	}
++
++	switch (cmd) {
++	case MSMFB_REG_WRITE:
++	case MSMFB_REG_READ:
++		if (copy_from_user(&reg_access, arg, sizeof(reg_access)))
++			return -EFAULT;
++
++		rc = mdss_dsi_panel_ioctl_handler(pdata, cmd, arg);
++		break;
++	default:
++		pr_err("%s: unsupport ioctl =0x%x\n", __func__, cmd);
++		rc = -EFAULT;
++		break;
++	}
++
++	return rc;
++}
++
+ /**
+  * mdss_dsi_find_panel_of_node(): find device node of dsi panel
+  * @pdev: platform_device of the dsi ctrl node
+diff --git a/drivers/video/msm/mdss/mdss_dsi.h b/drivers/video/msm/mdss/mdss_dsi.h
+index 58d4c4642d0..7d34e176a83 100644
+--- a/drivers/video/msm/mdss/mdss_dsi.h
++++ b/drivers/video/msm/mdss/mdss_dsi.h
+@@ -596,6 +596,8 @@ int mdss_panel_get_dst_fmt(u32 bpp, char mipi_mode, u32 pixel_packing,
+ int mdss_dsi_register_recovery_handler(struct mdss_dsi_ctrl_pdata *ctrl,
+ 		struct mdss_intf_recovery *recovery);
+ void mdss_dsi_unregister_bl_settings(struct mdss_dsi_ctrl_pdata *ctrl_pdata);
++int mdss_dsi_panel_ioctl_handler(struct mdss_panel_data *pdata,
++					u32 cmd, void *arg);
+ 
+ static inline const char *__mdss_dsi_pm_name(enum dsi_pm_type module)
+ {
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index e834668fc5b..e8f8fbf45f9 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -22,6 +22,8 @@
+ #include <linux/qpnp/pwm.h>
+ #include <linux/err.h>
+ #include <linux/string.h>
++#include <linux/uaccess.h>
++#include <linux/msm_mdp.h>
+ 
+ #include "mdss_dsi.h"
+ #include "mdss_dba_utils.h"
+@@ -2365,6 +2367,164 @@ error:
+ 	return -EINVAL;
+ }
+ 
++static int mdss_dsi_panel_reg_read(struct mdss_panel_data *pdata,
++				u8 reg, size_t size, u8 *buffer, bool hs_mode)
++{
++	int ret;
++	struct dcs_cmd_req cmdreq;
++	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
++	struct dsi_cmd_desc reg_read_cmd = {
++		.dchdr.dtype = DTYPE_DCS_READ,
++		.dchdr.last = 1,
++		.dchdr.vc = 0,
++		.dchdr.ack = 1,
++		.dchdr.wait = 1,
++		.dchdr.dlen = 1,
++		.payload = &reg
++	};
++
++	if (pdata == NULL) {
++		pr_err("%s: Invalid input data\n", __func__);
++		return -EINVAL;
++	}
++
++	if (size > MDSS_DSI_LEN) {
++		pr_warn("%s: size %zu, max rx length is %d.\n", __func__,
++							size, MDSS_DSI_LEN);
++		return -EINVAL;
++	}
++
++	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata, panel_data);
++	pr_debug("%s: Reading %zu bytes from 0x%02x\n", __func__, size, reg);
++
++	memset(&cmdreq, 0, sizeof(cmdreq));
++	cmdreq.cmds = &reg_read_cmd;
++	cmdreq.cmds_cnt = 1;
++	cmdreq.flags = CMD_REQ_RX | CMD_REQ_COMMIT;
++	if (hs_mode)
++		cmdreq.flags |= CMD_REQ_HS_MODE;
++	cmdreq.rlen = size;
++	cmdreq.cb = NULL; /* call back */
++	cmdreq.rbuf = kmalloc(MDSS_DSI_LEN, GFP_KERNEL);
++	if (!cmdreq.rbuf) {
++		ret = -ENOMEM;
++		goto err1;
++	}
++
++	ret = mdss_dsi_cmdlist_put(ctrl, &cmdreq);
++	if (ret != size) {
++		pr_err("%s: Error reading %zu bytes from reg 0x%02x. ret=0x%x\n",
++				__func__, size, (unsigned int) reg, ret);
++		ret = -EFAULT;
++	} else {
++		memcpy(buffer, cmdreq.rbuf, size);
++		ret = 0;
++	}
++
++	kfree(cmdreq.rbuf);
++err1:
++	return ret;
++}
++
++static int mdss_dsi_panel_reg_write(struct mdss_panel_data *pdata,
++				size_t size, u8 *buffer, bool hs_mode)
++{
++	int ret = 0;
++	struct dcs_cmd_req cmdreq;
++	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
++	struct dsi_cmd_desc reg_write_cmd = {
++		.dchdr.dtype = DTYPE_DCS_LWRITE,
++		.dchdr.last = 1,
++		.dchdr.vc = 0,
++		.dchdr.ack = 0,
++		.dchdr.wait = 0,
++		.dchdr.dlen = size,
++		.payload = buffer
++	};
++
++	if (pdata == NULL) {
++		pr_err("%s: Invalid input data\n", __func__);
++		return -EINVAL;
++	}
++
++	/* Limit size to 32 to match with disp_util size checking */
++	if (size > 32) {
++		pr_err("%s: size is larger than 32 bytes. size=%zu\n",
++							__func__, size);
++		return -EINVAL;
++	}
++
++	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata, panel_data);
++	pr_debug("%s: Writing %zu bytes to 0x%02x\n",
++		__func__, size, buffer[0]);
++	memset(&cmdreq, 0, sizeof(cmdreq));
++	cmdreq.cmds = &reg_write_cmd;
++	cmdreq.cmds_cnt = 1;
++	cmdreq.flags = CMD_REQ_COMMIT;
++	if (hs_mode)
++		cmdreq.flags |= CMD_REQ_HS_MODE;
++	cmdreq.rlen = 0;
++	cmdreq.cb = NULL;
++
++	ret = mdss_dsi_cmdlist_put(ctrl, &cmdreq);
++	if (ret <= 0) {
++		pr_err("%s: Failed writing %zu bytes to 0x%02x. Ret=0x%x\n",
++					__func__, size, buffer[0], ret);
++		ret = -EFAULT;
++	} else
++		ret = 0;
++
++
++	return ret;
++}
++
++int mdss_dsi_panel_ioctl_handler(struct mdss_panel_data *pdata,
++							u32 cmd, void *arg)
++{
++	int rc = -EINVAL;
++	struct msmfb_reg_access reg_access;
++	u8 *reg_access_buf;
++
++	if (copy_from_user(&reg_access, arg, sizeof(reg_access)))
++		return -EFAULT;
++
++	reg_access_buf = kmalloc(reg_access.buffer_size + 1, GFP_KERNEL);
++	if (reg_access_buf == NULL)
++		return -ENOMEM;
++
++	switch (cmd) {
++	case MSMFB_REG_WRITE:
++		reg_access_buf[0] = reg_access.address;
++		if (copy_from_user(&reg_access_buf[1], reg_access.buffer,
++						reg_access.buffer_size))
++			rc = -EFAULT;
++		else
++			rc = mdss_dsi_panel_reg_write(pdata,
++						reg_access.buffer_size + 1,
++						reg_access_buf,
++						reg_access.use_hs_mode);
++		break;
++	case MSMFB_REG_READ:
++		rc = mdss_dsi_panel_reg_read(pdata, reg_access.address,
++					reg_access.buffer_size,
++					reg_access_buf,
++					reg_access.use_hs_mode);
++		if ((rc == 0) && (copy_to_user(reg_access.buffer,
++						reg_access_buf,
++						reg_access.buffer_size)))
++			rc = -EFAULT;
++		break;
++	default:
++		pr_err("%s: unsupport ioctl =0x%x\n", __func__, cmd);
++		rc = -EFAULT;
++		break;
++	}
++
++	kfree(reg_access_buf);
++
++	return rc;
++}
++
+ static void mdss_dsi_set_prim_panel(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+ {
+ 	struct mdss_dsi_ctrl_pdata *octrl = NULL;
+diff --git a/drivers/video/msm/mdss/mdss_mdp.h b/drivers/video/msm/mdss/mdss_mdp.h
+index f35c95fbb44..5a7375d1de2 100644
+--- a/drivers/video/msm/mdss/mdss_mdp.h
++++ b/drivers/video/msm/mdss/mdss_mdp.h
+@@ -1163,6 +1163,7 @@ void mdss_rect_split(struct mdss_rect *in_roi, struct mdss_rect *l_roi,
+ int mdss_mdp_wb_kickoff(struct msm_fb_data_type *mfd,
+ 		struct mdss_mdp_commit_cb *commit_cb);
+ int mdss_mdp_wb_ioctl_handler(struct msm_fb_data_type *mfd, u32 cmd, void *arg);
++int mdss_dsi_ioctl_handler(struct mdss_panel_data *pdata, u32 cmd, void *arg);
+ 
+ int mdss_mdp_get_ctl_mixers(u32 fb_num, u32 *mixer_id);
+ u32 mdss_mdp_get_mixercfg(struct mdss_mdp_mixer *mixer);
+diff --git a/drivers/video/msm/mdss/mdss_mdp_overlay.c b/drivers/video/msm/mdss/mdss_mdp_overlay.c
+index b5137c20c81..4fecf2fcc30 100644
+--- a/drivers/video/msm/mdss/mdss_mdp_overlay.c
++++ b/drivers/video/msm/mdss/mdss_mdp_overlay.c
+@@ -4572,6 +4572,19 @@ static int mdss_mdp_overlay_ioctl_handler(struct msm_fb_data_type *mfd,
+ 	default:
+ 		if (mfd->panel.type == WRITEBACK_PANEL)
+ 			ret = mdss_mdp_wb_ioctl_handler(mfd, cmd, argp);
++
++		if (mfd->panel.type == MIPI_VIDEO_PANEL ||
++			mfd->panel.type == MIPI_CMD_PANEL) {
++			struct mdss_panel_data *pdata;
++			struct mdss_overlay_private *mdp5_data =
++				mfd_to_mdp5_data(mfd);
++			pdata = dev_get_platdata(&mfd->pdev->dev);
++			if (!pdata || !mdp5_data)
++				return -EFAULT;
++			mutex_lock(&mdp5_data->ov_lock);
++			ret = mdss_dsi_ioctl_handler(pdata, cmd, argp);
++			mutex_unlock(&mdp5_data->ov_lock);
++		}
+ 		break;
+ 	}
+ 
+diff --git a/include/uapi/linux/msm_mdp.h b/include/uapi/linux/msm_mdp.h
+index e7e95e3453f..e9e39b34e0a 100644
+--- a/include/uapi/linux/msm_mdp.h
++++ b/include/uapi/linux/msm_mdp.h
+@@ -67,6 +67,8 @@
+ #define MSMFB_OVERLAY_PREPARE		_IOWR(MSMFB_IOCTL_MAGIC, 169, \
+ 						struct mdp_overlay_list)
+ #define MSMFB_LPM_ENABLE	_IOWR(MSMFB_IOCTL_MAGIC, 170, unsigned int)
++#define MSMFB_REG_READ   _IOWR(MSMFB_IOCTL_MAGIC, 64, struct msmfb_reg_access)
++#define MSMFB_REG_WRITE  _IOW(MSMFB_IOCTL_MAGIC, 65, struct msmfb_reg_access)
+ 
+ #define FB_TYPE_3D_PANEL 0x10101010
+ #define MDP_IMGTYPE2_START 0x10000
+@@ -1187,6 +1189,13 @@ struct msmfb_mixer_info_req {
+ 	struct mdp_mixer_info info[MAX_PIPE_PER_MIXER];
+ };
+ 
++struct msmfb_reg_access {
++	uint8_t address;
++	uint8_t use_hs_mode;
++	uint32_t buffer_size;
++	uint8_t *buffer;
++};
++
+ enum {
+ 	DISPLAY_SUBSYSTEM_ID,
+ 	ROTATOR_SUBSYSTEM_ID,
+-- 
+2.11.0
+

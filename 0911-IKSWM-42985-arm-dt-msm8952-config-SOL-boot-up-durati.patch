@@ -1,0 +1,37 @@
+From ad35d169b707497d84af4fd054aa03f6ef082173 Mon Sep 17 00:00:00 2001
+From: lixh10 <lixh10@motorola.com>
+Date: Tue, 9 Aug 2016 18:05:15 +0800
+Subject: [PATCH 911/959] IKSWM-42985: arm/dt: msm8952 config SOL boot up
+ duration
+
+Set SOL vibration to have 250ms vibration at kernel boot up.
+Vibration in LK was disable by setting ENABLE_PON_VIB_SUPPORT
+as disable.
+
+Change-Id: Id3a8826463316617a8ece90495d170f028137ed7
+Signed-off-by: lixh10 <lixh10@motorola.com>
+Reviewed-on: http://gerrit.mot.com/885680
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 0ba0e03b9cb..192c7c621f9 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -867,6 +867,7 @@
+ 
+ 		pmi8950_haptic: qcom,haptic@c000 {
+ 			qcom,vmax-mv = <2900>;
++			mmi,vib-boot-up-vib-ms = <250>;
+ 		};
+ 	};
+ };
+-- 
+2.11.0
+

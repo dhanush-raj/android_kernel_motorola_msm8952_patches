@@ -1,0 +1,200 @@
+From 582101810a4b538f13a3e98bf77c4e5ba317117e Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Thu, 24 Sep 2015 19:05:26 -0700
+Subject: [PATCH 315/959] IKKRNBSP-3418 msm: mdss: Add sysfs method to read
+ panel information
+
+Provide display panel information including panel name, panel version
+manufacture id, controller version, controller drv version and
+supplier under /sys/class/graphics/fbX
+
+This combines commits:
+
+- e2a6a7c from 8996
+IKKRNBSP-3379 msm: mdss: provide display panel info in sysfs
+
+- ea1a939 from 8992.
+IKKRNBSP-3399: msm: mdss: store panel info based on DSI bus number
+
+Change-Id: Iff367e24035efa1dcdfdc9665e9c4acd17054812
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/786229
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 16 ++++++
+ drivers/video/msm/mdss/mdss_fb.c        | 91 ++++++++++++++++++++++++++++++++-
+ drivers/video/msm/mdss/mdss_panel.h     |  3 ++
+ 3 files changed, 109 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index f398dae25f1..5f923f3977d 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -523,6 +523,11 @@ int mdss_panel_parse_panel_config_dt(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+ 		(panel_ver & 0xff0000) >> 16,
+ 		pconf->panel_ver);
+ 
++	ctrl_pdata->panel_data.panel_info.panel_ver = panel_ver;
++	strlcpy(ctrl_pdata->panel_data.panel_info.panel_family_name,
++		pconf->panel_name,
++		sizeof(ctrl_pdata->panel_data.panel_info.panel_family_name));
++
+ 	of_node_put(np);
+ 
+ 	return 0;
+@@ -1799,6 +1804,7 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
+ {
+ 	struct mdss_panel_info *pinfo;
+ 	struct mdss_panel_config *pcfg;
++	const char *data;
+ 	int rc;
+ 
+ 	if (!np || !ctrl) {
+@@ -1875,6 +1881,16 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
+ 					__func__, __LINE__);
+ 	}
+ 
++	data = of_get_property(np, "qcom,mdss-dsi-panel-supplier", NULL);
++	if (!data)
++		memset(pinfo->panel_supplier, '\0',
++			sizeof(pinfo->panel_supplier));
++	else if (strlcpy(pinfo->panel_supplier, data,
++			sizeof(pinfo->panel_supplier)) >=
++			sizeof(pinfo->panel_supplier)) {
++		pr_err("%s: Panel supplier name too large\n", __func__);
++	}
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/video/msm/mdss/mdss_fb.c b/drivers/video/msm/mdss/mdss_fb.c
+index 19a7fec7e7b..e6a7c14d057 100644
+--- a/drivers/video/msm/mdss/mdss_fb.c
++++ b/drivers/video/msm/mdss/mdss_fb.c
+@@ -809,13 +809,102 @@ static struct attribute_group mdss_fb_attr_group = {
+ 	.attrs = mdss_fb_attrs,
+ };
+ 
++static struct mdss_panel_info *get_panel_info(struct device *dev)
++{
++	struct fb_info *fbi = dev_get_drvdata(dev);
++	struct msm_fb_data_type *mfd = fbi->par;
++	struct mdss_panel_info *pinfo = mfd->panel_info;
++
++	return pinfo;
++}
++
++static ssize_t panel_name_show(struct device *dev,
++				struct device_attribute *attr, char *buf)
++{
++	struct mdss_panel_info *pinfo = get_panel_info(dev);
++
++	return snprintf(buf, PAGE_SIZE, "%s\n", pinfo->panel_family_name);
++}
++
++static ssize_t panel_ver_show(struct device *dev,
++				struct device_attribute *attr, char *buf)
++{
++	struct mdss_panel_info *pinfo = get_panel_info(dev);
++
++	return snprintf(buf, PAGE_SIZE, "0x%08x\n", pinfo->panel_ver);
++}
++
++static ssize_t panel_supplier_show(struct device *dev,
++				struct device_attribute *attr, char *buf)
++{
++	struct mdss_panel_info *pinfo = get_panel_info(dev);
++
++	return snprintf(buf, PAGE_SIZE, "%s\n", pinfo->panel_supplier);
++}
++
++static ssize_t panel_man_id_show(struct device *dev,
++				struct device_attribute *attr, char *buf)
++{
++	struct mdss_panel_info *pinfo = get_panel_info(dev);
++
++	return snprintf(buf, PAGE_SIZE, "0x%02x\n",
++		pinfo->panel_ver & 0xff);
++}
++
++static ssize_t panel_controller_ver_show(struct device *dev,
++				struct device_attribute *attr, char *buf)
++{
++	struct mdss_panel_info *pinfo = get_panel_info(dev);
++
++	return snprintf(buf, PAGE_SIZE, "0x%02x\n",
++		(pinfo->panel_ver & 0xff00) >> 8);
++}
++
++static ssize_t panel_controller_drv_ver_show(struct device *dev,
++				struct device_attribute *attr, char *buf)
++{
++	struct mdss_panel_info *pinfo = get_panel_info(dev);
++
++	return snprintf(buf, PAGE_SIZE, "0x%02x\n",
++		(pinfo->panel_ver & 0xff0000) >> 16);
++}
++static DEVICE_ATTR(panel_name, S_IRUGO, panel_name_show, NULL);
++static DEVICE_ATTR(panel_ver, S_IRUGO, panel_ver_show, NULL);
++static DEVICE_ATTR(man_id, S_IRUGO, panel_man_id_show, NULL);
++static DEVICE_ATTR(controller_ver, S_IRUGO, panel_controller_ver_show, NULL);
++static DEVICE_ATTR(panel_supplier, S_IRUGO,
++					panel_supplier_show, NULL);
++static DEVICE_ATTR(controller_drv_ver, S_IRUGO,
++					panel_controller_drv_ver_show, NULL);
++static struct attribute *panel_id_attrs[] = {
++	&dev_attr_panel_name.attr,
++	&dev_attr_panel_ver.attr,
++	&dev_attr_panel_supplier.attr,
++	&dev_attr_man_id.attr,
++	&dev_attr_controller_ver.attr,
++	&dev_attr_controller_drv_ver.attr,
++	NULL,
++};
++
++static struct attribute_group panel_id_attr_group = {
++	.attrs = panel_id_attrs,
++};
++
+ static int mdss_fb_create_sysfs(struct msm_fb_data_type *mfd)
+ {
+ 	int rc;
+ 
+ 	rc = sysfs_create_group(&mfd->fbi->dev->kobj, &mdss_fb_attr_group);
+-	if (rc)
++	if (rc) {
+ 		pr_err("sysfs group creation failed, rc=%d\n", rc);
++		goto err;
++	}
++
++	rc = sysfs_create_group(&mfd->fbi->dev->kobj, &panel_id_attr_group);
++	if (rc)
++		pr_err("panel id group creation failed, rc=%d\n", rc);
++
++err:
+ 	return rc;
+ }
+ 
+diff --git a/drivers/video/msm/mdss/mdss_panel.h b/drivers/video/msm/mdss/mdss_panel.h
+index c099a853715..db8fa08136a 100644
+--- a/drivers/video/msm/mdss/mdss_panel.h
++++ b/drivers/video/msm/mdss/mdss_panel.h
+@@ -582,6 +582,9 @@ struct mdss_panel_info {
+ 	void *cec_data;
+ 
+ 	char panel_name[MDSS_MAX_PANEL_LEN];
++	char panel_family_name[MDSS_MAX_PANEL_LEN];
++	u32 panel_ver;
++	char panel_supplier[8];
+ 	struct mdss_mdp_pp_tear_check te;
+ 
+ 	struct dsc_desc dsc;
+-- 
+2.11.0
+

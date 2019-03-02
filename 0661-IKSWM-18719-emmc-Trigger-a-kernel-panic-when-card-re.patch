@@ -1,0 +1,36 @@
+From a8ec367f7654125b1c695c5c1acb33f194462925 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Fri, 29 Jan 2016 10:20:16 -0800
+Subject: [PATCH 661/959] IKSWM-18719:emmc: Trigger a kernel panic when card
+ reports errors
+
+ Trigger a kernel panic when card reports errors.
+
+Change-Id: Ic898854098a5874d9033dadb216867a3c187340c
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/817342
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Reviewed-by: Sheng-Zhe Zhao <a18689@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/mmc/host/cmdq_hci.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/mmc/host/cmdq_hci.c b/drivers/mmc/host/cmdq_hci.c
+index 9783fe221e9..fbb0117f96a 100644
+--- a/drivers/mmc/host/cmdq_hci.c
++++ b/drivers/mmc/host/cmdq_hci.c
+@@ -781,6 +781,7 @@ skip_cqterri:
+ 			mrq->cmdq_req->resp_err = true;
+ 			pr_err("%s: Response error (0x%08x) from card !!!",
+ 					mmc_hostname(mmc), status);
++			BUG();
+ 		} else {
+ 			mrq->cmdq_req->resp_idx = cmdq_readl(cq_host, CQCRI);
+ 			mrq->cmdq_req->resp_arg = cmdq_readl(cq_host, CQCRA);
+-- 
+2.11.0
+

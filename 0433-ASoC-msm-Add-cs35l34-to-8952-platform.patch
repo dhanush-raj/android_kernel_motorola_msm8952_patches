@@ -1,0 +1,36 @@
+From 5be8b0052f97079ba60910bdb14ad539e49d8bb5 Mon Sep 17 00:00:00 2001
+From: Paul Handrigan <Paul.Handrigan@cirrus.com>
+Date: Thu, 15 Oct 2015 17:07:05 -0500
+Subject: [PATCH 433/959] ASoC: msm: Add cs35l34 to 8952 platform.
+
+Modifiy Kconfig to add the cs35l34 audio amp to the msm8952
+platform.
+
+Change-Id: Ia09bfb0ee3bd9bfd46d022233b8e0836dcdb0d92
+Signed-off-by: Paul Handrigan <Paul.Handrigan@cirrus.com>
+Reviewed-on: http://gerrit.mot.com/795467
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ sound/soc/msm/Kconfig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/sound/soc/msm/Kconfig b/sound/soc/msm/Kconfig
+index 5f41f7e9088..a9674230a6e 100644
+--- a/sound/soc/msm/Kconfig
++++ b/sound/soc/msm/Kconfig
+@@ -267,7 +267,7 @@ config SND_SOC_MSM8X16
+ 	select SND_SOC_CPE
+ 	select SND_HWDEP
+         select DTS_EAGLE
+-	select SND_SOC_TFA9890
++	select SND_SOC_CS35L34
+ 	help
+ 	 To add support for SoC audio on MSM8X16.
+ 	 This will enable sound soc drivers which
+-- 
+2.11.0
+

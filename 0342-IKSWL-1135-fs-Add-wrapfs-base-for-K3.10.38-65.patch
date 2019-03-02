@@ -1,0 +1,2113 @@
+From f98d3d007a29340868feddb83f872697c57f6105 Mon Sep 17 00:00:00 2001
+From: "Russ W. Knize" <Russ.Knize@motorola.com>
+Date: Mon, 30 Jun 2014 08:54:30 -0500
+Subject: [PATCH 342/959] IKSWL-1135: fs: Add wrapfs base for K3.10.38-65
+
+Wrapfs is a small null-layer stackable file system, similar to
+BSD's Nullfs.
+
+Maintainer: Erez Zadok <ezk AT cs DOT stonybrook DOT edu>
+Web Site: <http://wrapfs.filesystems.org/>
+
+Change-Id: I26e2e9a88b9dc9d213362782c9e029ba592f1e62
+Signed-off-by: Russ Knize <Russ.Knize@motorola.com>
+Reviewed-on: http://gerrit.mot.com/658208
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+SLTApproved: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ Documentation/filesystems/00-INDEX   |   2 +
+ Documentation/filesystems/wrapfs.txt | 172 +++++++++++++
+ MAINTAINERS                          |   9 +
+ fs/Kconfig                           |   1 +
+ fs/Makefile                          |   1 +
+ fs/wrapfs/Kconfig                    |   8 +
+ fs/wrapfs/Makefile                   |   7 +
+ fs/wrapfs/dentry.c                   |  49 ++++
+ fs/wrapfs/file.c                     | 295 ++++++++++++++++++++++
+ fs/wrapfs/inode.c                    | 463 +++++++++++++++++++++++++++++++++++
+ fs/wrapfs/lookup.c                   | 332 +++++++++++++++++++++++++
+ fs/wrapfs/main.c                     | 174 +++++++++++++
+ fs/wrapfs/mmap.c                     |  53 ++++
+ fs/wrapfs/super.c                    | 168 +++++++++++++
+ fs/wrapfs/wrapfs.h                   | 205 ++++++++++++++++
+ include/uapi/linux/magic.h           |   2 +
+ 16 files changed, 1941 insertions(+)
+ create mode 100644 Documentation/filesystems/wrapfs.txt
+ create mode 100644 fs/wrapfs/Kconfig
+ create mode 100644 fs/wrapfs/Makefile
+ create mode 100644 fs/wrapfs/dentry.c
+ create mode 100644 fs/wrapfs/file.c
+ create mode 100644 fs/wrapfs/inode.c
+ create mode 100644 fs/wrapfs/lookup.c
+ create mode 100644 fs/wrapfs/main.c
+ create mode 100644 fs/wrapfs/mmap.c
+ create mode 100644 fs/wrapfs/super.c
+ create mode 100644 fs/wrapfs/wrapfs.h
+
+diff --git a/Documentation/filesystems/00-INDEX b/Documentation/filesystems/00-INDEX
+index 8042050eb26..47f37887be9 100644
+--- a/Documentation/filesystems/00-INDEX
++++ b/Documentation/filesystems/00-INDEX
+@@ -118,6 +118,8 @@ vfat.txt
+ 	- info on using the VFAT filesystem used in Windows NT and Windows 95
+ vfs.txt
+ 	- overview of the Virtual File System
++wrapfs.txt
++	- info and mount options for the stackable wrapper file system
+ xfs.txt
+ 	- info and mount options for the XFS filesystem.
+ xip.txt
+diff --git a/Documentation/filesystems/wrapfs.txt b/Documentation/filesystems/wrapfs.txt
+new file mode 100644
+index 00000000000..daa313b2ac6
+--- /dev/null
++++ b/Documentation/filesystems/wrapfs.txt
+@@ -0,0 +1,172 @@
++Wrapfs: a null-layer (aka wrapper) stackable file system
++
++Maintainer: Erez Zadok <ezk AT cs DOT stonybrook DOT edu>
++Web Site: <http://wrapfs.filesystems.org/>
++
++------------------------------------------------------------------------------
++MOTIVATION:
++
++Wrapfs is a small null-layer stackable file system, similar to BSD's Nullfs.
++Wrapfs is small, under 1,800 lines of code.  Compare that to, say, eCryptfs
++(in mainline since 2.6.19) and Unionfs, each of which are over 10,000 LoC.
++As such, Wrapfs is simple, easy to read and understand, and very easy to
++code-review.  Wrapfs is useful for several reasons:
++
++1. Many people like to experiment with in-kernel file system ideas.  Wrapfs
++   is an ideal small template that one can modify to incrementally create
++   new file system functionalities.
++
++2. As a platform to test and debug generic stacking problems in other Linux
++   stackable file systems (e.g., eCryptfs) more easily.
++
++3. As a way to test VFS enhancements to better support stacking in Linux.
++
++4. Wrapfs is also a very useful instructional tool, often used as a starting
++   point for course assignments, for people who want a small example of how
++   the Linux VFS works, or for those who want to learn how to write new
++   Linux file systems.
++
++5. As an alternative to bind mounts.  Wrapfs acts similarly to BSD's
++   loopback mount file system (lofs).
++
++Various versions of Wrapfs appeared as part of the "fistgen" package since
++1994, and have been used by numerous users world-wide.  This latest version
++was rewritten entirely from scratch in 2010 and had supported every kernel
++as of 2.6.32.  All versions of wrapfs have been thoroughly tested using LTP,
++FSX, racer, and other test-suites.  Wrapfs code uses the latest VFS API
++changes of the corresponding kernel.  For a more detailed history of Wrapfs,
++and list of most of its known users, see the section marked "HISTORY" below.
++
++------------------------------------------------------------------------------
++OPERATION:
++
++This is a brief description of how Wrapfs operates.  For more information,
++see the full paper published in Linux Expo 1999, titled "A Stackable File
++System Interface For Linux":
++
++	<http://www.fsl.cs.sunysb.edu/docs/linux-stacking/linux.pdf>
++
++The basic function of a stackable file system is to pass an operation and
++its arguments to the lower-level file system.  For every VFS object (inode,
++dentry, file, superblock, etc.), Wrapfs keeps a one-to-one mapping of a
++Wrapfs-level object to the lower one.  We call the Wrapfs object the "upper"
++one, and the one below we call the "lower" one.  Wrapfs stores these
++mappings as simple pointers inside the private field of the existing VFS
++objects (e.g., dentry->d_fsdata, sb->s_fs_info, and a container for inodes).
++
++There are two kinds of stackable operations: those that create new VFS
++objects and those that don't.
++
++The following distilled code snippet shows a method which doesn't create a
++new object.  The method just has to pass it to the lower layer and propagate
++any errors back up the VFS:
++
++int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
++{
++	int err;
++	struct inode *lower_dir;
++	struct dentry *lower_dentry;
++	lower_dir = get_lower_inode(dir);
++	lower_dentry = get_lower_dentry(dentry);
++	err = lower_dir->i_op->unlink(lower_dir, lower_dentry);
++	return err;
++}
++
++The following code snippet shows a method which creates a new object.  After
++a lower object gets created, Wrapfs has to also create its own object, and
++make the pointer connections between the upper and lower objects (the latter
++is done via a helper routine called "interpose"):
++
++int wrapfs_create(struct inode *dir, struct dentry *dentry, int mode)
++{
++	int err;
++	struct dentry *lower_dentry;
++	struct inode *lower_dir;
++	lower_dir = wrapfs_lower_inode(dir);
++	lower_dentry = wrapfs_lower_dentry(dentry);
++	err = vfs_create(lower_dir, lower_dentry, mode);
++	if (!err)
++		err = wrapfs_interpose(dentry, dir->i_sb);
++	return err;
++}
++
++The wrapfs_unlink code snippet above can be easily modified to change the
++behavior of unlink(2).  For example, if an ->unlink operation is changed to
++->rename, this could become the basis for an "undo" file system; or if the
++lower_dentry's name gets encrypted before calling the lower ->unlink, this
++could be part of an encryption file system.
++
++------------------------------------------------------------------------------
++USAGE:
++
++First, you have to have some pre-existing directory already mounted from any
++other file system, say /some/lower/path.  Then, to mount wrapfs in
++/mnt/wrapfs, on that lower directory, issue this command:
++
++# mount -t wrapfs /some/lower/path /mnt/wrapfs
++
++To access the files via Wrapfs, use the mount point /mnt/wrapfs.
++
++------------------------------------------------------------------------------
++CAVEATS:
++
++Stacking on NFS.  Wrapfs has been tested with LTP, racer, fsx, parallel
++compile, and more.  It's been tested on top of ext2, ext3, xfs, reiserfs,
++and tmpfs -- and passed all tests.  However, on top of nfs3, wrapfs has to
++treat silly-deleted files as if they don't exist: in ->unlink, if we try to
++vfs_unlink an NFS silly-deleted file, NFS returns EBUSY; so we simply ignore
++it and return 0 (success) to the VFS.  NFS will delete this file later on
++anyway.  As the VFS also has special handling for silly-deleted files, this
++isn't unusual.  A cleaner way to handle this in the future is if the VFS
++were to handle silly-deleted (aka "delayed-delete") files entirely at the
++VFS.
++
++------------------------------------------------------------------------------
++HISTORY:
++
++Wrapfs was developed initially in 1994 for Linux 2.1, as part of Erez
++Zadok's graduate work at Columbia University.  It was designed to be a
++flexible null-layer, pass-through, stackable file system, from which other
++file systems would be developed and even instantiated automatically using a
++high-level language.  One of the first file systems developed from Wrapfs
++was a simple encryption file system called Cryptfs (eCryptfs is based on
++Cryptfs).  Other examples include Gzipfs, a stackable compression file
++system, and Unionfs, a stackable unification file system.  Wrapfs was
++integrated into a larger package called fistgen (see www.filesystems.org),
++and ported to FreeBSD and Solaris.  Wrapfs and fistgen continued to be
++maintained for newer versions of kernels, but remained largely standalone
++until recently: this release of Wrapfs for Linux represents a clean version
++written from scratch.
++
++Over the past 15+ years, versions of Wrapfs had been used by many users and
++companies.  At one point or another, the following groups have used stacking
++code based on Wrapfs.
++
++1. PROJECTS: eCryptfs, Unionfs, mini_fo, Aufs, FindFS, StoreCompress,
++   TestFS, ToPAS, and MFS.
++
++2. COMPANIES AND RESEARCH LABS: Bell Labs's Plan 9 group, EMC,
++   Hewlett-Packard, IBM Research Almaden, IBM Research Austin, Red Hat,
++   SuSE, Sun Microsystems, Veritas, Booyaka, CalSoft (India), Computer Farm,
++   Deutsche Bank (Germany), DreamWorks LLC, Eli Lilly and Company, FAME
++   Information Services, GMX AG (Germany), IBM global services (India), IDA
++   Center for Communications Research, Indra Networks, Inc., Kavi
++   Corporation, Mendepie, Mitsubishi Electric (Japan), Mobile-Mind, Monster
++   Labs, Morning Network (Russia), NeST Technologies, Packet General
++   Networks, Inc., Outstep Technologies, Reflective Systems Group, River
++   Styx Internet, SARAI Net, Saint-Petersburg Official Web Site (Russia),
++   Shadow Island Games, TISCover (Germany), Trymedia Systems, Uber Admin,
++   Videsh Sanchar Nigam Limited (India), Wanadoo (France), and iNsu
++   Innovations.
++
++3. UNIVERSITIES: Georgia Institute of Technology, Stanford University, UC
++   Berkeley, UCLA, University of Maryland, College Park, University of
++   Michigan, Ben Gurion University (Israel), Clarkson University, Clemson
++   University, Deutsches Elektronen Synchrotron (Germany), Electronics and
++   Telecommunications Research Institute (South Korea), Indian Institute of
++   Technology (India), National Taiwan University, Pune University (India),
++   The College of William \& Mary, Trinity College (Ireland), Universitaet
++   Frankfurt am Main (Germany), University Hospital Olomouc (Czech
++   Republic), and University of Salermo (Italy).
++
++------------------------------------------------------------------------------
+diff --git a/MAINTAINERS b/MAINTAINERS
+index 36b18d9c95a..ef3b5187a53 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -9063,6 +9063,15 @@ F:	include/linux/workqueue.h
+ F:	kernel/workqueue.c
+ F:	Documentation/workqueue.txt
+ 
++WRAPFS
++M:	Erez Zadok <ezk@cs.sunysb.edu>
++L:	wrapfs@filesystems.org
++W:	http://wrapfs.filesystems.org/
++T:	git git.kernel.org/pub/scm/linux/kernel/git/ezk/wrapfs.git
++S:	Maintained
++F:	Documentation/filesystems/wrapfs.txt
++F:	fs/wrapfs/
++
+ X.25 NETWORK LAYER
+ M:	Andrew Hendry <andrew.hendry@gmail.com>
+ L:	linux-x25@vger.kernel.org
+diff --git a/fs/Kconfig b/fs/Kconfig
+index 3b5e7c5be37..e8bc31dceb7 100644
+--- a/fs/Kconfig
++++ b/fs/Kconfig
+@@ -189,6 +189,7 @@ source "fs/adfs/Kconfig"
+ source "fs/affs/Kconfig"
+ source "fs/ecryptfs/Kconfig"
+ source "fs/sdcardfs/Kconfig"
++source "fs/wrapfs/Kconfig"
+ source "fs/hfs/Kconfig"
+ source "fs/hfsplus/Kconfig"
+ source "fs/befs/Kconfig"
+diff --git a/fs/Makefile b/fs/Makefile
+index 7594e22a39d..c6b064c95d5 100644
+--- a/fs/Makefile
++++ b/fs/Makefile
+@@ -82,6 +82,7 @@ obj-$(CONFIG_ISO9660_FS)	+= isofs/
+ obj-$(CONFIG_HFSPLUS_FS)	+= hfsplus/ # Before hfs to find wrapped HFS+
+ obj-$(CONFIG_HFS_FS)		+= hfs/
+ obj-$(CONFIG_ECRYPT_FS)		+= ecryptfs/
++obj-$(CONFIG_WRAP_FS)		+= wrapfs/
+ obj-$(CONFIG_SDCARD_FS)		+= sdcardfs/
+ obj-$(CONFIG_VXFS_FS)		+= freevxfs/
+ obj-$(CONFIG_NFS_FS)		+= nfs/
+diff --git a/fs/wrapfs/Kconfig b/fs/wrapfs/Kconfig
+new file mode 100644
+index 00000000000..a495c7d05d2
+--- /dev/null
++++ b/fs/wrapfs/Kconfig
+@@ -0,0 +1,8 @@
++config WRAP_FS
++	tristate "Wrapfs stackable file system (EXPERIMENTAL)"
++	help
++	  Wrapfs is a stackable file system which simply passes its
++	  operations to the lower layer.  It is designed as a useful
++	  template for developing or debugging other stackable file systems,
++	  and more (see Documentation/filesystems/wrapfs.txt).  See
++	  <http://wrapfs.filesystems.org/> for details.
+diff --git a/fs/wrapfs/Makefile b/fs/wrapfs/Makefile
+new file mode 100644
+index 00000000000..f318d111c21
+--- /dev/null
++++ b/fs/wrapfs/Makefile
+@@ -0,0 +1,7 @@
++WRAPFS_VERSION="0.1"
++
++EXTRA_CFLAGS += -DWRAPFS_VERSION=\"$(WRAPFS_VERSION)\"
++
++obj-$(CONFIG_WRAP_FS) += wrapfs.o
++
++wrapfs-y := dentry.o file.o inode.o main.o super.o lookup.o mmap.o
+diff --git a/fs/wrapfs/dentry.c b/fs/wrapfs/dentry.c
+new file mode 100644
+index 00000000000..356b75e2f76
+--- /dev/null
++++ b/fs/wrapfs/dentry.c
+@@ -0,0 +1,49 @@
++/*
++ * Copyright (c) 1998-2014 Erez Zadok
++ * Copyright (c) 2009	   Shrikar Archak
++ * Copyright (c) 2003-2014 Stony Brook University
++ * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#include "wrapfs.h"
++
++/*
++ * returns: -ERRNO if error (returned to user)
++ *          0: tell VFS to invalidate dentry
++ *          1: dentry is valid
++ */
++static int wrapfs_d_revalidate(struct dentry *dentry, unsigned int flags)
++{
++	struct path lower_path;
++	struct dentry *lower_dentry;
++	int err = 1;
++
++	if (flags & LOOKUP_RCU)
++		return -ECHILD;
++
++	wrapfs_get_lower_path(dentry, &lower_path);
++	lower_dentry = lower_path.dentry;
++	if (!lower_dentry->d_op || !lower_dentry->d_op->d_revalidate)
++		goto out;
++	err = lower_dentry->d_op->d_revalidate(lower_dentry, flags);
++out:
++	wrapfs_put_lower_path(dentry, &lower_path);
++	return err;
++}
++
++static void wrapfs_d_release(struct dentry *dentry)
++{
++	/* release and reset the lower paths */
++	wrapfs_put_reset_lower_path(dentry);
++	free_dentry_private_data(dentry);
++	return;
++}
++
++const struct dentry_operations wrapfs_dops = {
++	.d_revalidate	= wrapfs_d_revalidate,
++	.d_release	= wrapfs_d_release,
++};
+diff --git a/fs/wrapfs/file.c b/fs/wrapfs/file.c
+new file mode 100644
+index 00000000000..0ac42fea950
+--- /dev/null
++++ b/fs/wrapfs/file.c
+@@ -0,0 +1,295 @@
++/*
++ * Copyright (c) 1998-2014 Erez Zadok
++ * Copyright (c) 2009	   Shrikar Archak
++ * Copyright (c) 2003-2014 Stony Brook University
++ * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#include "wrapfs.h"
++
++static ssize_t wrapfs_read(struct file *file, char __user *buf,
++			   size_t count, loff_t *ppos)
++{
++	int err;
++	struct file *lower_file;
++	struct dentry *dentry = file->f_path.dentry;
++
++	lower_file = wrapfs_lower_file(file);
++	err = vfs_read(lower_file, buf, count, ppos);
++	/* update our inode atime upon a successful lower read */
++	if (err >= 0)
++		fsstack_copy_attr_atime(dentry->d_inode,
++					lower_file->f_path.dentry->d_inode);
++
++	return err;
++}
++
++static ssize_t wrapfs_write(struct file *file, const char __user *buf,
++			    size_t count, loff_t *ppos)
++{
++	int err = 0;
++	struct file *lower_file;
++	struct dentry *dentry = file->f_path.dentry;
++
++	lower_file = wrapfs_lower_file(file);
++	err = vfs_write(lower_file, buf, count, ppos);
++	/* update our inode times+sizes upon a successful lower write */
++	if (err >= 0) {
++		fsstack_copy_inode_size(dentry->d_inode,
++					lower_file->f_path.dentry->d_inode);
++		fsstack_copy_attr_times(dentry->d_inode,
++					lower_file->f_path.dentry->d_inode);
++	}
++
++	return err;
++}
++
++static int wrapfs_readdir(struct file *file, void *dirent, filldir_t filldir)
++{
++	int err = 0;
++	struct file *lower_file = NULL;
++	struct dentry *dentry = file->f_path.dentry;
++
++	lower_file = wrapfs_lower_file(file);
++	err = vfs_readdir(lower_file, filldir, dirent);
++	file->f_pos = lower_file->f_pos;
++	if (err >= 0)		/* copy the atime */
++		fsstack_copy_attr_atime(dentry->d_inode,
++					lower_file->f_path.dentry->d_inode);
++	return err;
++}
++
++static long wrapfs_unlocked_ioctl(struct file *file, unsigned int cmd,
++				  unsigned long arg)
++{
++	long err = -ENOTTY;
++	struct file *lower_file;
++
++	lower_file = wrapfs_lower_file(file);
++
++	/* XXX: use vfs_ioctl if/when VFS exports it */
++	if (!lower_file || !lower_file->f_op)
++		goto out;
++	if (lower_file->f_op->unlocked_ioctl)
++		err = lower_file->f_op->unlocked_ioctl(lower_file, cmd, arg);
++
++	/* some ioctls can change inode attributes (EXT2_IOC_SETFLAGS) */
++	if (!err)
++		fsstack_copy_attr_all(file->f_path.dentry->d_inode,
++				      lower_file->f_path.dentry->d_inode);
++out:
++	return err;
++}
++
++#ifdef CONFIG_COMPAT
++static long wrapfs_compat_ioctl(struct file *file, unsigned int cmd,
++				unsigned long arg)
++{
++	long err = -ENOTTY;
++	struct file *lower_file;
++
++	lower_file = wrapfs_lower_file(file);
++
++	/* XXX: use vfs_ioctl if/when VFS exports it */
++	if (!lower_file || !lower_file->f_op)
++		goto out;
++	if (lower_file->f_op->compat_ioctl)
++		err = lower_file->f_op->compat_ioctl(lower_file, cmd, arg);
++
++out:
++	return err;
++}
++#endif
++
++static int wrapfs_mmap(struct file *file, struct vm_area_struct *vma)
++{
++	int err = 0;
++	bool willwrite;
++	struct file *lower_file;
++	const struct vm_operations_struct *saved_vm_ops = NULL;
++
++	/* this might be deferred to mmap's writepage */
++	willwrite = ((vma->vm_flags | VM_SHARED | VM_WRITE) == vma->vm_flags);
++
++	/*
++	 * File systems which do not implement ->writepage may use
++	 * generic_file_readonly_mmap as their ->mmap op.  If you call
++	 * generic_file_readonly_mmap with VM_WRITE, you'd get an -EINVAL.
++	 * But we cannot call the lower ->mmap op, so we can't tell that
++	 * writeable mappings won't work.  Therefore, our only choice is to
++	 * check if the lower file system supports the ->writepage, and if
++	 * not, return EINVAL (the same error that
++	 * generic_file_readonly_mmap returns in that case).
++	 */
++	lower_file = wrapfs_lower_file(file);
++	if (willwrite && !lower_file->f_mapping->a_ops->writepage) {
++		err = -EINVAL;
++		printk(KERN_ERR "wrapfs: lower file system does not "
++		       "support writeable mmap\n");
++		goto out;
++	}
++
++	/*
++	 * find and save lower vm_ops.
++	 *
++	 * XXX: the VFS should have a cleaner way of finding the lower vm_ops
++	 */
++	if (!WRAPFS_F(file)->lower_vm_ops) {
++		err = lower_file->f_op->mmap(lower_file, vma);
++		if (err) {
++			printk(KERN_ERR "wrapfs: lower mmap failed %d\n", err);
++			goto out;
++		}
++		saved_vm_ops = vma->vm_ops; /* save: came from lower ->mmap */
++	}
++
++	/*
++	 * Next 3 lines are all I need from generic_file_mmap.  I definitely
++	 * don't want its test for ->readpage which returns -ENOEXEC.
++	 */
++	file_accessed(file);
++	vma->vm_ops = &wrapfs_vm_ops;
++
++	file->f_mapping->a_ops = &wrapfs_aops; /* set our aops */
++	if (!WRAPFS_F(file)->lower_vm_ops) /* save for our ->fault */
++		WRAPFS_F(file)->lower_vm_ops = saved_vm_ops;
++
++out:
++	return err;
++}
++
++static int wrapfs_open(struct inode *inode, struct file *file)
++{
++	int err = 0;
++	struct file *lower_file = NULL;
++	struct path lower_path;
++
++	/* don't open unhashed/deleted files */
++	if (d_unhashed(file->f_path.dentry)) {
++		err = -ENOENT;
++		goto out_err;
++	}
++
++	file->private_data =
++		kzalloc(sizeof(struct wrapfs_file_info), GFP_KERNEL);
++	if (!WRAPFS_F(file)) {
++		err = -ENOMEM;
++		goto out_err;
++	}
++
++	/* open lower object and link wrapfs's file struct to lower's */
++	wrapfs_get_lower_path(file->f_path.dentry, &lower_path);
++	lower_file = dentry_open(&lower_path, file->f_flags, current_cred());
++	path_put(&lower_path);
++	if (IS_ERR(lower_file)) {
++		err = PTR_ERR(lower_file);
++		lower_file = wrapfs_lower_file(file);
++		if (lower_file) {
++			wrapfs_set_lower_file(file, NULL);
++			fput(lower_file); /* fput calls dput for lower_dentry */
++		}
++	} else {
++		wrapfs_set_lower_file(file, lower_file);
++	}
++
++	if (err)
++		kfree(WRAPFS_F(file));
++	else
++		fsstack_copy_attr_all(inode, wrapfs_lower_inode(inode));
++out_err:
++	return err;
++}
++
++static int wrapfs_flush(struct file *file, fl_owner_t id)
++{
++	int err = 0;
++	struct file *lower_file = NULL;
++
++	lower_file = wrapfs_lower_file(file);
++	if (lower_file && lower_file->f_op && lower_file->f_op->flush)
++		err = lower_file->f_op->flush(lower_file, id);
++
++	return err;
++}
++
++/* release all lower object references & free the file info structure */
++static int wrapfs_file_release(struct inode *inode, struct file *file)
++{
++	struct file *lower_file;
++
++	lower_file = wrapfs_lower_file(file);
++	if (lower_file) {
++		wrapfs_set_lower_file(file, NULL);
++		fput(lower_file);
++	}
++
++	kfree(WRAPFS_F(file));
++	return 0;
++}
++
++static int wrapfs_fsync(struct file *file, loff_t start, loff_t end,
++			int datasync)
++{
++	int err;
++	struct file *lower_file;
++	struct path lower_path;
++	struct dentry *dentry = file->f_path.dentry;
++
++	err = generic_file_fsync(file, start, end, datasync);
++	if (err)
++		goto out;
++	lower_file = wrapfs_lower_file(file);
++	wrapfs_get_lower_path(dentry, &lower_path);
++	err = vfs_fsync_range(lower_file, start, end, datasync);
++	wrapfs_put_lower_path(dentry, &lower_path);
++out:
++	return err;
++}
++
++static int wrapfs_fasync(int fd, struct file *file, int flag)
++{
++	int err = 0;
++	struct file *lower_file = NULL;
++
++	lower_file = wrapfs_lower_file(file);
++	if (lower_file->f_op && lower_file->f_op->fasync)
++		err = lower_file->f_op->fasync(fd, lower_file, flag);
++
++	return err;
++}
++
++const struct file_operations wrapfs_main_fops = {
++	.llseek		= generic_file_llseek,
++	.read		= wrapfs_read,
++	.write		= wrapfs_write,
++	.unlocked_ioctl	= wrapfs_unlocked_ioctl,
++#ifdef CONFIG_COMPAT
++	.compat_ioctl	= wrapfs_compat_ioctl,
++#endif
++	.mmap		= wrapfs_mmap,
++	.open		= wrapfs_open,
++	.flush		= wrapfs_flush,
++	.release	= wrapfs_file_release,
++	.fsync		= wrapfs_fsync,
++	.fasync		= wrapfs_fasync,
++};
++
++/* trimmed directory options */
++const struct file_operations wrapfs_dir_fops = {
++	.llseek		= generic_file_llseek,
++	.read		= generic_read_dir,
++	.readdir	= wrapfs_readdir,
++	.unlocked_ioctl	= wrapfs_unlocked_ioctl,
++#ifdef CONFIG_COMPAT
++	.compat_ioctl	= wrapfs_compat_ioctl,
++#endif
++	.open		= wrapfs_open,
++	.release	= wrapfs_file_release,
++	.flush		= wrapfs_flush,
++	.fsync		= wrapfs_fsync,
++	.fasync		= wrapfs_fasync,
++};
+diff --git a/fs/wrapfs/inode.c b/fs/wrapfs/inode.c
+new file mode 100644
+index 00000000000..b6f287adc7b
+--- /dev/null
++++ b/fs/wrapfs/inode.c
+@@ -0,0 +1,463 @@
++/*
++ * Copyright (c) 1998-2014 Erez Zadok
++ * Copyright (c) 2009	   Shrikar Archak
++ * Copyright (c) 2003-2014 Stony Brook University
++ * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#include "wrapfs.h"
++
++static int wrapfs_create(struct inode *dir, struct dentry *dentry,
++			 umode_t mode, bool want_excl)
++{
++	int err = 0;
++	struct dentry *lower_dentry;
++	struct dentry *lower_parent_dentry = NULL;
++	struct path lower_path;
++
++	wrapfs_get_lower_path(dentry, &lower_path);
++	lower_dentry = lower_path.dentry;
++	lower_parent_dentry = lock_parent(lower_dentry);
++
++	err = vfs_create(lower_parent_dentry->d_inode, lower_dentry, mode,
++			 want_excl);
++	if (err)
++		goto out;
++	err = wrapfs_interpose(dentry, dir->i_sb, &lower_path);
++	if (err)
++		goto out;
++	fsstack_copy_attr_times(dir, wrapfs_lower_inode(dir));
++	fsstack_copy_inode_size(dir, lower_parent_dentry->d_inode);
++
++out:
++	unlock_dir(lower_parent_dentry);
++	wrapfs_put_lower_path(dentry, &lower_path);
++	return err;
++}
++
++static int wrapfs_link(struct dentry *old_dentry, struct inode *dir,
++		       struct dentry *new_dentry)
++{
++	struct dentry *lower_old_dentry;
++	struct dentry *lower_new_dentry;
++	struct dentry *lower_dir_dentry;
++	u64 file_size_save;
++	int err;
++	struct path lower_old_path, lower_new_path;
++
++	file_size_save = i_size_read(old_dentry->d_inode);
++	wrapfs_get_lower_path(old_dentry, &lower_old_path);
++	wrapfs_get_lower_path(new_dentry, &lower_new_path);
++	lower_old_dentry = lower_old_path.dentry;
++	lower_new_dentry = lower_new_path.dentry;
++	lower_dir_dentry = lock_parent(lower_new_dentry);
++
++	err = vfs_link(lower_old_dentry, lower_dir_dentry->d_inode,
++		       lower_new_dentry);
++	if (err || !lower_new_dentry->d_inode)
++		goto out;
++
++	err = wrapfs_interpose(new_dentry, dir->i_sb, &lower_new_path);
++	if (err)
++		goto out;
++	fsstack_copy_attr_times(dir, lower_new_dentry->d_inode);
++	fsstack_copy_inode_size(dir, lower_new_dentry->d_inode);
++	set_nlink(old_dentry->d_inode,
++		  wrapfs_lower_inode(old_dentry->d_inode)->i_nlink);
++	i_size_write(new_dentry->d_inode, file_size_save);
++out:
++	unlock_dir(lower_dir_dentry);
++	wrapfs_put_lower_path(old_dentry, &lower_old_path);
++	wrapfs_put_lower_path(new_dentry, &lower_new_path);
++	return err;
++}
++
++static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
++{
++	int err;
++	struct dentry *lower_dentry;
++	struct inode *lower_dir_inode = wrapfs_lower_inode(dir);
++	struct dentry *lower_dir_dentry;
++	struct path lower_path;
++
++	wrapfs_get_lower_path(dentry, &lower_path);
++	lower_dentry = lower_path.dentry;
++	dget(lower_dentry);
++	lower_dir_dentry = lock_parent(lower_dentry);
++
++	err = vfs_unlink(lower_dir_inode, lower_dentry);
++
++	/*
++	 * Note: unlinking on top of NFS can cause silly-renamed files.
++	 * Trying to delete such files results in EBUSY from NFS
++	 * below.  Silly-renamed files will get deleted by NFS later on, so
++	 * we just need to detect them here and treat such EBUSY errors as
++	 * if the upper file was successfully deleted.
++	 */
++	if (err == -EBUSY && lower_dentry->d_flags & DCACHE_NFSFS_RENAMED)
++		err = 0;
++	if (err)
++		goto out;
++	fsstack_copy_attr_times(dir, lower_dir_inode);
++	fsstack_copy_inode_size(dir, lower_dir_inode);
++	set_nlink(dentry->d_inode,
++		  wrapfs_lower_inode(dentry->d_inode)->i_nlink);
++	dentry->d_inode->i_ctime = dir->i_ctime;
++	d_drop(dentry); /* this is needed, else LTP fails (VFS won't do it) */
++out:
++	unlock_dir(lower_dir_dentry);
++	dput(lower_dentry);
++	wrapfs_put_lower_path(dentry, &lower_path);
++	return err;
++}
++
++static int wrapfs_symlink(struct inode *dir, struct dentry *dentry,
++			  const char *symname)
++{
++	int err = 0;
++	struct dentry *lower_dentry;
++	struct dentry *lower_parent_dentry = NULL;
++	struct path lower_path;
++
++	wrapfs_get_lower_path(dentry, &lower_path);
++	lower_dentry = lower_path.dentry;
++	lower_parent_dentry = lock_parent(lower_dentry);
++
++	err = vfs_symlink(lower_parent_dentry->d_inode, lower_dentry, symname);
++	if (err)
++		goto out;
++	err = wrapfs_interpose(dentry, dir->i_sb, &lower_path);
++	if (err)
++		goto out;
++	fsstack_copy_attr_times(dir, wrapfs_lower_inode(dir));
++	fsstack_copy_inode_size(dir, lower_parent_dentry->d_inode);
++
++out:
++	unlock_dir(lower_parent_dentry);
++	wrapfs_put_lower_path(dentry, &lower_path);
++	return err;
++}
++
++static int wrapfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
++{
++	int err = 0;
++	struct dentry *lower_dentry;
++	struct dentry *lower_parent_dentry = NULL;
++	struct path lower_path;
++
++	wrapfs_get_lower_path(dentry, &lower_path);
++	lower_dentry = lower_path.dentry;
++	lower_parent_dentry = lock_parent(lower_dentry);
++
++	err = vfs_mkdir(lower_parent_dentry->d_inode, lower_dentry, mode);
++	if (err)
++		goto out;
++
++	err = wrapfs_interpose(dentry, dir->i_sb, &lower_path);
++	if (err)
++		goto out;
++
++	fsstack_copy_attr_times(dir, wrapfs_lower_inode(dir));
++	fsstack_copy_inode_size(dir, lower_parent_dentry->d_inode);
++	/* update number of links on parent directory */
++	set_nlink(dir, wrapfs_lower_inode(dir)->i_nlink);
++
++out:
++	unlock_dir(lower_parent_dentry);
++	wrapfs_put_lower_path(dentry, &lower_path);
++	return err;
++}
++
++static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
++{
++	struct dentry *lower_dentry;
++	struct dentry *lower_dir_dentry;
++	int err;
++	struct path lower_path;
++
++	wrapfs_get_lower_path(dentry, &lower_path);
++	lower_dentry = lower_path.dentry;
++	lower_dir_dentry = lock_parent(lower_dentry);
++
++	err = vfs_rmdir(lower_dir_dentry->d_inode, lower_dentry);
++	if (err)
++		goto out;
++
++	d_drop(dentry);	/* drop our dentry on success (why not VFS's job?) */
++	if (dentry->d_inode)
++		clear_nlink(dentry->d_inode);
++	fsstack_copy_attr_times(dir, lower_dir_dentry->d_inode);
++	fsstack_copy_inode_size(dir, lower_dir_dentry->d_inode);
++	set_nlink(dir, lower_dir_dentry->d_inode->i_nlink);
++
++out:
++	unlock_dir(lower_dir_dentry);
++	wrapfs_put_lower_path(dentry, &lower_path);
++	return err;
++}
++
++static int wrapfs_mknod(struct inode *dir, struct dentry *dentry, umode_t mode,
++			dev_t dev)
++{
++	int err = 0;
++	struct dentry *lower_dentry;
++	struct dentry *lower_parent_dentry = NULL;
++	struct path lower_path;
++
++	wrapfs_get_lower_path(dentry, &lower_path);
++	lower_dentry = lower_path.dentry;
++	lower_parent_dentry = lock_parent(lower_dentry);
++
++	err = vfs_mknod(lower_parent_dentry->d_inode, lower_dentry, mode, dev);
++	if (err)
++		goto out;
++
++	err = wrapfs_interpose(dentry, dir->i_sb, &lower_path);
++	if (err)
++		goto out;
++	fsstack_copy_attr_times(dir, wrapfs_lower_inode(dir));
++	fsstack_copy_inode_size(dir, lower_parent_dentry->d_inode);
++
++out:
++	unlock_dir(lower_parent_dentry);
++	wrapfs_put_lower_path(dentry, &lower_path);
++	return err;
++}
++
++/*
++ * The locking rules in wrapfs_rename are complex.  We could use a simpler
++ * superblock-level name-space lock for renames and copy-ups.
++ */
++static int wrapfs_rename(struct inode *old_dir, struct dentry *old_dentry,
++			 struct inode *new_dir, struct dentry *new_dentry)
++{
++	int err = 0;
++	struct dentry *lower_old_dentry = NULL;
++	struct dentry *lower_new_dentry = NULL;
++	struct dentry *lower_old_dir_dentry = NULL;
++	struct dentry *lower_new_dir_dentry = NULL;
++	struct dentry *trap = NULL;
++	struct path lower_old_path, lower_new_path;
++
++	wrapfs_get_lower_path(old_dentry, &lower_old_path);
++	wrapfs_get_lower_path(new_dentry, &lower_new_path);
++	lower_old_dentry = lower_old_path.dentry;
++	lower_new_dentry = lower_new_path.dentry;
++	lower_old_dir_dentry = dget_parent(lower_old_dentry);
++	lower_new_dir_dentry = dget_parent(lower_new_dentry);
++
++	trap = lock_rename(lower_old_dir_dentry, lower_new_dir_dentry);
++	/* source should not be ancestor of target */
++	if (trap == lower_old_dentry) {
++		err = -EINVAL;
++		goto out;
++	}
++	/* target should not be ancestor of source */
++	if (trap == lower_new_dentry) {
++		err = -ENOTEMPTY;
++		goto out;
++	}
++
++	err = vfs_rename(lower_old_dir_dentry->d_inode, lower_old_dentry,
++			 lower_new_dir_dentry->d_inode, lower_new_dentry);
++	if (err)
++		goto out;
++
++	fsstack_copy_attr_all(new_dir, lower_new_dir_dentry->d_inode);
++	fsstack_copy_inode_size(new_dir, lower_new_dir_dentry->d_inode);
++	if (new_dir != old_dir) {
++		fsstack_copy_attr_all(old_dir,
++				      lower_old_dir_dentry->d_inode);
++		fsstack_copy_inode_size(old_dir,
++					lower_old_dir_dentry->d_inode);
++	}
++
++out:
++	unlock_rename(lower_old_dir_dentry, lower_new_dir_dentry);
++	dput(lower_old_dir_dentry);
++	dput(lower_new_dir_dentry);
++	wrapfs_put_lower_path(old_dentry, &lower_old_path);
++	wrapfs_put_lower_path(new_dentry, &lower_new_path);
++	return err;
++}
++
++static int wrapfs_readlink(struct dentry *dentry, char __user *buf, int bufsiz)
++{
++	int err;
++	struct dentry *lower_dentry;
++	struct path lower_path;
++
++	wrapfs_get_lower_path(dentry, &lower_path);
++	lower_dentry = lower_path.dentry;
++	if (!lower_dentry->d_inode->i_op ||
++	    !lower_dentry->d_inode->i_op->readlink) {
++		err = -EINVAL;
++		goto out;
++	}
++
++	err = lower_dentry->d_inode->i_op->readlink(lower_dentry,
++						    buf, bufsiz);
++	if (err < 0)
++		goto out;
++	fsstack_copy_attr_atime(dentry->d_inode, lower_dentry->d_inode);
++
++out:
++	wrapfs_put_lower_path(dentry, &lower_path);
++	return err;
++}
++
++static void *wrapfs_follow_link(struct dentry *dentry, struct nameidata *nd)
++{
++	char *buf;
++	int len = PAGE_SIZE, err;
++	mm_segment_t old_fs;
++
++	/* This is freed by the put_link method assuming a successful call. */
++	buf = kmalloc(len, GFP_KERNEL);
++	if (!buf) {
++		buf = ERR_PTR(-ENOMEM);
++		goto out;
++	}
++
++	/* read the symlink, and then we will follow it */
++	old_fs = get_fs();
++	set_fs(KERNEL_DS);
++	err = wrapfs_readlink(dentry, buf, len);
++	set_fs(old_fs);
++	if (err < 0) {
++		kfree(buf);
++		buf = ERR_PTR(err);
++	} else {
++		buf[err] = '\0';
++	}
++out:
++	nd_set_link(nd, buf);
++	return NULL;
++}
++
++/* this @nd *IS* still used */
++static void wrapfs_put_link(struct dentry *dentry, struct nameidata *nd,
++			    void *cookie)
++{
++	char *buf = nd_get_link(nd);
++	if (!IS_ERR(buf))	/* free the char* */
++		kfree(buf);
++}
++
++static int wrapfs_permission(struct inode *inode, int mask)
++{
++	struct inode *lower_inode;
++	int err;
++
++	lower_inode = wrapfs_lower_inode(inode);
++	err = inode_permission(lower_inode, mask);
++	return err;
++}
++
++static int wrapfs_setattr(struct dentry *dentry, struct iattr *ia)
++{
++	int err = 0;
++	struct dentry *lower_dentry;
++	struct inode *inode;
++	struct inode *lower_inode;
++	struct path lower_path;
++	struct iattr lower_ia;
++
++	inode = dentry->d_inode;
++
++	/*
++	 * Check if user has permission to change inode.  We don't check if
++	 * this user can change the lower inode: that should happen when
++	 * calling notify_change on the lower inode.
++	 */
++	err = inode_change_ok(inode, ia);
++	if (err)
++		goto out_err;
++
++	wrapfs_get_lower_path(dentry, &lower_path);
++	lower_dentry = lower_path.dentry;
++	lower_inode = wrapfs_lower_inode(inode);
++
++	/* prepare our own lower struct iattr (with the lower file) */
++	memcpy(&lower_ia, ia, sizeof(lower_ia));
++	if (ia->ia_valid & ATTR_FILE)
++		lower_ia.ia_file = wrapfs_lower_file(ia->ia_file);
++
++	/*
++	 * If shrinking, first truncate upper level to cancel writing dirty
++	 * pages beyond the new eof; and also if its' maxbytes is more
++	 * limiting (fail with -EFBIG before making any change to the lower
++	 * level).  There is no need to vmtruncate the upper level
++	 * afterwards in the other cases: we fsstack_copy_inode_size from
++	 * the lower level.
++	 */
++	if (ia->ia_valid & ATTR_SIZE) {
++		err = inode_newsize_ok(inode, ia->ia_size);
++		if (err)
++			goto out;
++		truncate_setsize(inode, ia->ia_size);
++	}
++
++	/*
++	 * mode change is for clearing setuid/setgid bits. Allow lower fs
++	 * to interpret this in its own way.
++	 */
++	if (lower_ia.ia_valid & (ATTR_KILL_SUID | ATTR_KILL_SGID))
++		lower_ia.ia_valid &= ~ATTR_MODE;
++
++	/* notify the (possibly copied-up) lower inode */
++	/*
++	 * Note: we use lower_dentry->d_inode, because lower_inode may be
++	 * unlinked (no inode->i_sb and i_ino==0.  This happens if someone
++	 * tries to open(), unlink(), then ftruncate() a file.
++	 */
++	mutex_lock(&lower_dentry->d_inode->i_mutex);
++	err = notify_change(lower_dentry, &lower_ia); /* note: lower_ia */
++	mutex_unlock(&lower_dentry->d_inode->i_mutex);
++	if (err)
++		goto out;
++
++	/* get attributes from the lower inode */
++	fsstack_copy_attr_all(inode, lower_inode);
++	/*
++	 * Not running fsstack_copy_inode_size(inode, lower_inode), because
++	 * VFS should update our inode size, and notify_change on
++	 * lower_inode should update its size.
++	 */
++
++out:
++	wrapfs_put_lower_path(dentry, &lower_path);
++out_err:
++	return err;
++}
++
++const struct inode_operations wrapfs_symlink_iops = {
++	.readlink	= wrapfs_readlink,
++	.permission	= wrapfs_permission,
++	.follow_link	= wrapfs_follow_link,
++	.setattr	= wrapfs_setattr,
++	.put_link	= wrapfs_put_link,
++};
++
++const struct inode_operations wrapfs_dir_iops = {
++	.create		= wrapfs_create,
++	.lookup		= wrapfs_lookup,
++	.link		= wrapfs_link,
++	.unlink		= wrapfs_unlink,
++	.symlink	= wrapfs_symlink,
++	.mkdir		= wrapfs_mkdir,
++	.rmdir		= wrapfs_rmdir,
++	.mknod		= wrapfs_mknod,
++	.rename		= wrapfs_rename,
++	.permission	= wrapfs_permission,
++	.setattr	= wrapfs_setattr,
++};
++
++const struct inode_operations wrapfs_main_iops = {
++	.permission	= wrapfs_permission,
++	.setattr	= wrapfs_setattr,
++};
+diff --git a/fs/wrapfs/lookup.c b/fs/wrapfs/lookup.c
+new file mode 100644
+index 00000000000..d08de9f5db0
+--- /dev/null
++++ b/fs/wrapfs/lookup.c
+@@ -0,0 +1,332 @@
++/*
++ * Copyright (c) 1998-2014 Erez Zadok
++ * Copyright (c) 2009	   Shrikar Archak
++ * Copyright (c) 2003-2014 Stony Brook University
++ * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#include "wrapfs.h"
++
++/* The dentry cache is just so we have properly sized dentries */
++static struct kmem_cache *wrapfs_dentry_cachep;
++
++int wrapfs_init_dentry_cache(void)
++{
++	wrapfs_dentry_cachep =
++		kmem_cache_create("wrapfs_dentry",
++				  sizeof(struct wrapfs_dentry_info),
++				  0, SLAB_RECLAIM_ACCOUNT, NULL);
++
++	return wrapfs_dentry_cachep ? 0 : -ENOMEM;
++}
++
++void wrapfs_destroy_dentry_cache(void)
++{
++	if (wrapfs_dentry_cachep)
++		kmem_cache_destroy(wrapfs_dentry_cachep);
++}
++
++void free_dentry_private_data(struct dentry *dentry)
++{
++	if (!dentry || !dentry->d_fsdata)
++		return;
++	kmem_cache_free(wrapfs_dentry_cachep, dentry->d_fsdata);
++	dentry->d_fsdata = NULL;
++}
++
++/* allocate new dentry private data */
++int new_dentry_private_data(struct dentry *dentry)
++{
++	struct wrapfs_dentry_info *info = WRAPFS_D(dentry);
++
++	/* use zalloc to init dentry_info.lower_path */
++	info = kmem_cache_zalloc(wrapfs_dentry_cachep, GFP_ATOMIC);
++	if (!info)
++		return -ENOMEM;
++
++	spin_lock_init(&info->lock);
++	dentry->d_fsdata = info;
++
++	return 0;
++}
++
++/*
++ * Initialize a nameidata structure (the intent part) we can pass to a lower
++ * file system.  Returns 0 on success or -error (only -ENOMEM possible).
++ */
++int init_lower_nd(struct nameidata *nd, unsigned int flags)
++{
++	int err = 0;
++
++	memset(nd, 0, sizeof(struct nameidata));
++	if (!flags)
++		goto out;
++
++	switch (flags) {
++	case LOOKUP_CREATE:
++	case LOOKUP_OPEN:
++		nd->flags = flags;
++		break;
++	default:
++		/* We should never get here, for now */
++		pr_debug("wrapfs: unknown nameidata flag 0x%x\n", flags);
++		BUG();
++		break;
++	}
++
++out:
++	return err;
++}
++
++static int wrapfs_inode_test(struct inode *inode, void *candidate_lower_inode)
++{
++	struct inode *current_lower_inode = wrapfs_lower_inode(inode);
++	if (current_lower_inode == (struct inode *)candidate_lower_inode)
++		return 1; /* found a match */
++	else
++		return 0; /* no match */
++}
++
++static int wrapfs_inode_set(struct inode *inode, void *lower_inode)
++{
++	/* we do actual inode initialization in wrapfs_iget */
++	return 0;
++}
++
++struct inode *wrapfs_iget(struct super_block *sb, struct inode *lower_inode)
++{
++	struct wrapfs_inode_info *info;
++	struct inode *inode; /* the new inode to return */
++	int err;
++
++	inode = iget5_locked(sb, /* our superblock */
++			     /*
++			      * hashval: we use inode number, but we can
++			      * also use "(unsigned long)lower_inode"
++			      * instead.
++			      */
++			     lower_inode->i_ino, /* hashval */
++			     wrapfs_inode_test,	/* inode comparison function */
++			     wrapfs_inode_set, /* inode init function */
++			     lower_inode); /* data passed to test+set fxns */
++	if (!inode) {
++		err = -EACCES;
++		iput(lower_inode);
++		return ERR_PTR(err);
++	}
++	/* if found a cached inode, then just return it */
++	if (!(inode->i_state & I_NEW))
++		return inode;
++
++	/* initialize new inode */
++	info = WRAPFS_I(inode);
++
++	inode->i_ino = lower_inode->i_ino;
++	if (!igrab(lower_inode)) {
++		err = -ESTALE;
++		return ERR_PTR(err);
++	}
++	wrapfs_set_lower_inode(inode, lower_inode);
++
++	inode->i_version++;
++
++	/* use different set of inode ops for symlinks & directories */
++	if (S_ISDIR(lower_inode->i_mode))
++		inode->i_op = &wrapfs_dir_iops;
++	else if (S_ISLNK(lower_inode->i_mode))
++		inode->i_op = &wrapfs_symlink_iops;
++	else
++		inode->i_op = &wrapfs_main_iops;
++
++	/* use different set of file ops for directories */
++	if (S_ISDIR(lower_inode->i_mode))
++		inode->i_fop = &wrapfs_dir_fops;
++	else
++		inode->i_fop = &wrapfs_main_fops;
++
++	inode->i_mapping->a_ops = &wrapfs_aops;
++
++	inode->i_atime.tv_sec = 0;
++	inode->i_atime.tv_nsec = 0;
++	inode->i_mtime.tv_sec = 0;
++	inode->i_mtime.tv_nsec = 0;
++	inode->i_ctime.tv_sec = 0;
++	inode->i_ctime.tv_nsec = 0;
++
++	/* properly initialize special inodes */
++	if (S_ISBLK(lower_inode->i_mode) || S_ISCHR(lower_inode->i_mode) ||
++	    S_ISFIFO(lower_inode->i_mode) || S_ISSOCK(lower_inode->i_mode))
++		init_special_inode(inode, lower_inode->i_mode,
++				   lower_inode->i_rdev);
++
++	/* all well, copy inode attributes */
++	fsstack_copy_attr_all(inode, lower_inode);
++	fsstack_copy_inode_size(inode, lower_inode);
++
++	unlock_new_inode(inode);
++	return inode;
++}
++
++/*
++ * Connect a wrapfs inode dentry/inode with several lower ones.  This is
++ * the classic stackable file system "vnode interposition" action.
++ *
++ * @dentry: wrapfs's dentry which interposes on lower one
++ * @sb: wrapfs's super_block
++ * @lower_path: the lower path (caller does path_get/put)
++ */
++int wrapfs_interpose(struct dentry *dentry, struct super_block *sb,
++		     struct path *lower_path)
++{
++	int err = 0;
++	struct inode *inode;
++	struct inode *lower_inode;
++	struct super_block *lower_sb;
++
++	lower_inode = lower_path->dentry->d_inode;
++	lower_sb = wrapfs_lower_super(sb);
++
++	/* check that the lower file system didn't cross a mount point */
++	if (lower_inode->i_sb != lower_sb) {
++		err = -EXDEV;
++		goto out;
++	}
++
++	/*
++	 * We allocate our new inode below by calling wrapfs_iget,
++	 * which will initialize some of the new inode's fields
++	 */
++
++	/* inherit lower inode number for wrapfs's inode */
++	inode = wrapfs_iget(sb, lower_inode);
++	if (IS_ERR(inode)) {
++		err = PTR_ERR(inode);
++		goto out;
++	}
++
++	d_add(dentry, inode);
++
++out:
++	return err;
++}
++
++/*
++ * Main driver function for wrapfs's lookup.
++ *
++ * Returns: NULL (ok), ERR_PTR if an error occurred.
++ * Fills in lower_parent_path with <dentry,mnt> on success.
++ */
++static struct dentry *__wrapfs_lookup(struct dentry *dentry,
++				      unsigned int flags,
++				      struct path *lower_parent_path)
++{
++	int err = 0;
++	struct vfsmount *lower_dir_mnt;
++	struct dentry *lower_dir_dentry = NULL;
++	struct dentry *lower_dentry;
++	const char *name;
++	struct path lower_path;
++	struct qstr this;
++
++	/* must initialize dentry operations */
++	d_set_d_op(dentry, &wrapfs_dops);
++
++	if (IS_ROOT(dentry))
++		goto out;
++
++	name = dentry->d_name.name;
++
++	/* now start the actual lookup procedure */
++	lower_dir_dentry = lower_parent_path->dentry;
++	lower_dir_mnt = lower_parent_path->mnt;
++
++	/* Use vfs_path_lookup to check if the dentry exists or not */
++	err = vfs_path_lookup(lower_dir_dentry, lower_dir_mnt, name, 0,
++			      &lower_path);
++
++	/* no error: handle positive dentries */
++	if (!err) {
++		wrapfs_set_lower_path(dentry, &lower_path);
++		err = wrapfs_interpose(dentry, dentry->d_sb, &lower_path);
++		if (err) /* path_put underlying path on error */
++			wrapfs_put_reset_lower_path(dentry);
++		goto out;
++	}
++
++	/*
++	 * We don't consider ENOENT an error, and we want to return a
++	 * negative dentry.
++	 */
++	if (err && err != -ENOENT)
++		goto out;
++
++	/* instatiate a new negative dentry */
++	this.name = name;
++	this.len = strlen(name);
++	this.hash = full_name_hash(this.name, this.len);
++	lower_dentry = d_lookup(lower_dir_dentry, &this);
++	if (lower_dentry)
++		goto setup_lower;
++
++	lower_dentry = d_alloc(lower_dir_dentry, &this);
++	if (!lower_dentry) {
++		err = -ENOMEM;
++		goto out;
++	}
++	d_add(lower_dentry, NULL); /* instantiate and hash */
++
++setup_lower:
++	lower_path.dentry = lower_dentry;
++	lower_path.mnt = mntget(lower_dir_mnt);
++	wrapfs_set_lower_path(dentry, &lower_path);
++
++	/*
++	 * If the intent is to create a file, then don't return an error, so
++	 * the VFS will continue the process of making this negative dentry
++	 * into a positive one.
++	 */
++	if (flags & (LOOKUP_CREATE|LOOKUP_RENAME_TARGET))
++		err = 0;
++
++out:
++	return ERR_PTR(err);
++}
++
++struct dentry *wrapfs_lookup(struct inode *dir, struct dentry *dentry,
++			     unsigned int flags)
++{
++	struct dentry *ret, *parent;
++	struct path lower_parent_path;
++	int err = 0;
++
++	parent = dget_parent(dentry);
++
++	wrapfs_get_lower_path(parent, &lower_parent_path);
++
++	/* allocate dentry private data.  We free it in ->d_release */
++	err = new_dentry_private_data(dentry);
++	if (err) {
++		ret = ERR_PTR(err);
++		goto out;
++	}
++	ret = __wrapfs_lookup(dentry, flags, &lower_parent_path);
++	if (IS_ERR(ret))
++		goto out;
++	if (ret)
++		dentry = ret;
++	if (dentry->d_inode)
++		fsstack_copy_attr_times(dentry->d_inode,
++					wrapfs_lower_inode(dentry->d_inode));
++	/* update parent directory's atime */
++	fsstack_copy_attr_atime(parent->d_inode,
++				wrapfs_lower_inode(parent->d_inode));
++
++out:
++	wrapfs_put_lower_path(parent, &lower_parent_path);
++	dput(parent);
++	return ret;
++}
+diff --git a/fs/wrapfs/main.c b/fs/wrapfs/main.c
+new file mode 100644
+index 00000000000..5ce79304f6e
+--- /dev/null
++++ b/fs/wrapfs/main.c
+@@ -0,0 +1,174 @@
++/*
++ * Copyright (c) 1998-2014 Erez Zadok
++ * Copyright (c) 2009	   Shrikar Archak
++ * Copyright (c) 2003-2014 Stony Brook University
++ * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#include "wrapfs.h"
++#include <linux/module.h>
++
++/*
++ * There is no need to lock the wrapfs_super_info's rwsem as there is no
++ * way anyone can have a reference to the superblock at this point in time.
++ */
++static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
++{
++	int err = 0;
++	struct super_block *lower_sb;
++	struct path lower_path;
++	char *dev_name = (char *) raw_data;
++	struct inode *inode;
++
++	if (!dev_name) {
++		printk(KERN_ERR
++		       "wrapfs: read_super: missing dev_name argument\n");
++		err = -EINVAL;
++		goto out;
++	}
++
++	/* parse lower path */
++	err = kern_path(dev_name, LOOKUP_FOLLOW | LOOKUP_DIRECTORY,
++			&lower_path);
++	if (err) {
++		printk(KERN_ERR	"wrapfs: error accessing "
++		       "lower directory '%s'\n", dev_name);
++		goto out;
++	}
++
++	/* allocate superblock private data */
++	sb->s_fs_info = kzalloc(sizeof(struct wrapfs_sb_info), GFP_KERNEL);
++	if (!WRAPFS_SB(sb)) {
++		printk(KERN_CRIT "wrapfs: read_super: out of memory\n");
++		err = -ENOMEM;
++		goto out_free;
++	}
++
++	/* set the lower superblock field of upper superblock */
++	lower_sb = lower_path.dentry->d_sb;
++	atomic_inc(&lower_sb->s_active);
++	wrapfs_set_lower_super(sb, lower_sb);
++
++	/* inherit maxbytes from lower file system */
++	sb->s_maxbytes = lower_sb->s_maxbytes;
++
++	/*
++	 * Our c/m/atime granularity is 1 ns because we may stack on file
++	 * systems whose granularity is as good.
++	 */
++	sb->s_time_gran = 1;
++
++	sb->s_op = &wrapfs_sops;
++
++	/* get a new inode and allocate our root dentry */
++	inode = wrapfs_iget(sb, lower_path.dentry->d_inode);
++	if (IS_ERR(inode)) {
++		err = PTR_ERR(inode);
++		goto out_sput;
++	}
++	sb->s_root = d_make_root(inode);
++	if (!sb->s_root) {
++		err = -ENOMEM;
++		goto out_iput;
++	}
++	d_set_d_op(sb->s_root, &wrapfs_dops);
++
++	/* link the upper and lower dentries */
++	sb->s_root->d_fsdata = NULL;
++	err = new_dentry_private_data(sb->s_root);
++	if (err)
++		goto out_freeroot;
++
++	/* if get here: cannot have error */
++
++	/* set the lower dentries for s_root */
++	wrapfs_set_lower_path(sb->s_root, &lower_path);
++
++	/*
++	 * No need to call interpose because we already have a positive
++	 * dentry, which was instantiated by d_make_root.  Just need to
++	 * d_rehash it.
++	 */
++	d_rehash(sb->s_root);
++	if (!silent)
++		printk(KERN_INFO
++		       "wrapfs: mounted on top of %s type %s\n",
++		       dev_name, lower_sb->s_type->name);
++	goto out; /* all is well */
++
++	/* no longer needed: free_dentry_private_data(sb->s_root); */
++out_freeroot:
++	dput(sb->s_root);
++out_iput:
++	iput(inode);
++out_sput:
++	/* drop refs we took earlier */
++	atomic_dec(&lower_sb->s_active);
++	kfree(WRAPFS_SB(sb));
++	sb->s_fs_info = NULL;
++out_free:
++	path_put(&lower_path);
++
++out:
++	return err;
++}
++
++struct dentry *wrapfs_mount(struct file_system_type *fs_type, int flags,
++			    const char *dev_name, void *raw_data)
++{
++	void *lower_path_name = (void *) dev_name;
++
++	return mount_nodev(fs_type, flags, lower_path_name,
++			   wrapfs_read_super);
++}
++
++static struct file_system_type wrapfs_fs_type = {
++	.owner		= THIS_MODULE,
++	.name		= WRAPFS_NAME,
++	.mount		= wrapfs_mount,
++	.kill_sb	= generic_shutdown_super,
++	.fs_flags	= 0,
++};
++MODULE_ALIAS_FS(WRAPFS_NAME);
++
++static int __init init_wrapfs_fs(void)
++{
++	int err;
++
++	pr_info("Registering wrapfs " WRAPFS_VERSION "\n");
++
++	err = wrapfs_init_inode_cache();
++	if (err)
++		goto out;
++	err = wrapfs_init_dentry_cache();
++	if (err)
++		goto out;
++	err = register_filesystem(&wrapfs_fs_type);
++out:
++	if (err) {
++		wrapfs_destroy_inode_cache();
++		wrapfs_destroy_dentry_cache();
++	}
++	return err;
++}
++
++static void __exit exit_wrapfs_fs(void)
++{
++	wrapfs_destroy_inode_cache();
++	wrapfs_destroy_dentry_cache();
++	unregister_filesystem(&wrapfs_fs_type);
++	pr_info("Completed wrapfs module unload\n");
++}
++
++MODULE_AUTHOR("Erez Zadok, Filesystems and Storage Lab, Stony Brook University"
++	      " (http://www.fsl.cs.sunysb.edu/)");
++MODULE_DESCRIPTION("Wrapfs " WRAPFS_VERSION
++		   " (http://wrapfs.filesystems.org/)");
++MODULE_LICENSE("GPL");
++
++module_init(init_wrapfs_fs);
++module_exit(exit_wrapfs_fs);
+diff --git a/fs/wrapfs/mmap.c b/fs/wrapfs/mmap.c
+new file mode 100644
+index 00000000000..a1fefada516
+--- /dev/null
++++ b/fs/wrapfs/mmap.c
+@@ -0,0 +1,53 @@
++/*
++ * Copyright (c) 1998-2014 Erez Zadok
++ * Copyright (c) 2009	   Shrikar Archak
++ * Copyright (c) 2003-2014 Stony Brook University
++ * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#include "wrapfs.h"
++
++static int wrapfs_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
++{
++	int err;
++	struct file *file, *lower_file;
++	const struct vm_operations_struct *lower_vm_ops;
++	struct vm_area_struct lower_vma;
++
++	memcpy(&lower_vma, vma, sizeof(struct vm_area_struct));
++	file = lower_vma.vm_file;
++	lower_vm_ops = WRAPFS_F(file)->lower_vm_ops;
++	BUG_ON(!lower_vm_ops);
++
++	lower_file = wrapfs_lower_file(file);
++	/*
++	 * XXX: vm_ops->fault may be called in parallel.  Because we have to
++	 * resort to temporarily changing the vma->vm_file to point to the
++	 * lower file, a concurrent invocation of wrapfs_fault could see a
++	 * different value.  In this workaround, we keep a different copy of
++	 * the vma structure in our stack, so we never expose a different
++	 * value of the vma->vm_file called to us, even temporarily.  A
++	 * better fix would be to change the calling semantics of ->fault to
++	 * take an explicit file pointer.
++	 */
++	lower_vma.vm_file = lower_file;
++	err = lower_vm_ops->fault(&lower_vma, vmf);
++	return err;
++}
++
++/*
++ * XXX: the default address_space_ops for wrapfs is empty.  We cannot set
++ * our inode->i_mapping->a_ops to NULL because too many code paths expect
++ * the a_ops vector to be non-NULL.
++ */
++const struct address_space_operations wrapfs_aops = {
++	/* empty on purpose */
++};
++
++const struct vm_operations_struct wrapfs_vm_ops = {
++	.fault		= wrapfs_fault,
++};
+diff --git a/fs/wrapfs/super.c b/fs/wrapfs/super.c
+new file mode 100644
+index 00000000000..4e78840e157
+--- /dev/null
++++ b/fs/wrapfs/super.c
+@@ -0,0 +1,168 @@
++/*
++ * Copyright (c) 1998-2014 Erez Zadok
++ * Copyright (c) 2009	   Shrikar Archak
++ * Copyright (c) 2003-2014 Stony Brook University
++ * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#include "wrapfs.h"
++
++/*
++ * The inode cache is used with alloc_inode for both our inode info and the
++ * vfs inode.
++ */
++static struct kmem_cache *wrapfs_inode_cachep;
++
++/* final actions when unmounting a file system */
++static void wrapfs_put_super(struct super_block *sb)
++{
++	struct wrapfs_sb_info *spd;
++	struct super_block *s;
++
++	spd = WRAPFS_SB(sb);
++	if (!spd)
++		return;
++
++	/* decrement lower super references */
++	s = wrapfs_lower_super(sb);
++	wrapfs_set_lower_super(sb, NULL);
++	atomic_dec(&s->s_active);
++
++	kfree(spd);
++	sb->s_fs_info = NULL;
++}
++
++static int wrapfs_statfs(struct dentry *dentry, struct kstatfs *buf)
++{
++	int err;
++	struct path lower_path;
++
++	wrapfs_get_lower_path(dentry, &lower_path);
++	err = vfs_statfs(&lower_path, buf);
++	wrapfs_put_lower_path(dentry, &lower_path);
++
++	/* set return buf to our f/s to avoid confusing user-level utils */
++	buf->f_type = WRAPFS_SUPER_MAGIC;
++
++	return err;
++}
++
++/*
++ * @flags: numeric mount options
++ * @options: mount options string
++ */
++static int wrapfs_remount_fs(struct super_block *sb, int *flags, char *options)
++{
++	int err = 0;
++
++	/*
++	 * The VFS will take care of "ro" and "rw" flags among others.  We
++	 * can safely accept a few flags (RDONLY, MANDLOCK), and honor
++	 * SILENT, but anything else left over is an error.
++	 */
++	if ((*flags & ~(MS_RDONLY | MS_MANDLOCK | MS_SILENT)) != 0) {
++		printk(KERN_ERR
++		       "wrapfs: remount flags 0x%x unsupported\n", *flags);
++		err = -EINVAL;
++	}
++
++	return err;
++}
++
++/*
++ * Called by iput() when the inode reference count reached zero
++ * and the inode is not hashed anywhere.  Used to clear anything
++ * that needs to be, before the inode is completely destroyed and put
++ * on the inode free list.
++ */
++static void wrapfs_evict_inode(struct inode *inode)
++{
++	struct inode *lower_inode;
++
++	truncate_inode_pages(&inode->i_data, 0);
++	clear_inode(inode);
++	/*
++	 * Decrement a reference to a lower_inode, which was incremented
++	 * by our read_inode when it was created initially.
++	 */
++	lower_inode = wrapfs_lower_inode(inode);
++	wrapfs_set_lower_inode(inode, NULL);
++	iput(lower_inode);
++}
++
++static struct inode *wrapfs_alloc_inode(struct super_block *sb)
++{
++	struct wrapfs_inode_info *i;
++
++	i = kmem_cache_alloc(wrapfs_inode_cachep, GFP_KERNEL);
++	if (!i)
++		return NULL;
++
++	/* memset everything up to the inode to 0 */
++	memset(i, 0, offsetof(struct wrapfs_inode_info, vfs_inode));
++
++	i->vfs_inode.i_version = 1;
++	return &i->vfs_inode;
++}
++
++static void wrapfs_destroy_inode(struct inode *inode)
++{
++	kmem_cache_free(wrapfs_inode_cachep, WRAPFS_I(inode));
++}
++
++/* wrapfs inode cache constructor */
++static void init_once(void *obj)
++{
++	struct wrapfs_inode_info *i = obj;
++
++	inode_init_once(&i->vfs_inode);
++}
++
++int wrapfs_init_inode_cache(void)
++{
++	int err = 0;
++
++	wrapfs_inode_cachep =
++		kmem_cache_create("wrapfs_inode_cache",
++				  sizeof(struct wrapfs_inode_info), 0,
++				  SLAB_RECLAIM_ACCOUNT, init_once);
++	if (!wrapfs_inode_cachep)
++		err = -ENOMEM;
++	return err;
++}
++
++/* wrapfs inode cache destructor */
++void wrapfs_destroy_inode_cache(void)
++{
++	if (wrapfs_inode_cachep)
++		kmem_cache_destroy(wrapfs_inode_cachep);
++}
++
++/*
++ * Used only in nfs, to kill any pending RPC tasks, so that subsequent
++ * code can actually succeed and won't leave tasks that need handling.
++ */
++static void wrapfs_umount_begin(struct super_block *sb)
++{
++	struct super_block *lower_sb;
++
++	lower_sb = wrapfs_lower_super(sb);
++	if (lower_sb && lower_sb->s_op && lower_sb->s_op->umount_begin)
++		lower_sb->s_op->umount_begin(lower_sb);
++}
++
++const struct super_operations wrapfs_sops = {
++	.put_super	= wrapfs_put_super,
++	.statfs		= wrapfs_statfs,
++	.remount_fs	= wrapfs_remount_fs,
++	.evict_inode	= wrapfs_evict_inode,
++	.umount_begin	= wrapfs_umount_begin,
++	.show_options	= generic_show_options,
++	.alloc_inode	= wrapfs_alloc_inode,
++	.destroy_inode	= wrapfs_destroy_inode,
++	.drop_inode	= generic_delete_inode,
++};
+diff --git a/fs/wrapfs/wrapfs.h b/fs/wrapfs/wrapfs.h
+new file mode 100644
+index 00000000000..e4998d7d857
+--- /dev/null
++++ b/fs/wrapfs/wrapfs.h
+@@ -0,0 +1,205 @@
++/*
++ * Copyright (c) 1998-2014 Erez Zadok
++ * Copyright (c) 2009	   Shrikar Archak
++ * Copyright (c) 2003-2014 Stony Brook University
++ * Copyright (c) 2003-2014 The Research Foundation of SUNY
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#ifndef _WRAPFS_H_
++#define _WRAPFS_H_
++
++#include <linux/dcache.h>
++#include <linux/file.h>
++#include <linux/fs.h>
++#include <linux/mm.h>
++#include <linux/mount.h>
++#include <linux/namei.h>
++#include <linux/seq_file.h>
++#include <linux/statfs.h>
++#include <linux/fs_stack.h>
++#include <linux/magic.h>
++#include <linux/uaccess.h>
++#include <linux/slab.h>
++#include <linux/sched.h>
++
++/* the file system name */
++#define WRAPFS_NAME "wrapfs"
++
++/* wrapfs root inode number */
++#define WRAPFS_ROOT_INO     1
++
++/* useful for tracking code reachability */
++#define UDBG printk(KERN_DEFAULT "DBG:%s:%s:%d\n", __FILE__, __func__, __LINE__)
++
++/* operations vectors defined in specific files */
++extern const struct file_operations wrapfs_main_fops;
++extern const struct file_operations wrapfs_dir_fops;
++extern const struct inode_operations wrapfs_main_iops;
++extern const struct inode_operations wrapfs_dir_iops;
++extern const struct inode_operations wrapfs_symlink_iops;
++extern const struct super_operations wrapfs_sops;
++extern const struct dentry_operations wrapfs_dops;
++extern const struct address_space_operations wrapfs_aops, wrapfs_dummy_aops;
++extern const struct vm_operations_struct wrapfs_vm_ops;
++
++extern int wrapfs_init_inode_cache(void);
++extern void wrapfs_destroy_inode_cache(void);
++extern int wrapfs_init_dentry_cache(void);
++extern void wrapfs_destroy_dentry_cache(void);
++extern int new_dentry_private_data(struct dentry *dentry);
++extern void free_dentry_private_data(struct dentry *dentry);
++extern int init_lower_nd(struct nameidata *nd, unsigned int flags);
++extern struct dentry *wrapfs_lookup(struct inode *dir, struct dentry *dentry,
++				    unsigned int flags);
++extern struct inode *wrapfs_iget(struct super_block *sb,
++				 struct inode *lower_inode);
++extern int wrapfs_interpose(struct dentry *dentry, struct super_block *sb,
++			    struct path *lower_path);
++
++/* file private data */
++struct wrapfs_file_info {
++	struct file *lower_file;
++	const struct vm_operations_struct *lower_vm_ops;
++};
++
++/* wrapfs inode data in memory */
++struct wrapfs_inode_info {
++	struct inode *lower_inode;
++	struct inode vfs_inode;
++};
++
++/* wrapfs dentry data in memory */
++struct wrapfs_dentry_info {
++	spinlock_t lock;	/* protects lower_path */
++	struct path lower_path;
++};
++
++/* wrapfs super-block data in memory */
++struct wrapfs_sb_info {
++	struct super_block *lower_sb;
++};
++
++/*
++ * inode to private data
++ *
++ * Since we use containers and the struct inode is _inside_ the
++ * wrapfs_inode_info structure, WRAPFS_I will always (given a non-NULL
++ * inode pointer), return a valid non-NULL pointer.
++ */
++static inline struct wrapfs_inode_info *WRAPFS_I(const struct inode *inode)
++{
++	return container_of(inode, struct wrapfs_inode_info, vfs_inode);
++}
++
++/* dentry to private data */
++#define WRAPFS_D(dent) ((struct wrapfs_dentry_info *)(dent)->d_fsdata)
++
++/* superblock to private data */
++#define WRAPFS_SB(super) ((struct wrapfs_sb_info *)(super)->s_fs_info)
++
++/* file to private Data */
++#define WRAPFS_F(file) ((struct wrapfs_file_info *)((file)->private_data))
++
++/* file to lower file */
++static inline struct file *wrapfs_lower_file(const struct file *f)
++{
++	return WRAPFS_F(f)->lower_file;
++}
++
++static inline void wrapfs_set_lower_file(struct file *f, struct file *val)
++{
++	WRAPFS_F(f)->lower_file = val;
++}
++
++/* inode to lower inode. */
++static inline struct inode *wrapfs_lower_inode(const struct inode *i)
++{
++	return WRAPFS_I(i)->lower_inode;
++}
++
++static inline void wrapfs_set_lower_inode(struct inode *i, struct inode *val)
++{
++	WRAPFS_I(i)->lower_inode = val;
++}
++
++/* superblock to lower superblock */
++static inline struct super_block *wrapfs_lower_super(
++	const struct super_block *sb)
++{
++	return WRAPFS_SB(sb)->lower_sb;
++}
++
++static inline void wrapfs_set_lower_super(struct super_block *sb,
++					  struct super_block *val)
++{
++	WRAPFS_SB(sb)->lower_sb = val;
++}
++
++/* path based (dentry/mnt) macros */
++static inline void pathcpy(struct path *dst, const struct path *src)
++{
++	dst->dentry = src->dentry;
++	dst->mnt = src->mnt;
++}
++/* Returns struct path.  Caller must path_put it. */
++static inline void wrapfs_get_lower_path(const struct dentry *dent,
++					 struct path *lower_path)
++{
++	spin_lock(&WRAPFS_D(dent)->lock);
++	pathcpy(lower_path, &WRAPFS_D(dent)->lower_path);
++	path_get(lower_path);
++	spin_unlock(&WRAPFS_D(dent)->lock);
++	return;
++}
++static inline void wrapfs_put_lower_path(const struct dentry *dent,
++					 struct path *lower_path)
++{
++	path_put(lower_path);
++	return;
++}
++static inline void wrapfs_set_lower_path(const struct dentry *dent,
++					 struct path *lower_path)
++{
++	spin_lock(&WRAPFS_D(dent)->lock);
++	pathcpy(&WRAPFS_D(dent)->lower_path, lower_path);
++	spin_unlock(&WRAPFS_D(dent)->lock);
++	return;
++}
++static inline void wrapfs_reset_lower_path(const struct dentry *dent)
++{
++	spin_lock(&WRAPFS_D(dent)->lock);
++	WRAPFS_D(dent)->lower_path.dentry = NULL;
++	WRAPFS_D(dent)->lower_path.mnt = NULL;
++	spin_unlock(&WRAPFS_D(dent)->lock);
++	return;
++}
++static inline void wrapfs_put_reset_lower_path(const struct dentry *dent)
++{
++	struct path lower_path;
++	spin_lock(&WRAPFS_D(dent)->lock);
++	pathcpy(&lower_path, &WRAPFS_D(dent)->lower_path);
++	WRAPFS_D(dent)->lower_path.dentry = NULL;
++	WRAPFS_D(dent)->lower_path.mnt = NULL;
++	spin_unlock(&WRAPFS_D(dent)->lock);
++	path_put(&lower_path);
++	return;
++}
++
++/* locking helpers */
++static inline struct dentry *lock_parent(struct dentry *dentry)
++{
++	struct dentry *dir = dget_parent(dentry);
++	mutex_lock_nested(&dir->d_inode->i_mutex, I_MUTEX_PARENT);
++	return dir;
++}
++
++static inline void unlock_dir(struct dentry *dir)
++{
++	mutex_unlock(&dir->d_inode->i_mutex);
++	dput(dir);
++}
++#endif	/* not _WRAPFS_H_ */
+diff --git a/include/uapi/linux/magic.h b/include/uapi/linux/magic.h
+index fc9697a7668..70d8dcec09f 100644
+--- a/include/uapi/linux/magic.h
++++ b/include/uapi/linux/magic.h
+@@ -54,6 +54,8 @@
+ 
+ #define SDCARDFS_SUPER_MAGIC	0x5dca2df5
+ 
++#define WRAPFS_SUPER_MAGIC	0xb550ca10
++
+ #define SMB_SUPER_MAGIC		0x517B
+ #define CGROUP_SUPER_MAGIC	0x27e0eb
+ 
+-- 
+2.11.0
+

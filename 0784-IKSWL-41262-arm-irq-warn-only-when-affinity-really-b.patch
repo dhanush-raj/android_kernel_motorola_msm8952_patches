@@ -1,0 +1,68 @@
+From d27ddf87490811d9d41db14f6412a65c4e592a61 Mon Sep 17 00:00:00 2001
+From: Peng Liu <a22543@motorola.com>
+Date: Mon, 8 Jun 2015 17:52:57 -0500
+Subject: [PATCH 784/959] IKSWL-41262: arm: irq: warn only when affinity really
+ breaks
+
+Following change causes unnecessary warnings printed for those IRQ's
+which are affine to several CPU's when one of these CPU's is taken off
+line. It shouldn't be considered a broken affinity when one online
+CPU can satisfy the IRQ's affinity preference.
+
+commit 0410136f260e3e580c556f0e8b9b66cad7a67449
+Author: Praveen Chidambaram <pchidamb@codeaurora.org>
+Date:   Mon Jun 23 08:58:08 2014 -0600
+
+arm: irq: Notify affinity change when migrating IRQs during hotplug
+
+Hotplug causes IRQs affine to a core that is being taken down to migrate
+to an online core. This is done by directly calling the irq_set_affinity
+associated with the irq_chip structure. Instead using the
+irq_set_affinity() api lets the notifications bubble through.
+
+Change-Id: Id4ab4e751f647cbe07ab159f371a5ef94db988cf
+Signed-off-by: Peng Liu <a22543@motorola.com>
+Reviewed-on: http://gerrit.mot.com/755421
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Lian-Wei Wang <lian-wei.wang@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/832118
+---
+ arch/arm/kernel/irq.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/kernel/irq.c b/arch/arm/kernel/irq.c
+index 8d3bda9b1d4..01b02c5f45b 100644
+--- a/arch/arm/kernel/irq.c
++++ b/arch/arm/kernel/irq.c
+@@ -145,6 +145,7 @@ static bool migrate_one_irq(struct irq_desc *desc)
+ {
+ 	struct irq_data *d = irq_desc_get_irq_data(desc);
+ 	const struct cpumask *affinity = d->affinity;
++	bool ret = false;
+ 
+ 	/*
+ 	 * If this is a per-CPU interrupt, or the affinity does not
+@@ -153,10 +154,14 @@ static bool migrate_one_irq(struct irq_desc *desc)
+ 	if (irqd_is_per_cpu(d) || !cpumask_test_cpu(smp_processor_id(), affinity))
+ 		return false;
+ 
+-	if (cpumask_any_and(affinity, cpu_online_mask) >= nr_cpu_ids)
++	if (cpumask_any_and(affinity, cpu_online_mask) >= nr_cpu_ids) {
+ 		affinity = cpu_online_mask;
++		ret = true;
++	}
++
++	irq_set_affinity_locked(d, affinity, false);
+ 
+-	return irq_set_affinity_locked(d, affinity, false) == IRQ_SET_MASK_OK;
++	return ret;
+ }
+ 
+ /*
+-- 
+2.11.0
+

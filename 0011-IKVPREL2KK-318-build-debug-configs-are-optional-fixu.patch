@@ -1,0 +1,43 @@
+From 64f58ab356a8bd4f616f8f631f85c0352290a4c8 Mon Sep 17 00:00:00 2001
+From: Chris Fries <C.Fries@motorola.com>
+Date: Tue, 17 Dec 2013 20:48:53 -0600
+Subject: [PATCH 011/959] IKVPREL2KK-318 build: debug configs are optional
+ (fixup)
+
+Only include debug defconfig if it exists.
+
+Change-Id: Id771d498909bc90cd85421528a01af09c8701af9
+Signed-off-by: Chris Fries <C.Fries@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/590188
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Reviewed-by: Christopher Fries <c.fries@motorola.com>
+SLTApproved: Christopher Fries <c.fries@motorola.com>
+Submit-Approved: Christopher Fries <c.fries@motorola.com>
+Tested-by: Christopher Fries <c.fries@motorola.com>
+(cherry picked from commit 2dd14264f881ce8a8ecf6c5dfc2c208236140046)
+---
+ defconfig.mk | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/defconfig.mk b/defconfig.mk
+index ab031fdecaa..77cc0911018 100644
+--- a/defconfig.mk
++++ b/defconfig.mk
+@@ -2,10 +2,13 @@ DEFCONFIGSRC			:= kernel/arch/arm/configs
+ LJAPDEFCONFIGSRC		:= ${DEFCONFIGSRC}/ext_config
+ PRODUCT_SPECIFIC_DEFCONFIGS	:= $(DEFCONFIGSRC)/$(KERNEL_DEFCONFIG)
+ TARGET_DEFCONFIG		:= $(KERNEL_OUT)/mapphone_defconfig
++KERNEL_DEBUG_DEFCONFIG          := $(LJAPDEFCONFIGSRC)/debug-$(subst _defconfig,,$(KERNEL_DEFCONFIG)).config
+ 
+ # add debug config file for non-user build
+ ifneq ($(TARGET_BUILD_VARIANT), user)
+-KERNEL_EXTRA_CONFIG +=debug-$(subst _defconfig,,$(KERNEL_DEFCONFIG))
++ifneq ($(wildcard $(KERNEL_DEBUG_DEFCONFIG)),)
++PRODUCT_SPECIFIC_DEFCONFIGS += $(KERNEL_DEBUG_DEFCONFIG)
++endif
+ endif
+ 
+ # append all additional configs
+-- 
+2.11.0
+

@@ -1,0 +1,56 @@
+From ed6ec8a01350b6216324f5734679872371568148 Mon Sep 17 00:00:00 2001
+From: caoyi1 <caoyi1@lenovo.com>
+Date: Wed, 13 Jan 2016 11:04:08 +0800
+Subject: [PATCH 616/959] IKSWM-16345:input misc epl8802,parameter change
+
+report near(10mm) and far(100mm)
+
+Change-Id: Iae92222d7d6a65d7ae1e13d8fd6022c44291a342
+Signed-off-by: caoyi1 <caoyi1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/812808
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/epl8802.c | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/input/misc/epl8802.c b/drivers/input/misc/epl8802.c
+index 2b4141dbe6b..67cc341609c 100644
+--- a/drivers/input/misc/epl8802.c
++++ b/drivers/input/misc/epl8802.c
+@@ -506,10 +506,18 @@ static void epl_sensor_report_ps_status(void)
+ {
+ 	struct epl_sensor_priv *epld = epl_sensor_obj;
+ 	ktime_t	timestamp;
++	int distance;
+ 	timestamp = ktime_get();
+ 	LOG_INFO("epl_sensor.ps.data.data=%d, value=%d\n", epl_sensor.ps.data.data, epl_sensor.ps.compare_low >> 3);
+ 
+-	input_report_abs(epld->ps_input_dev, ABS_DISTANCE, epl_sensor.ps.compare_low >> 3);
++	if (epl_sensor.ps.compare_low >> 3 == 0)
++		distance = 10;
++	else if (epl_sensor.ps.compare_low >> 3 == 1)
++		distance = 100;
++	else
++		distance = -1;
++
++	input_report_abs(epld->ps_input_dev, ABS_DISTANCE, distance);
+ 	input_event(epld->ps_input_dev, EV_SYN, SYN_TIME_SEC, ktime_to_timespec(timestamp).tv_sec);
+ 	input_event(epld->ps_input_dev, EV_SYN, SYN_TIME_NSEC, ktime_to_timespec(timestamp).tv_nsec);
+ 	input_sync(epld->ps_input_dev);
+@@ -3200,7 +3208,7 @@ static int epl_sensor_setup_psensor(struct epl_sensor_priv *epld)
+     epld->ps_input_dev->name = ElanPsensorName;
+ 
+     set_bit(EV_ABS, epld->ps_input_dev->evbit);
+-    input_set_abs_params(epld->ps_input_dev, ABS_DISTANCE, 0, 1, 0, 0);
++	input_set_abs_params(epld->ps_input_dev, ABS_DISTANCE, 0, 100, 0, 0);
+ #if SPREAD
+     set_bit(EV_ABS, epld->ps_input_dev->evbit);
+     input_set_abs_params(epld->ps_input_dev, ABS_MISC, 0, 9, 0, 0);
+-- 
+2.11.0
+

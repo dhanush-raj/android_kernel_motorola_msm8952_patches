@@ -1,0 +1,43 @@
+From 7c0b25158637ca588778a72e78730e711ee3da1e Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Mon, 2 Nov 2015 14:35:24 -0600
+Subject: [PATCH 439/959] IKLOCSEN-2438 dts: Set the physical orientation for
+ the BMI160
+
+Set the hardware part orientation for the BMI160 accel/gyro
+part to match the physical pert on the athene P1 boards.
+
+Change-Id: I3f2b101e6cf084609800d1f032655b5416c8a5e3
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/796575
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Gabriel Burca <Gabriel.Burca@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 780ffd54ff7..a2eb0f11d39 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -454,9 +454,9 @@
+ 			headset_button_4_keycode = <0x72>;  /* KEY_VOLUMEDOWN   */
+ 			cover_detect_polarity = <1>;
+ 			reset_hw_type = <1>;
+-			accel_orientation_1 = <5>;	/* Accel 1  Orientation value */
+-			accel_orientation_2 = <5>;	/* Accel 2  Orientation value */
+-			accel_swap = <1>;		/* The accel parts are swapped left/right */
++			accel_orientation_1 = <4>; /* Accel Orientation value */
++			accel_orientation_2 = <1>; /* Not used */
++			accel_swap = <0>;          /* Not used */
+ 			sensor1-supply = <&pm8950_l6>;
+ 			sensor2-supply = <&pm8950_l17>;
+ 
+-- 
+2.11.0
+

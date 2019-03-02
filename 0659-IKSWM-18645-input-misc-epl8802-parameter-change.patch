@@ -1,0 +1,47 @@
+From c75d360cc3c290db61828e5051ffa32b92837a1d Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Thu, 28 Jan 2016 11:29:20 -0600
+Subject: [PATCH 659/959] IKSWM-18645: input misc epl8802,parameter change
+
+near 1cm, far 10cm, in cm unit
+
+Change-Id: I8a7580e0f85d1f85617c9830ca02bcc0a42b74c0
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/816970
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/epl8802.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/input/misc/epl8802.c b/drivers/input/misc/epl8802.c
+index 67cc341609c..619ddf890d5 100644
+--- a/drivers/input/misc/epl8802.c
++++ b/drivers/input/misc/epl8802.c
+@@ -511,9 +511,9 @@ static void epl_sensor_report_ps_status(void)
+ 	LOG_INFO("epl_sensor.ps.data.data=%d, value=%d\n", epl_sensor.ps.data.data, epl_sensor.ps.compare_low >> 3);
+ 
+ 	if (epl_sensor.ps.compare_low >> 3 == 0)
+-		distance = 10;
++		distance = 1;
+ 	else if (epl_sensor.ps.compare_low >> 3 == 1)
+-		distance = 100;
++		distance = 10;
+ 	else
+ 		distance = -1;
+ 
+@@ -3208,7 +3208,7 @@ static int epl_sensor_setup_psensor(struct epl_sensor_priv *epld)
+     epld->ps_input_dev->name = ElanPsensorName;
+ 
+     set_bit(EV_ABS, epld->ps_input_dev->evbit);
+-	input_set_abs_params(epld->ps_input_dev, ABS_DISTANCE, 0, 100, 0, 0);
++	input_set_abs_params(epld->ps_input_dev, ABS_DISTANCE, 0, 10, 0, 0);
+ #if SPREAD
+     set_bit(EV_ABS, epld->ps_input_dev->evbit);
+     input_set_abs_params(epld->ps_input_dev, ABS_MISC, 0, 9, 0, 0);
+-- 
+2.11.0
+

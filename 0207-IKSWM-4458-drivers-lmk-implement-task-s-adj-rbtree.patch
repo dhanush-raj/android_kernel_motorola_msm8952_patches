@@ -1,0 +1,217 @@
+From 21ab43f25b21394606dad26aa41eb825b77fa00c Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Fri, 6 Mar 2015 16:09:08 -0600
+Subject: [PATCH 207/959] IKSWM-4458 drivers:lmk: implement task's adj rbtree
+
+Based on the current LMK implementation, LMK has to
+scan all processes to select the correct task to kill
+during low memory.
+
+The basic idea for the optimization is to : queue all
+tasks with oom_score_adj priority, and then LMK just
+selects the proper task from the queue(rbtree) to kill.
+
+performance improvement:
+current: average time to find a task to kill : 1004us
+optimized: average time to find a task to kill: 43us
+
+Change-Id: I370263496f24f061db8e413f67dc5b882e0faf5c
+---
+ drivers/staging/android/Kconfig           |   8 +++
+ drivers/staging/android/lowmemorykiller.c | 100 ++++++++++++++++++++++++++++++
+ include/linux/sched.h                     |  11 ++++
+ 3 files changed, 119 insertions(+)
+
+diff --git a/drivers/staging/android/Kconfig b/drivers/staging/android/Kconfig
+index b5b181789de..ab33d5a5e51 100644
+--- a/drivers/staging/android/Kconfig
++++ b/drivers/staging/android/Kconfig
+@@ -44,6 +44,14 @@ config ANDROID_LOW_MEMORY_KILLER_AUTODETECT_OOM_ADJ_VALUES
+ 	  /sys/module/lowmemorykiller/parameters/adj and convert them
+ 	  to oom_score_adj values.
+ 
++config ANDROID_LMK_ADJ_RBTREE
++	bool "Use RBTREE for Android Low Memory Killer"
++	depends on ANDROID_LOW_MEMORY_KILLER
++	default N
++	---help---
++	    Use oom_score_adj rbtree to select the best proecss to kill
++	    when system in low memory status.
++
+ config SYNC
+ 	bool "Synchronization framework"
+ 	default n
+diff --git a/drivers/staging/android/lowmemorykiller.c b/drivers/staging/android/lowmemorykiller.c
+index 748a8edff7b..99583b8080d 100644
+--- a/drivers/staging/android/lowmemorykiller.c
++++ b/drivers/staging/android/lowmemorykiller.c
+@@ -399,6 +399,12 @@ void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc,
+ 	}
+ }
+ 
++#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
++static struct task_struct *pick_next_from_adj_tree(struct task_struct *task);
++static struct task_struct *pick_first_task(void);
++static struct task_struct *pick_last_task(void);
++#endif
++
+ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ {
+ 	struct task_struct *tsk;
+@@ -473,7 +479,13 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 	selected_oom_score_adj = min_score_adj;
+ 
+ 	rcu_read_lock();
++#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
++	for (tsk = pick_first_task();
++		tsk != pick_last_task();
++		tsk = pick_next_from_adj_tree(tsk)) {
++#else
+ 	for_each_process(tsk) {
++#endif
+ 		struct task_struct *p;
+ 		short oom_score_adj;
+ 
+@@ -501,7 +513,11 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 		oom_score_adj = p->signal->oom_score_adj;
+ 		if (oom_score_adj < min_score_adj) {
+ 			task_unlock(p);
++#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
++			break;
++#else
+ 			continue;
++#endif
+ 		}
+ 		tasksize = get_mm_rss(p->mm);
+ 		task_unlock(p);
+@@ -509,7 +525,11 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 			continue;
+ 		if (selected) {
+ 			if (oom_score_adj < selected_oom_score_adj)
++#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
++				break;
++#else
+ 				continue;
++#endif
+ 			if (oom_score_adj == selected_oom_score_adj &&
+ 			    tasksize <= selected_tasksize)
+ 				continue;
+@@ -700,6 +720,86 @@ static const struct kparam_array __param_arr_adj = {
+ };
+ #endif
+ 
++#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
++DEFINE_SPINLOCK(lmk_lock);
++struct rb_root tasks_scoreadj = RB_ROOT;
++void add_2_adj_tree(struct task_struct *task)
++{
++	struct rb_node **link;
++	struct rb_node *parent = NULL;
++	struct task_struct *task_entry;
++	s64 key = task->signal->oom_score_adj;
++
++	/*
++	 * Find the right place in the rbtree:
++	 */
++	spin_lock(&lmk_lock);
++	link =  &tasks_scoreadj.rb_node;
++	while (*link) {
++		parent = *link;
++		task_entry = rb_entry(parent, struct task_struct, adj_node);
++
++		if (key < task_entry->signal->oom_score_adj)
++			link = &parent->rb_right;
++		else
++			link = &parent->rb_left;
++	}
++
++	rb_link_node(&task->adj_node, parent, link);
++	rb_insert_color(&task->adj_node, &tasks_scoreadj);
++	spin_unlock(&lmk_lock);
++}
++
++void delete_from_adj_tree(struct task_struct *task)
++{
++	spin_lock(&lmk_lock);
++	rb_erase(&task->adj_node, &tasks_scoreadj);
++	spin_unlock(&lmk_lock);
++}
++
++static struct task_struct *pick_next_from_adj_tree(struct task_struct *task)
++{
++	struct rb_node *next;
++
++	spin_lock(&lmk_lock);
++	next = rb_next(&task->adj_node);
++	spin_unlock(&lmk_lock);
++
++	if (!next)
++		return NULL;
++
++	return rb_entry(next, struct task_struct, adj_node);
++}
++
++static struct task_struct *pick_first_task(void)
++{
++	struct rb_node *left;
++
++	spin_lock(&lmk_lock);
++	left = rb_first(&tasks_scoreadj);
++	spin_unlock(&lmk_lock);
++
++	if (!left)
++		return NULL;
++
++	return rb_entry(left, struct task_struct, adj_node);
++}
++static struct task_struct *pick_last_task(void)
++{
++	struct rb_node *right;
++
++	spin_lock(&lmk_lock);
++	right = rb_last(&tasks_scoreadj);
++	spin_unlock(&lmk_lock);
++
++	if (!right)
++		return NULL;
++
++	return rb_entry(right, struct task_struct, adj_node);
++}
++#endif
++
++
+ module_param_named(cost, lowmem_shrinker.seeks, int, S_IRUGO | S_IWUSR);
+ #ifdef CONFIG_ANDROID_LOW_MEMORY_KILLER_AUTODETECT_OOM_ADJ_VALUES
+ __module_param_call(MODULE_PARAM_PREFIX, adj,
+diff --git a/include/linux/sched.h b/include/linux/sched.h
+index 16e776eff21..3bd9a849b31 100644
+--- a/include/linux/sched.h
++++ b/include/linux/sched.h
+@@ -1271,6 +1271,9 @@ struct task_struct {
+ #endif
+ 
+ 	struct list_head tasks;
++#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
++	struct rb_node adj_node;
++#endif
+ #ifdef CONFIG_SMP
+ 	struct plist_node pushable_tasks;
+ 	struct rb_node pushable_dl_tasks;
+@@ -1636,6 +1639,14 @@ static inline struct pid *task_tgid(struct task_struct *task)
+ 	return task->group_leader->pids[PIDTYPE_PID].pid;
+ }
+ 
++#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
++extern void add_2_adj_tree(struct task_struct *task);
++extern void delete_from_adj_tree(struct task_struct *task);
++#else
++static inline void add_2_adj_tree(struct task_struct *task) { }
++static inline void delete_from_adj_tree(struct task_struct *task) { }
++#endif
++
+ /*
+  * Without tasklist or rcu lock it is not safe to dereference
+  * the result of task_pgrp/task_session even if task == current,
+-- 
+2.11.0
+

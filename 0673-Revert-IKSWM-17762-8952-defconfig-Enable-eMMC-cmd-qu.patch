@@ -1,0 +1,37 @@
+From d52ea3d87b1ed60f1e2ffecf1058005c973530c7 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Thu, 4 Feb 2016 11:20:14 -0800
+Subject: [PATCH 673/959] Revert "IKSWM-17762  8952/defconfig: Enable eMMC cmd
+ queue"
+
+ CMDQ is not working well with DISCARD/ERASE cmds.
+ Disable the CMDQ mode till we fix it.
+
+Change-Id: Ie41161e49f7815773459a63fd4807dc82283c460
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/818844
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index c8e17e5db08..22ae77c1a57 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -60,7 +60,7 @@ CONFIG_SUSPEND_DEBUG=y
+ CONFIG_ALSA_TO_H2W=y
+ CONFIG_ESD_FS=y
+ CONFIG_SEC_DRIVER=y
+-CONFIG_MMC_CQ_HCI=y
++# CONFIG_MMC_CQ_HCI is not set
+ CONFIG_CRYPTO_SHA256_ARM=y
+ CONFIG_KERNEL_MODE_NEON=y
+ CONFIG_CRYPTO_AES_ARM_BS=y
+-- 
+2.11.0
+

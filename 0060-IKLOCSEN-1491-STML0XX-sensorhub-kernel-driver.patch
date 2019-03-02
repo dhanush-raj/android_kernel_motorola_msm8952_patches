@@ -1,0 +1,4795 @@
+From 220f0f2960eac17467fa0ee68f6fb9e729e3a0e1 Mon Sep 17 00:00:00 2001
+From: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Date: Mon, 9 Jun 2014 11:26:59 -0500
+Subject: [PATCH 060/959] IKLOCSEN-1491 STML0XX sensorhub kernel driver
+
+This kernel driver communicates with the STML0XX
+sensorhub over SPI to support various sensors and
+sensor fusion algorithms.
+
+Change-Id: Ifb6a4dc406251c1467f4a5cc95bc6ffea21cd694
+Signed-off-by: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Reviewed-on: http://gerrit.mot.com/643275
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+
+Conflicts:
+	drivers/misc/Makefile
+---
+ drivers/misc/Kconfig                    |    1 +
+ drivers/misc/Makefile                   |    1 +
+ drivers/misc/stml0xx/Kconfig            |    7 +
+ drivers/misc/stml0xx/Makefile           |   10 +
+ drivers/misc/stml0xx/stml0xx_core.c     | 1046 +++++++++++++++++++++++++++++++
+ drivers/misc/stml0xx/stml0xx_flash.c    |  596 ++++++++++++++++++
+ drivers/misc/stml0xx/stml0xx_ioctl.c    |  590 +++++++++++++++++
+ drivers/misc/stml0xx/stml0xx_irq.c      |  328 ++++++++++
+ drivers/misc/stml0xx/stml0xx_queue.c    |  273 ++++++++
+ drivers/misc/stml0xx/stml0xx_reset.c    |  154 +++++
+ drivers/misc/stml0xx/stml0xx_spi.c      |  414 ++++++++++++
+ drivers/misc/stml0xx/stml0xx_spi_crc.c  |  122 ++++
+ drivers/misc/stml0xx/stml0xx_wake_irq.c |  395 ++++++++++++
+ include/linux/stml0xx.h                 |  718 +++++++++++++++++++++
+ 14 files changed, 4655 insertions(+)
+ create mode 100644 drivers/misc/stml0xx/Kconfig
+ create mode 100644 drivers/misc/stml0xx/Makefile
+ create mode 100644 drivers/misc/stml0xx/stml0xx_core.c
+ create mode 100644 drivers/misc/stml0xx/stml0xx_flash.c
+ create mode 100644 drivers/misc/stml0xx/stml0xx_ioctl.c
+ create mode 100644 drivers/misc/stml0xx/stml0xx_irq.c
+ create mode 100644 drivers/misc/stml0xx/stml0xx_queue.c
+ create mode 100644 drivers/misc/stml0xx/stml0xx_reset.c
+ create mode 100644 drivers/misc/stml0xx/stml0xx_spi.c
+ create mode 100644 drivers/misc/stml0xx/stml0xx_spi_crc.c
+ create mode 100644 drivers/misc/stml0xx/stml0xx_wake_irq.c
+ create mode 100644 include/linux/stml0xx.h
+
+diff --git a/drivers/misc/Kconfig b/drivers/misc/Kconfig
+index 4f949168f9c..47eda740514 100644
+--- a/drivers/misc/Kconfig
++++ b/drivers/misc/Kconfig
+@@ -667,4 +667,5 @@ source "drivers/misc/altera-stapl/Kconfig"
+ source "drivers/misc/mei/Kconfig"
+ source "drivers/misc/vmw_vmci/Kconfig"
+ source "drivers/misc/qcom/Kconfig"
++source "drivers/misc/stml0xx/Kconfig"
+ endmenu
+diff --git a/drivers/misc/Makefile b/drivers/misc/Makefile
+index ca6c3cfa697..1f5275c2970 100644
+--- a/drivers/misc/Makefile
++++ b/drivers/misc/Makefile
+@@ -71,3 +71,4 @@ obj-$(CONFIG_USB_EXT_TYPE_C_PERICOM)	+= type-c-pericom.o
+ obj-$(CONFIG_USB_EXT_TYPE_C_TI)		+= type-c-ti.o
+ obj-$(CONFIG_UID_SYS_STATS) += uid_sys_stats.o
+ obj-$(CONFIG_MOT_UTAG) += utag/
++obj-$(CONFIG_SENSORS_STML0XX) += stml0xx/
+diff --git a/drivers/misc/stml0xx/Kconfig b/drivers/misc/stml0xx/Kconfig
+new file mode 100644
+index 00000000000..caaff764f94
+--- /dev/null
++++ b/drivers/misc/stml0xx/Kconfig
+@@ -0,0 +1,7 @@
++config SENSORS_STML0XX
++	tristate "STML0XX Sensor Processor"
++	default n
++	depends on SPI
++	help
++	  Say yes here if you wish to include the STM
++	  STML0XX Sensor processor driver.
+diff --git a/drivers/misc/stml0xx/Makefile b/drivers/misc/stml0xx/Makefile
+new file mode 100644
+index 00000000000..a206152fc1d
+--- /dev/null
++++ b/drivers/misc/stml0xx/Makefile
+@@ -0,0 +1,10 @@
++stml0xx-objs := stml0xx_core.o \
++		stml0xx_flash.o \
++		stml0xx_ioctl.o \
++		stml0xx_irq.o \
++		stml0xx_queue.o \
++		stml0xx_reset.o \
++		stml0xx_wake_irq.o \
++		stml0xx_spi.o \
++		stml0xx_spi_crc.o
++obj-$(CONFIG_SENSORS_STML0XX) += stml0xx.o
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+new file mode 100644
+index 00000000000..54d689372b0
+--- /dev/null
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -0,0 +1,1046 @@
++/*
++ * Copyright (C) 2010-2014 Motorola Mobility LLC
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++ * 02111-1307, USA
++ */
++
++#include <linux/cdev.h>
++#include <linux/delay.h>
++#include <linux/dma-mapping.h>
++#include <linux/err.h>
++#include <linux/errno.h>
++#include <linux/export.h>
++#include <linux/of.h>
++#include <linux/of_gpio.h>
++#include <linux/fs.h>
++#include <linux/gpio.h>
++#include <linux/input.h>
++#include <linux/input-polldev.h>
++#include <linux/interrupt.h>
++#include <linux/irq.h>
++#include <linux/miscdevice.h>
++#include <linux/module.h>
++#include <linux/poll.h>
++#include <linux/regulator/consumer.h>
++#include <linux/slab.h>
++#include <linux/switch.h>
++#include <linux/time.h>
++#include <linux/uaccess.h>
++#include <linux/wakelock.h>
++#include <linux/workqueue.h>
++
++#include <linux/stml0xx.h>
++
++#define NAME                "stml0xx"
++
++#define STML0XX_DELAY_USEC	10
++#define G_MAX				0x7FFF
++
++#define STML0XX_BUSY_SLEEP_USEC    10000
++#define STML0XX_BUSY_RESUME_COUNT  14
++#define STML0XX_BUSY_SUSPEND_COUNT 6
++#define STML0XX_SPI_FAIL_LIMIT     10
++
++long stml0xx_time_delta;
++unsigned int stml0xx_irq_disable;
++module_param_named(irq_disable, stml0xx_irq_disable, uint, 0644);
++
++unsigned short stml0xx_spi_retry_delay = 10;
++
++/* Remember the sensor state */
++unsigned short stml0xx_g_acc_delay;
++unsigned short stml0xx_g_mag_delay;
++unsigned short stml0xx_g_gyro_delay;
++unsigned short stml0xx_g_baro_delay;
++unsigned short stml0xx_g_step_counter_delay;
++unsigned short stml0xx_g_ir_gesture_delay;
++unsigned short stml0xx_g_ir_raw_delay;
++unsigned long stml0xx_g_nonwake_sensor_state;
++unsigned short stml0xx_g_wake_sensor_state;
++unsigned short stml0xx_g_algo_state;
++unsigned char stml0xx_g_motion_dur;
++unsigned char stml0xx_g_zmotion_dur;
++unsigned char stml0xx_g_control_reg[STML0XX_CONTROL_REG_SIZE];
++unsigned char stml0xx_g_mag_cal[STML0XX_MAG_CAL_SIZE];
++unsigned short stml0xx_g_control_reg_restore;
++unsigned char stml0xx_g_ir_config_reg[STML0XX_IR_CONFIG_REG_SIZE];
++bool stml0xx_g_ir_config_reg_restore;
++bool stml0xx_g_booted;
++
++/* Store error message */
++unsigned char stat_string[ESR_SIZE + 1];
++
++struct stml0xx_algo_requst_t stml0xx_g_algo_requst[STML0XX_NUM_ALGOS];
++
++unsigned char *stml0xx_cmdbuff;
++unsigned char *stml0xx_readbuff;
++
++/* per algo config, request, and event registers */
++const struct stml0xx_algo_info_t stml0xx_algo_info[STML0XX_NUM_ALGOS] = {
++	{M_ALGO_MODALITY, ALGO_CFG_MODALITY, ALGO_REQ_MODALITY,
++	 ALGO_EVT_MODALITY, STML0XX_EVT_SZ_TRANSITION},
++	{M_ALGO_ORIENTATION, ALGO_CFG_ORIENTATION, ALGO_REQ_ORIENTATION,
++	 ALGO_EVT_ORIENTATION, STML0XX_EVT_SZ_TRANSITION},
++	{M_ALGO_STOWED, ALGO_CFG_STOWED, ALGO_REQ_STOWED,
++	 ALGO_EVT_STOWED, STML0XX_EVT_SZ_TRANSITION},
++	{M_ALGO_ACCUM_MODALITY, ALGO_CFG_ACCUM_MODALITY,
++	 ALGO_REQ_ACCUM_MODALITY, ALGO_EVT_ACCUM_MODALITY,
++	 STML0XX_EVT_SZ_ACCUM_STATE},
++	{M_ALGO_ACCUM_MVMT, ALGO_CFG_ACCUM_MVMT, ALGO_REQ_ACCUM_MVMT,
++	 ALGO_EVT_ACCUM_MVMT, STML0XX_EVT_SZ_ACCUM_MVMT}
++};
++
++struct stml0xx_data *stml0xx_misc_data;
++
++void stml0xx_wake(struct stml0xx_data *ps_stml0xx)
++{
++	if (ps_stml0xx != NULL && ps_stml0xx->pdata != NULL) {
++		if (!(ps_stml0xx->sh_lowpower_enabled))
++			return;
++
++		mutex_lock(&ps_stml0xx->sh_wakeup_lock);
++
++		if (ps_stml0xx->sh_wakeup_count == 0)
++			gpio_set_value(ps_stml0xx->pdata->gpio_sh_wake, 1);
++
++		ps_stml0xx->sh_wakeup_count++;
++
++		mutex_unlock(&ps_stml0xx->sh_wakeup_lock);
++	}
++}
++
++void stml0xx_sleep(struct stml0xx_data *ps_stml0xx)
++{
++	if (ps_stml0xx != NULL && ps_stml0xx->pdata != NULL) {
++		if (!(ps_stml0xx->sh_lowpower_enabled))
++			return;
++
++		mutex_lock(&ps_stml0xx->sh_wakeup_lock);
++
++		if (ps_stml0xx->sh_wakeup_count > 0) {
++			ps_stml0xx->sh_wakeup_count--;
++			if (ps_stml0xx->sh_wakeup_count == 0) {
++				gpio_set_value(ps_stml0xx->pdata->gpio_sh_wake,
++					       0);
++			}
++		} else {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"stml0xx_sleep called too many times: %d",
++				ps_stml0xx->sh_wakeup_count);
++		}
++
++		mutex_unlock(&ps_stml0xx->sh_wakeup_lock);
++	}
++}
++
++void stml0xx_detect_lowpower_mode(unsigned char *cmdbuff)
++{
++	int err;
++	uint8_t buf[2];
++
++	if (stml0xx_misc_data->pdata->gpio_sh_wake >= 0) {
++		mutex_lock(&stml0xx_misc_data->sh_wakeup_lock);
++
++		/* hold sensorhub awake, it might try to sleep
++		 * after we tell it the kernel supports low power */
++		gpio_set_value(stml0xx_misc_data->pdata->gpio_sh_wake, 1);
++
++		/* detect whether lowpower mode is supported */
++		err = stml0xx_spi_send_read_reg(LOWPOWER_REG, buf, 2);
++
++		if (err >= 0) {
++			if ((int)buf[1] == 1)
++				stml0xx_misc_data->sh_lowpower_enabled = 1;
++			else
++				stml0xx_misc_data->sh_lowpower_enabled = 0;
++
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"lowpower supported: %d",
++				stml0xx_misc_data->sh_lowpower_enabled);
++
++			if (stml0xx_misc_data->sh_lowpower_enabled) {
++				/* send back to the hub the kernel
++				 * supports low power mode */
++				cmdbuff[0] =
++				    stml0xx_misc_data->sh_lowpower_enabled;
++				err =
++				    stml0xx_spi_send_write_reg(LOWPOWER_REG,
++							       cmdbuff, 1);
++
++				if (err < 0) {
++					/* if we failed to let the sensorhub
++					 * know we support lowpower mode
++					 * disable it */
++					stml0xx_misc_data->sh_lowpower_enabled =
++					    0;
++				}
++			}
++		} else {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"error reading lowpower supported %d", err);
++			/* if we failed to read the sensorhub
++			 * disable lowpower mode */
++			stml0xx_misc_data->sh_lowpower_enabled = 0;
++		}
++
++		mutex_unlock(&stml0xx_misc_data->sh_wakeup_lock);
++	}
++}
++
++static int stml0xx_hw_init(struct stml0xx_data *ps_stml0xx)
++{
++	int err = 0;
++	dev_dbg(&ps_stml0xx->spi->dev, "stml0xx_hw_init");
++	ps_stml0xx->hw_initialized = 1;
++	return err;
++}
++
++static void stml0xx_device_power_off(struct stml0xx_data *ps_stml0xx)
++{
++	dev_dbg(&ps_stml0xx->spi->dev, "stml0xx_device_power_off");
++	if (ps_stml0xx->hw_initialized == 1) {
++		if (ps_stml0xx->pdata->power_off)
++			ps_stml0xx->pdata->power_off();
++		ps_stml0xx->hw_initialized = 0;
++	}
++}
++
++static int stml0xx_device_power_on(struct stml0xx_data *ps_stml0xx)
++{
++	int err = 0;
++	dev_dbg(&ps_stml0xx->spi->dev, "stml0xx_device_power_on");
++	if (ps_stml0xx->pdata->power_on) {
++		err = ps_stml0xx->pdata->power_on();
++		if (err < 0) {
++			dev_err(&ps_stml0xx->spi->dev,
++				"power_on failed: %d", err);
++			return err;
++		}
++	}
++	if (!ps_stml0xx->hw_initialized) {
++		err = stml0xx_hw_init(ps_stml0xx);
++		if (err < 0) {
++			stml0xx_device_power_off(ps_stml0xx);
++			return err;
++		}
++	}
++	return err;
++}
++
++static ssize_t dock_print_name(struct switch_dev *switch_dev, char *buf)
++{
++	switch (switch_get_state(switch_dev)) {
++	case NO_DOCK:
++		return snprintf(buf, 5, "None\n");
++	case DESK_DOCK:
++		return snprintf(buf, 5, "DESK\n");
++	case CAR_DOCK:
++		return snprintf(buf, 4, "CAR\n");
++	}
++
++	return -EINVAL;
++}
++
++int stml0xx_enable(void)
++{
++	int err = 0;
++
++	dev_dbg(&stml0xx_misc_data->spi->dev, "stml0xx_enable");
++	if (!atomic_cmpxchg(&stml0xx_misc_data->enabled, 0, 1)) {
++		err = stml0xx_device_power_on(stml0xx_misc_data);
++		if (err < 0) {
++			atomic_set(&stml0xx_misc_data->enabled, 0);
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"stml0xx_enable returned with %d", err);
++			return err;
++		}
++	}
++
++	return err;
++}
++
++struct miscdevice stml0xx_misc_device = {
++	.minor = MISC_DYNAMIC_MINOR,
++	.name = NAME,
++	.fops = &stml0xx_misc_fops,
++};
++
++#ifdef CONFIG_OF
++static struct stml0xx_platform_data *stml0xx_of_init(struct spi_device *spi)
++{
++	int len;
++	int lsize, bsize, index;
++	struct stml0xx_platform_data *pdata;
++	struct device_node *np = spi->dev.of_node;
++	unsigned int lux_table[LIGHTING_TABLE_SIZE];
++	unsigned int brightness_table[LIGHTING_TABLE_SIZE];
++	const char *name;
++
++	pdata = devm_kzalloc(&spi->dev, sizeof(*pdata), GFP_KERNEL);
++	if (!pdata) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"pdata allocation failure");
++		return NULL;
++	}
++
++	pdata->gpio_int = of_get_gpio(np, 0);
++	pdata->gpio_reset = of_get_gpio(np, 1);
++	pdata->gpio_bslen = of_get_gpio(np, 2);
++	pdata->gpio_wakeirq = of_get_gpio(np, 3);
++
++	if (of_gpio_count(np) >= 6) {
++		pdata->gpio_spi_ready_for_receive = of_get_gpio(np, 4);
++		pdata->gpio_spi_data_ack = of_get_gpio(np, 5);
++	} else {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"spi side band signals not defined");
++		return NULL;
++	}
++
++	if (of_gpio_count(np) >= 7) {
++		pdata->gpio_sh_wake = of_get_gpio(np, 6);
++		stml0xx_misc_data->sh_lowpower_enabled = 1;
++	} else {
++		pdata->gpio_sh_wake = -1;
++		stml0xx_misc_data->sh_lowpower_enabled = 0;
++	}
++
++	stml0xx_misc_data->sh_wakeup_count = 0;
++
++	if (of_get_property(np, "lux_table", &len) == NULL) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"lux_table len access failure");
++		return NULL;
++	}
++	lsize = len / sizeof(u32);
++	if ((lsize != 0) && (lsize < (LIGHTING_TABLE_SIZE - 1)) &&
++	    (!of_property_read_u32_array(np, "lux_table",
++					 (u32 *) (lux_table), lsize))) {
++		for (index = 0; index < lsize; index++)
++			pdata->lux_table[index] = ((u32 *) lux_table)[index];
++	} else {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Lux table is missing");
++		return NULL;
++	}
++	pdata->lux_table[lsize] = 0xFFFF;
++
++	if (of_get_property(np, "brightness_table", &len) == NULL) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Brightness_table len access failure");
++		return NULL;
++	}
++	bsize = len / sizeof(u32);
++	if ((bsize != 0) && (bsize < (LIGHTING_TABLE_SIZE)) &&
++	    !of_property_read_u32_array(np,
++					"brightness_table",
++					(u32 *) (brightness_table), bsize)) {
++
++		for (index = 0; index < bsize; index++) {
++			pdata->brightness_table[index]
++			    = ((u32 *) brightness_table)[index];
++		}
++	} else {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Brightness table is missing");
++		return NULL;
++	}
++
++	if ((lsize + 1) != bsize) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Lux and Brightness table sizes don't match");
++		return NULL;
++	}
++
++	of_property_read_u32(np, "bslen_pin_active_value",
++			     &pdata->bslen_pin_active_value);
++
++	of_get_property(np, "stml0xx_fw_version", &len);
++	if (!of_property_read_string(np, "stml0xx_fw_version", &name))
++		strlcpy(pdata->fw_version, name, FW_VERSION_SIZE);
++	else
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Not using stml0xx_fw_version override");
++
++	pdata->ct406_detect_threshold = 0x006E;
++	pdata->ct406_undetect_threshold = 0x0050;
++	pdata->ct406_recalibrate_threshold = 0x0064;
++	pdata->ct406_pulse_count = 0x04;
++	of_property_read_u32(np, "ct406_detect_threshold",
++			     &pdata->ct406_detect_threshold);
++	of_property_read_u32(np, "ct406_undetect_threshold",
++			     &pdata->ct406_undetect_threshold);
++	of_property_read_u32(np, "ct406_recalibrate_threshold",
++			     &pdata->ct406_recalibrate_threshold);
++	of_property_read_u32(np, "ct406_pulse_count",
++			     &pdata->ct406_pulse_count);
++
++	return pdata;
++}
++#else
++static inline struct stml0xx_platform_data *stml0xx_of_init(struct spi_device
++							    *spi)
++{
++	return NULL;
++}
++#endif
++
++static int stml0xx_gpio_init(struct stml0xx_platform_data *pdata,
++			     struct spi_device *pdev)
++{
++	int err;
++
++	err = gpio_request(pdata->gpio_int, "stml0xx int");
++	if (err) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"stml0xx int gpio_request failed: %d", err);
++		return err;
++	}
++	gpio_direction_input(pdata->gpio_int);
++	err = gpio_export(pdata->gpio_int, 0);
++	if (err) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"gpio_int gpio_export failed: %d", err);
++		goto free_int;
++	}
++	err = gpio_export_link(&pdev->dev, "gpio_irq", pdata->gpio_int);
++	if (err) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"gpio_irq gpio_export_link failed: %d", err);
++		goto free_int;
++	}
++
++	err = gpio_request(pdata->gpio_reset, "stml0xx reset");
++	if (err) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"stml0xx reset gpio_request failed: %d", err);
++		goto free_int;
++	}
++	gpio_direction_output(pdata->gpio_reset, 1);
++	gpio_set_value(pdata->gpio_reset, 1);
++	err = gpio_export(pdata->gpio_reset, 0);
++	if (err) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"reset gpio_export failed: %d", err);
++		goto free_reset;
++	}
++
++	err = gpio_request(pdata->gpio_bslen, "stml0xx bslen");
++	if (err) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"bslen gpio_request failed: %d", err);
++		goto free_reset;
++	}
++	gpio_direction_output(pdata->gpio_bslen, 0);
++	gpio_set_value(pdata->gpio_bslen, 0);
++	err = gpio_export(pdata->gpio_bslen, 0);
++	if (err) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"bslen gpio_export failed: %d", err);
++		goto free_bslen;
++	}
++
++	err = gpio_request(pdata->gpio_spi_ready_for_receive, "stml0xx rfr");
++	if (err) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"rfr gpio_request failed: %d", err);
++		goto free_bslen;
++	}
++	gpio_direction_input(pdata->gpio_spi_ready_for_receive);
++	err = gpio_export(pdata->gpio_spi_ready_for_receive, 0);
++	if (err) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"rfr gpio_export failed: %d", err);
++		goto free_rfr;
++	}
++	err =
++	    gpio_export_link(&pdev->dev, "gpio_spi_ready_for_receive",
++			     pdata->gpio_spi_ready_for_receive);
++	if (err) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++		  "gpio_spi_ready_for_receive gpio_export_link failed: %d",
++		  err);
++		goto free_rfr;
++	}
++
++	err = gpio_request(pdata->gpio_spi_data_ack, "stml0xx data_ack");
++	if (err) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"data_ack gpio_request failed: %d", err);
++		goto free_rfr;
++	}
++	gpio_direction_input(pdata->gpio_spi_data_ack);
++	err = gpio_export(pdata->gpio_spi_data_ack, 0);
++	if (err) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"data_ack gpio_export failed: %d", err);
++		goto free_data_ack;
++	}
++	err =
++	    gpio_export_link(&pdev->dev, "gpio_spi_data_ack",
++			     pdata->gpio_spi_data_ack);
++	if (err) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"gpio_spi_data_ack gpio_export_link failed: %d", err);
++		goto free_data_ack;
++	}
++
++	if (pdata->gpio_sh_wake >= 0) {
++		/* pin to pull the stm chip out of lowpower mode */
++		err = gpio_request(pdata->gpio_sh_wake, "stml0xx sh_wake");
++		if (err) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"sh_wake gpio_request failed: %d", err);
++			goto free_data_ack;
++		}
++		gpio_direction_output(pdata->gpio_sh_wake, 0);
++		gpio_set_value(pdata->gpio_sh_wake, 1);
++		err = gpio_export(pdata->gpio_sh_wake, 0);
++		if (err) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"sh_wake gpio_export failed: %d", err);
++			goto free_wake_sh;
++		}
++	} else {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"%s: pin for stm lowpower mode not specified",
++			__func__);
++	}
++
++	if (gpio_is_valid(pdata->gpio_wakeirq)) {
++		err = gpio_request(pdata->gpio_wakeirq, "stml0xx wakeirq");
++		if (err) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"wakeirq gpio_request failed: %d", err);
++			goto free_wake_sh;
++		}
++		gpio_direction_input(pdata->gpio_wakeirq);
++		err = gpio_export(pdata->gpio_wakeirq, 0);
++		if (err) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"wakeirq gpio_export failed: %d", err);
++			goto free_wakeirq;
++		}
++
++		err = gpio_export_link(&pdev->dev, "wakeirq",
++				       pdata->gpio_wakeirq);
++		if (err) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"wakeirq link failed: %d", err);
++			goto free_wakeirq;
++		}
++	} else {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"%s: gpio wake irq not specified", __func__);
++	}
++
++	return 0;
++
++free_wakeirq:
++	gpio_free(pdata->gpio_wakeirq);
++free_wake_sh:
++	if (pdata->gpio_sh_wake >= 0)
++		gpio_free(pdata->gpio_sh_wake);
++free_data_ack:
++	gpio_free(pdata->gpio_spi_data_ack);
++free_rfr:
++	gpio_free(pdata->gpio_spi_ready_for_receive);
++free_bslen:
++	gpio_free(pdata->gpio_bslen);
++free_reset:
++	gpio_free(pdata->gpio_reset);
++free_int:
++	gpio_free(pdata->gpio_int);
++	return err;
++}
++
++static void stml0xx_gpio_free(struct stml0xx_platform_data *pdata)
++{
++	gpio_free(pdata->gpio_int);
++	gpio_free(pdata->gpio_reset);
++	gpio_free(pdata->gpio_bslen);
++	gpio_free(pdata->gpio_wakeirq);
++	gpio_free(pdata->gpio_spi_data_ack);
++	gpio_free(pdata->gpio_spi_ready_for_receive);
++	if (pdata->gpio_sh_wake >= 0)
++		gpio_free(pdata->gpio_sh_wake);
++}
++
++void clear_interrupt_status_work_func(struct work_struct *work)
++{
++	struct stml0xx_data *ps_stml0xx = container_of(work,
++						struct stml0xx_data,
++						clear_interrupt_status_work);
++	uint8_t buf[3];
++
++	dev_dbg(&ps_stml0xx->spi->dev, "clear_interrupt_status_work_func");
++	mutex_lock(&ps_stml0xx->lock);
++
++	if (ps_stml0xx->mode == BOOTMODE)
++		goto EXIT;
++
++	if (ps_stml0xx->is_suspended)
++		goto EXIT;
++
++	stml0xx_wake(ps_stml0xx);
++
++	/* read interrupt mask register to clear
++	   any interrupt during suspend state */
++	stml0xx_spi_send_read_reg(INTERRUPT_STATUS, buf, 3);
++
++	stml0xx_sleep(ps_stml0xx);
++EXIT:
++	mutex_unlock(&ps_stml0xx->lock);
++}
++
++static int stml0xx_probe(struct spi_device *spi)
++{
++	struct stml0xx_platform_data *pdata;
++	struct stml0xx_data *ps_stml0xx;
++	int err = -1;
++
++	dev_dbg(&spi->dev, "probe begun");
++
++	ps_stml0xx = devm_kzalloc(&spi->dev, sizeof(*ps_stml0xx), GFP_KERNEL);
++	if (ps_stml0xx == NULL) {
++		dev_err(&spi->dev,
++			"failed to allocate memory for module data: %d", err);
++		return -ENOMEM;
++	}
++	ps_stml0xx->spi = spi;
++	if (!stml0xx_misc_data)
++		stml0xx_misc_data = ps_stml0xx;
++
++	/* SPI setup */
++
++	if (spi->master->flags & SPI_MASTER_HALF_DUPLEX) {
++		dev_err(&spi->dev, "%s: Half duplex not supported by host",
++			__func__);
++		err = -EIO;
++		goto err_other;
++	}
++
++	spi->mode = (SPI_MODE_0);
++	spi->bits_per_word = 8;
++
++	err = spi_setup(spi);
++	if (err < 0) {
++		dev_err(&spi->dev, "%s: Failed to perform SPI setup",
++			__func__);
++		goto err_other;
++	}
++
++	if (spi->dev.of_node)
++		pdata = stml0xx_of_init(spi);
++	else
++		pdata = spi->dev.platform_data;
++
++	if (pdata == NULL) {
++		dev_err(&spi->dev, "platform data is NULL, exiting");
++		err = -ENODEV;
++		goto err_pdata;
++	}
++	/* Allocate DMA buffers */
++	ps_stml0xx->spi_dma_enabled = SPI_DMA_ENABLED;
++	if (ps_stml0xx->spi_dma_enabled) {
++		spi->dev.coherent_dma_mask = ~0;
++		/* Minimum coherent DMA allocation is PAGE_SIZE, so allocate
++		   that much and share it between Tx and Rx DMA buffers. */
++		ps_stml0xx->spi_tx_buf =
++		    dma_alloc_coherent(&spi->dev, PAGE_SIZE,
++				       &ps_stml0xx->spi_tx_dma, GFP_DMA);
++
++		if (ps_stml0xx->spi_tx_buf) {
++			ps_stml0xx->spi_rx_buf = (ps_stml0xx->spi_tx_buf
++						  + (PAGE_SIZE / 2));
++			ps_stml0xx->spi_rx_dma =
++			    (dma_addr_t) (ps_stml0xx->spi_tx_dma +
++					  (PAGE_SIZE / 2));
++		} else {
++			/* Fall back to non-DMA */
++			ps_stml0xx->spi_dma_enabled = false;
++		}
++	}
++
++	if (!ps_stml0xx->spi_dma_enabled) {
++		/* Allocate non-DMA buffers */
++		ps_stml0xx->spi_tx_buf =
++			devm_kzalloc(&spi->dev, SPI_BUFF_SIZE, GFP_KERNEL);
++		ps_stml0xx->spi_rx_buf =
++			devm_kzalloc(&spi->dev, SPI_BUFF_SIZE, GFP_KERNEL);
++		if (!ps_stml0xx->spi_tx_buf || !ps_stml0xx->spi_rx_buf)
++			goto err_nomem;
++	}
++
++	stml0xx_cmdbuff = ps_stml0xx->spi_tx_buf;
++	stml0xx_readbuff = ps_stml0xx->spi_rx_buf;
++
++	/* initialize regulators */
++	ps_stml0xx->regulator_1 = regulator_get(&spi->dev, "sensor1");
++	if (IS_ERR(ps_stml0xx->regulator_1)) {
++		dev_err(&spi->dev, "Failed to get VIO regulator");
++		goto err_regulator;
++	}
++
++	ps_stml0xx->regulator_2 = regulator_get(&spi->dev, "sensor2");
++	if (IS_ERR(ps_stml0xx->regulator_2)) {
++		dev_err(&spi->dev, "Failed to get VCC regulator");
++		regulator_put(ps_stml0xx->regulator_1);
++		goto err_regulator;
++	}
++
++	if (regulator_enable(ps_stml0xx->regulator_1)) {
++		dev_err(&spi->dev, "Failed to enable Sensor 1 regulator");
++		regulator_put(ps_stml0xx->regulator_2);
++		regulator_put(ps_stml0xx->regulator_1);
++		goto err_regulator;
++	}
++
++	if (regulator_enable(ps_stml0xx->regulator_2)) {
++		dev_err(&spi->dev, "Failed to enable Sensor 2 regulator");
++		regulator_disable(ps_stml0xx->regulator_1);
++		regulator_put(ps_stml0xx->regulator_2);
++		regulator_put(ps_stml0xx->regulator_1);
++		goto err_regulator;
++	}
++
++	err = stml0xx_gpio_init(pdata, spi);
++	if (err) {
++		dev_err(&spi->dev, "stml0xx gpio init failed");
++		goto err_gpio_init;
++	}
++
++	mutex_init(&ps_stml0xx->lock);
++	mutex_init(&ps_stml0xx->sh_wakeup_lock);
++
++	mutex_lock(&ps_stml0xx->lock);
++	wake_lock_init(&ps_stml0xx->wakelock, WAKE_LOCK_SUSPEND, "stml0xx");
++	wake_lock_init(&ps_stml0xx->reset_wakelock, WAKE_LOCK_SUSPEND,
++		       "stml0xx_reset");
++
++	/* Set to passive mode by default */
++	stml0xx_g_nonwake_sensor_state = 0;
++	stml0xx_g_wake_sensor_state = 0;
++	/* clear the interrupt mask */
++	ps_stml0xx->intp_mask = 0x00;
++
++	INIT_WORK(&ps_stml0xx->irq_work, stml0xx_irq_work_func);
++	INIT_WORK(&ps_stml0xx->irq_wake_work, stml0xx_irq_wake_work_func);
++	INIT_WORK(&ps_stml0xx->clear_interrupt_status_work,
++		  clear_interrupt_status_work_func);
++
++	ps_stml0xx->irq_work_queue =
++	    create_singlethread_workqueue("stml0xx_wq");
++	if (!ps_stml0xx->irq_work_queue) {
++		err = -ENOMEM;
++		dev_err(&spi->dev, "cannot create work queue: %d", err);
++		goto err1;
++	}
++	ps_stml0xx->pdata = pdata;
++
++	if (ps_stml0xx->pdata->init) {
++		err = ps_stml0xx->pdata->init();
++		if (err < 0) {
++			dev_err(&spi->dev, "init failed: %d", err);
++			goto err2;
++		}
++	}
++
++	/* configure interrupt */
++	ps_stml0xx->irq = gpio_to_irq(ps_stml0xx->pdata->gpio_int);
++	if (gpio_is_valid(ps_stml0xx->pdata->gpio_wakeirq))
++		ps_stml0xx->irq_wake
++		    = gpio_to_irq(ps_stml0xx->pdata->gpio_wakeirq);
++	else
++		ps_stml0xx->irq_wake = -1;
++
++	err = stml0xx_device_power_on(ps_stml0xx);
++	if (err < 0) {
++		dev_err(&spi->dev, "power on failed: %d", err);
++		goto err4;
++	}
++
++	if (ps_stml0xx->irq_wake != -1)
++		enable_irq_wake(ps_stml0xx->irq_wake);
++	atomic_set(&ps_stml0xx->enabled, 1);
++
++	err = misc_register(&stml0xx_misc_device);
++	if (err < 0) {
++		dev_err(&spi->dev, "misc register failed: %d", err);
++		goto err6;
++	}
++
++	if (alloc_chrdev_region(&ps_stml0xx->stml0xx_dev_num, 0, 2, "stml0xx")
++	    < 0) {
++		dev_err(&spi->dev, "alloc_chrdev_region failed");
++	}
++	ps_stml0xx->stml0xx_class = class_create(THIS_MODULE, "stml0xx");
++
++	cdev_init(&ps_stml0xx->as_cdev, &stml0xx_as_fops);
++	ps_stml0xx->as_cdev.owner = THIS_MODULE;
++	err = cdev_add(&ps_stml0xx->as_cdev, ps_stml0xx->stml0xx_dev_num, 1);
++	if (err)
++		dev_err(&spi->dev, "cdev_add as failed: %d", err);
++
++	device_create(ps_stml0xx->stml0xx_class, NULL,
++		      MKDEV(MAJOR(ps_stml0xx->stml0xx_dev_num), 0),
++		      ps_stml0xx, "stml0xx_as");
++
++	cdev_init(&ps_stml0xx->ms_cdev, &stml0xx_ms_fops);
++	ps_stml0xx->ms_cdev.owner = THIS_MODULE;
++	err =
++	    cdev_add(&ps_stml0xx->ms_cdev, ps_stml0xx->stml0xx_dev_num + 1, 1);
++	if (err)
++		dev_err(&spi->dev, "cdev_add ms failed: %d", err);
++
++	device_create(ps_stml0xx->stml0xx_class, NULL,
++		      MKDEV(MAJOR(ps_stml0xx->stml0xx_dev_num), 1),
++		      ps_stml0xx, "stml0xx_ms");
++
++	stml0xx_device_power_off(ps_stml0xx);
++
++	atomic_set(&ps_stml0xx->enabled, 0);
++
++	err = request_irq(ps_stml0xx->irq, stml0xx_isr,
++			  IRQF_TRIGGER_RISING, NAME, ps_stml0xx);
++	if (err < 0) {
++		dev_err(&spi->dev, "request irq failed: %d", err);
++		goto err7;
++	}
++
++	if (ps_stml0xx->irq_wake != -1) {
++		err = request_irq(ps_stml0xx->irq_wake, stml0xx_wake_isr,
++				  IRQF_TRIGGER_RISING, NAME, ps_stml0xx);
++		if (err < 0) {
++			dev_err(&spi->dev, "request wake irq failed: %d",
++				err);
++			goto err8;
++		}
++	}
++
++	init_waitqueue_head(&ps_stml0xx->stml0xx_as_data_wq);
++	init_waitqueue_head(&ps_stml0xx->stml0xx_ms_data_wq);
++
++	ps_stml0xx->dsdev.name = "dock";
++	ps_stml0xx->dsdev.print_name = dock_print_name;
++	err = switch_dev_register(&ps_stml0xx->dsdev);
++	if (err) {
++		dev_err(&spi->dev, "Couldn't register switch (%s) rc=%d",
++			ps_stml0xx->dsdev.name, err);
++		ps_stml0xx->dsdev.dev = NULL;
++	}
++
++	ps_stml0xx->edsdev.name = "extdock";
++	ps_stml0xx->edsdev.print_name = dock_print_name;
++	err = switch_dev_register(&ps_stml0xx->edsdev);
++	if (err) {
++		dev_err(&spi->dev, "Couldn't register switch (%s) rc=%d",
++			ps_stml0xx->edsdev.name, err);
++		ps_stml0xx->edsdev.dev = NULL;
++	}
++
++	ps_stml0xx->input_dev = input_allocate_device();
++	if (!ps_stml0xx->input_dev) {
++		err = -ENOMEM;
++		dev_err(&spi->dev, "input device allocate failed: %d", err);
++		goto err8;
++	}
++	input_set_drvdata(ps_stml0xx->input_dev, ps_stml0xx);
++	input_set_capability(ps_stml0xx->input_dev, EV_KEY, KEY_POWER);
++	input_set_capability(ps_stml0xx->input_dev, EV_KEY, KEY_CAMERA);
++	input_set_capability(ps_stml0xx->input_dev, EV_SW, SW_LID);
++	ps_stml0xx->input_dev->name = "sensorprocessor";
++
++	err = input_register_device(ps_stml0xx->input_dev);
++	if (err) {
++		dev_err(&spi->dev,
++			"unable to register input polled device %s: %d",
++			ps_stml0xx->input_dev->name, err);
++		goto err9;
++	}
++
++	ps_stml0xx->is_suspended = false;
++
++	switch_stml0xx_mode(NORMALMODE);
++
++	mutex_unlock(&ps_stml0xx->lock);
++
++	dev_dbg(&spi->dev, "probed finished");
++
++	return 0;
++
++err9:
++	input_free_device(ps_stml0xx->input_dev);
++err8:
++	free_irq(ps_stml0xx->irq, ps_stml0xx);
++err7:
++	misc_deregister(&stml0xx_misc_device);
++err6:
++	stml0xx_device_power_off(ps_stml0xx);
++err4:
++	if (ps_stml0xx->pdata->exit)
++		ps_stml0xx->pdata->exit();
++err2:
++	destroy_workqueue(ps_stml0xx->irq_work_queue);
++err1:
++	mutex_unlock(&ps_stml0xx->lock);
++	mutex_destroy(&ps_stml0xx->lock);
++	wake_unlock(&ps_stml0xx->wakelock);
++	wake_lock_destroy(&ps_stml0xx->wakelock);
++	wake_unlock(&ps_stml0xx->reset_wakelock);
++	wake_lock_destroy(&ps_stml0xx->reset_wakelock);
++	stml0xx_gpio_free(pdata);
++err_gpio_init:
++	regulator_disable(ps_stml0xx->regulator_2);
++	regulator_disable(ps_stml0xx->regulator_1);
++	regulator_put(ps_stml0xx->regulator_2);
++	regulator_put(ps_stml0xx->regulator_1);
++err_regulator:
++err_nomem:
++	if (ps_stml0xx->spi_dma_enabled) {
++		dma_free_coherent(&spi->dev, PAGE_SIZE,
++				  ps_stml0xx->spi_tx_buf,
++				  ps_stml0xx->spi_tx_dma);
++	}
++err_pdata:
++err_other:
++	return err;
++}
++
++static int stml0xx_remove(struct spi_device *spi)
++{
++	struct stml0xx_data *ps_stml0xx = spi_get_drvdata(spi);
++
++	switch_dev_unregister(&ps_stml0xx->dsdev);
++	switch_dev_unregister(&ps_stml0xx->edsdev);
++
++	if (ps_stml0xx->irq_wake != -1)
++		free_irq(ps_stml0xx->irq_wake, ps_stml0xx);
++
++	free_irq(ps_stml0xx->irq, ps_stml0xx);
++	misc_deregister(&stml0xx_misc_device);
++	input_unregister_device(ps_stml0xx->input_dev);
++	input_free_device(ps_stml0xx->input_dev);
++	stml0xx_device_power_off(ps_stml0xx);
++
++	if (ps_stml0xx->pdata->exit)
++		ps_stml0xx->pdata->exit();
++
++	stml0xx_gpio_free(ps_stml0xx->pdata);
++	destroy_workqueue(ps_stml0xx->irq_work_queue);
++	mutex_destroy(&ps_stml0xx->lock);
++	wake_unlock(&ps_stml0xx->wakelock);
++	wake_lock_destroy(&ps_stml0xx->wakelock);
++	wake_unlock(&ps_stml0xx->reset_wakelock);
++	wake_lock_destroy(&ps_stml0xx->reset_wakelock);
++	disable_irq_wake(ps_stml0xx->irq);
++
++	regulator_disable(ps_stml0xx->regulator_2);
++	regulator_disable(ps_stml0xx->regulator_1);
++	regulator_put(ps_stml0xx->regulator_2);
++	regulator_put(ps_stml0xx->regulator_1);
++
++	kfree(ps_stml0xx);
++
++	return 0;
++}
++
++static int stml0xx_resume(struct device *dev)
++{
++	struct stml0xx_data *ps_stml0xx = spi_get_drvdata(to_spi_device(dev));
++	dev_dbg(&stml0xx_misc_data->spi->dev, "%s", __func__);
++
++	mutex_lock(&ps_stml0xx->lock);
++	ps_stml0xx->is_suspended = false;
++
++	if (ps_stml0xx->pending_wake_work) {
++		queue_work(ps_stml0xx->irq_work_queue,
++			   &ps_stml0xx->irq_wake_work);
++		ps_stml0xx->pending_wake_work = false;
++	}
++
++	if (stml0xx_irq_disable == 0)
++		queue_work(ps_stml0xx->irq_work_queue,
++			   &ps_stml0xx->clear_interrupt_status_work);
++
++	mutex_unlock(&ps_stml0xx->lock);
++
++	return 0;
++}
++
++static int stml0xx_suspend(struct device *dev)
++{
++	struct stml0xx_data *ps_stml0xx = spi_get_drvdata(to_spi_device(dev));
++	dev_dbg(&stml0xx_misc_data->spi->dev, "%s", __func__);
++
++	mutex_lock(&ps_stml0xx->lock);
++	ps_stml0xx->is_suspended = true;
++
++	mutex_unlock(&ps_stml0xx->lock);
++
++	return 0;
++}
++
++static const struct dev_pm_ops stml0xx_pm_ops = {
++	SET_SYSTEM_SLEEP_PM_OPS(stml0xx_suspend, stml0xx_resume)
++};
++
++static const struct spi_device_id stml0xx_id[] = {
++	{NAME, 0},
++	{},
++};
++
++MODULE_DEVICE_TABLE(spi, stml0xx_id);
++
++#ifdef CONFIG_OF
++static struct of_device_id stml0xx_match_tbl[] = {
++	{.compatible = "stm,stml0xx"},
++	{},
++};
++
++MODULE_DEVICE_TABLE(of, stml0xx_match_tbl);
++#endif
++
++static struct spi_driver stml0xx_driver = {
++	.driver = {
++		   .name = NAME,
++		   .owner = THIS_MODULE,
++		   .of_match_table = of_match_ptr(stml0xx_match_tbl),
++#ifdef CONFIG_PM
++		   .pm = &stml0xx_pm_ops,
++#endif
++		   },
++	.probe = stml0xx_probe,
++	.remove = stml0xx_remove,
++	.id_table = stml0xx_id,
++};
++
++static int __init stml0xx_init(void)
++{
++	return spi_register_driver(&stml0xx_driver);
++}
++
++static void __exit stml0xx_exit(void)
++{
++	spi_unregister_driver(&stml0xx_driver);
++	return;
++}
++
++module_init(stml0xx_init);
++module_exit(stml0xx_exit);
++
++MODULE_DESCRIPTION("STML0XX sensor processor");
++MODULE_AUTHOR("Motorola");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/misc/stml0xx/stml0xx_flash.c b/drivers/misc/stml0xx/stml0xx_flash.c
+new file mode 100644
+index 00000000000..34c5e8dcdf4
+--- /dev/null
++++ b/drivers/misc/stml0xx/stml0xx_flash.c
+@@ -0,0 +1,596 @@
++/*
++ * Copyright (C) 2010-2014 Motorola Mobility LLC
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++ * 02111-1307, USA
++ */
++
++#include <linux/cdev.h>
++#include <linux/delay.h>
++#include <linux/dma-mapping.h>
++#include <linux/err.h>
++#include <linux/errno.h>
++#include <linux/export.h>
++#include <linux/of.h>
++#include <linux/of_gpio.h>
++#include <linux/fs.h>
++#include <linux/gpio.h>
++#include <linux/input.h>
++#include <linux/input-polldev.h>
++#include <linux/interrupt.h>
++#include <linux/irq.h>
++#include <linux/miscdevice.h>
++#include <linux/module.h>
++#include <linux/poll.h>
++#include <linux/regulator/consumer.h>
++#include <linux/slab.h>
++#include <linux/switch.h>
++#include <linux/time.h>
++#include <linux/uaccess.h>
++#include <linux/wakelock.h>
++#include <linux/workqueue.h>
++
++#include <linux/stml0xx.h>
++
++#define GET_ACK_RETRIES 10
++#define GET_ACK_DELAY   20
++#define COMMAND_RETRIES 5
++#define COMMAND_DELAY   2000
++
++#define SOF_BYTE        0x5A	/* Start of frame byte */
++#define ACK_BYTE        0x79
++#define BUSY_BYTE       0x76
++#define NACK_BYTE       0x1F
++
++#define ERASE_DELAY     200
++#define ERASE_TIMEOUT   80
++
++#define RESTART_DELAY   1000
++#define WRITE_DELAY     20
++#define WRITE_TIMEOUT   20
++
++#define NUM_PAGES       512	/* Number of pages of internal flash */
++
++enum stm_command {
++	GET_VERSION = 0x01,
++	GET_ID = 0x02,
++	READ_MEMORY = 0x11,
++	GO = 0x21,
++	WRITE_MEMORY = 0x31,
++	NO_WAIT_WRITE_MEMORY = 0x32,
++	ERASE = 0x44,
++	NO_WAIT_ERASE = 0x45,
++	WRITE_UNPROTECT = 0x73,
++	SPI_SYNC = 0xFF
++};
++
++static unsigned char stml0xx_bootloader_ver;
++
++/* Send ACK byte over SPI */
++static int stml0xx_boot_spi_send_ack(void)
++{
++	int rc = 0;
++	stml0xx_cmdbuff[0] = ACK_BYTE;
++	rc = stml0xx_spi_write_no_reset(stml0xx_cmdbuff, 1);
++	if (rc < 0)
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Failed to send SPI ACK [%d]", rc);
++	return rc;
++}
++
++/* Receive ACK byte and respond back with ACK */
++static int stml0xx_boot_spi_wait_for_ack(int num_polls, int poll_int_ms,
++					 bool send_ack)
++{
++	/* Poll for ACK */
++	int rc = 0;
++	while (num_polls--) {
++		rc = stml0xx_spi_read_no_reset(stml0xx_readbuff, 1);
++		if (rc < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Failed to read from SPI [%d]", rc);
++			return rc;
++		}
++		if (stml0xx_readbuff[0] == ACK_BYTE) {
++			/* Received ACK */
++			if (send_ack) {
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++					"Received ACK, sending ACK.");
++				return stml0xx_boot_spi_send_ack();
++			} else {
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++					"Received ACK");
++				return rc;
++			}
++		}
++		msleep(poll_int_ms);
++	}
++	dev_err(&stml0xx_misc_data->spi->dev, "Failed to receive ACK");
++	return -EIO;
++}
++
++/* Send boot command and receive ACK */
++static int stml0xx_boot_cmd_write(enum stm_command command, bool send_ack)
++{
++	int rc = 0, index = 0;
++	/* Send command code with SOF and XOR checksum */
++	stml0xx_cmdbuff[index++] = SOF_BYTE;
++	if (command == SPI_SYNC) {
++		/* No command, SOF only */
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending SPI sync byte [0x%02x]", SOF_BYTE);
++	} else {
++		stml0xx_cmdbuff[index++] = command;
++		stml0xx_cmdbuff[index++] = ~command;
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX Sending command [0x%02x]", command);
++	}
++
++	rc = stml0xx_spi_write_no_reset(stml0xx_cmdbuff, index);
++	if (rc < 0) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Failed to send boot command [%d]", rc);
++		return rc;
++	}
++	/* Wait for ACK */
++	return stml0xx_boot_spi_wait_for_ack(GET_ACK_RETRIES, GET_ACK_DELAY,
++					     send_ack);
++}
++
++/* Add checksum byte and write to SPI */
++static int stml0xx_boot_checksum_write(unsigned char *buf, int len)
++{
++	int i;
++	unsigned char checksum = 0;
++
++	for (i = 0; i < len; i++)
++		checksum ^= buf[i];
++	buf[i++] = checksum;
++
++	return stml0xx_spi_write_no_reset(buf, i);
++}
++
++/* Get bootloader version */
++static int stml0xx_get_boot_ver(void)
++{
++	int tries = COMMAND_RETRIES;
++
++	while (tries--) {
++		/* Send GET_VERSION command */
++		if (stml0xx_boot_cmd_write(GET_VERSION, true) < 0)
++			goto RETRY_GET_VERSION;
++
++		/* Read bootloader version */
++		if ((stml0xx_spi_read_no_reset(stml0xx_readbuff, 3)) < 0)
++			goto RETRY_GET_VERSION;
++
++		/* Byte 1: ACK
++		   Byte 2: Bootloader version
++				( 0 < ver <= 255), eg. 0x10 = ver 1.0
++		   Byte 3: ACK */
++		if ((stml0xx_readbuff[0] == ACK_BYTE) &&
++		    (stml0xx_readbuff[2] == ACK_BYTE)) {
++			stml0xx_bootloader_ver = stml0xx_readbuff[1];
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Bootloader version 0x%02x",
++				stml0xx_bootloader_ver);
++			/* Send ACK */
++			stml0xx_boot_spi_send_ack();
++			return stml0xx_bootloader_ver;
++		} else {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Error reading GET_VERSION data 0x%02x 0x%02x 0x%02x",
++				stml0xx_readbuff[0],
++				stml0xx_readbuff[1],
++				stml0xx_readbuff[2]);
++			goto RETRY_GET_VERSION;
++		}
++RETRY_GET_VERSION:
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Retry get version, retries left [%d]", tries);
++		msleep(COMMAND_DELAY);
++	}
++	return -EIO;
++}
++
++/* Erase internal flash */
++int stml0xx_boot_flash_erase(void)
++{
++	int tries = COMMAND_RETRIES;
++	int i;
++
++	if (stml0xx_bootloader_ver == 0) {
++		if (stml0xx_get_boot_ver() <= 0)
++			return -EIO;
++	}
++
++	dev_dbg(&stml0xx_misc_data->spi->dev, "Starting flash erase");
++
++	while (tries--) {
++		/* Send ERASE command */
++		if (stml0xx_boot_cmd_write(ERASE, true) < 0)
++			goto RETRY_ERASE;
++
++		/* Send number of pages + checksum
++		   (mass erase option unsupported on STM32L0XX) */
++		stml0xx_cmdbuff[0] = ((NUM_PAGES - 1) >> 8) & 0xFF;
++		stml0xx_cmdbuff[1] = (NUM_PAGES - 1) & 0xFF;
++		if (stml0xx_boot_checksum_write(stml0xx_cmdbuff, 2) < 0)
++			goto RETRY_ERASE;
++
++		/* Wait for ACK */
++		if (stml0xx_boot_spi_wait_for_ack(GET_ACK_RETRIES,
++						  GET_ACK_DELAY, true) < 0)
++			goto RETRY_ERASE;
++
++		/* Populate 2-byte page numbers (MSB then LSB) */
++		for (i = 0; i < NUM_PAGES; i++) {
++			stml0xx_cmdbuff[i * 2] = (i >> 8) & 0xFF;
++			stml0xx_cmdbuff[(i * 2) + 1] = i & 0xFF;
++		}
++
++		/* Add checksum byte */
++		if (stml0xx_boot_checksum_write
++		    (stml0xx_cmdbuff, (NUM_PAGES * 2))
++		    < 0)
++			goto RETRY_ERASE;
++
++		/* Wait for ACK */
++		if (stml0xx_boot_spi_wait_for_ack(ERASE_TIMEOUT,
++						  ERASE_DELAY, true) < 0)
++			goto RETRY_ERASE;
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Flash erase successful");
++		return 0;
++
++RETRY_ERASE:
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Retry flash erase, retries left [%d]", tries);
++		msleep(COMMAND_DELAY);
++	}
++	return -EIO;
++}
++
++/* Get firmware version */
++int stml0xx_get_version(struct stml0xx_data *ps_stml0xx)
++{
++	int rc = 0;
++	unsigned char fw_ver;
++	if (ps_stml0xx->mode == BOOTMODE) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Tried to read version in boot mode");
++		return -EIO;
++	}
++
++	stml0xx_wake(ps_stml0xx);
++	dev_dbg(&stml0xx_misc_data->spi->dev, "stml0xx_get_version");
++	rc = stml0xx_spi_send_read_reg(REV_ID, &fw_ver, 1);
++	if (rc >= 0) {
++		rc = (int)fw_ver;
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"STML0XX version %02x", fw_ver);
++		if (fw_ver > 0)
++			stml0xx_g_booted = 1;
++		else
++			stml0xx_g_booted = 0;
++	}
++	stml0xx_sleep(ps_stml0xx);
++	return rc;
++}
++
++/* Switch to boot or normal mode */
++int switch_stml0xx_mode(enum stm_mode mode)
++{
++	struct stml0xx_platform_data *pdata = stml0xx_misc_data->pdata;
++	unsigned int bslen_pin_active_value = pdata->bslen_pin_active_value;
++	int tries = COMMAND_RETRIES;
++	int rc = 0;
++
++	stml0xx_misc_data->mode = mode;
++
++	/* Set to bootloader mode */
++	if (mode == BOOTMODE) {
++		/* Set boot pin */
++		gpio_set_value(pdata->gpio_bslen, (bslen_pin_active_value));
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Switching to boot mode");
++		msleep(stml0xx_spi_retry_delay);
++
++		/* Toggle reset */
++		gpio_set_value(pdata->gpio_reset, 0);
++		msleep(stml0xx_spi_retry_delay);
++		gpio_set_value(pdata->gpio_reset, 1);
++		msleep(STML0XX_RESET_DELAY);
++
++		/* Send SPI bootloader synchronization byte */
++		rc = stml0xx_boot_cmd_write(SPI_SYNC, true);
++		if (rc < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Failed to send SPI sync byte [%d]", rc);
++			return rc;
++		}
++		dev_dbg(&stml0xx_misc_data->spi->dev, "SPI sync successful");
++
++		/* Check part ID */
++		while (tries--) {
++			if (stml0xx_boot_cmd_write(GET_ID, true) < 0)
++				goto RETRY_GET_ID;
++
++			/* Read part ID
++			   Byte 1: ACK
++			   Byte 2: N = 1
++			   Byte 3: PID (MSB)
++			   Byte 4: PID (LSB)
++			   Byte 5: ACK */
++			if (stml0xx_spi_read_no_reset(stml0xx_readbuff, 5)
++				< 0)
++				goto RETRY_GET_ID;
++			/* Part ID read successfully */
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Part ID 0x%02x 0x%02x",
++				stml0xx_readbuff[2], stml0xx_readbuff[3]);
++			/* Send ACK */
++			return stml0xx_boot_spi_send_ack();
++
++RETRY_GET_ID:
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Retry get part ID, retries left [%d]", tries);
++			msleep(COMMAND_DELAY);
++		}
++		return -EIO;
++	} else {
++		/* Set to normal mode */
++		gpio_set_value(pdata->gpio_bslen, !(bslen_pin_active_value));
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Switching to normal mode");
++		/* init only if booted at least once and not in the factory
++		   - stml0xx_irq_disable indicates factory test ongoing */
++		if (stml0xx_g_booted && !stml0xx_irq_disable)
++			stml0xx_reset_and_init();
++		else
++			stml0xx_reset(pdata, stml0xx_cmdbuff);
++	}
++	return rc;
++}
++
++static int stml0xx_misc_open(struct inode *inode, struct file *file)
++{
++	int rc = 0;
++	dev_dbg(&stml0xx_misc_data->spi->dev, "stml0xx_misc_open");
++
++	rc = nonseekable_open(inode, file);
++	if (rc < 0)
++		return rc;
++	file->private_data = stml0xx_misc_data;
++
++	return stml0xx_enable();
++}
++
++ssize_t stml0xx_misc_write(struct file *file, const char __user *buff,
++			   size_t count, loff_t *ppos)
++{
++	int read_retries = COMMAND_RETRIES;
++	int write_retries = COMMAND_RETRIES;
++	int index = 0;
++	int err = 0;
++	int bad_byte_cnt = 0;
++	int fillers = 0;
++
++	if (count > STML0XX_MAXDATA_LENGTH || count == 0) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Invalid packet size %d", count);
++		return -EINVAL;
++	}
++
++	mutex_lock(&stml0xx_misc_data->lock);
++
++	if (stml0xx_bootloader_ver == 0) {
++		if (stml0xx_get_boot_ver() <= 0) {
++			err = -EIO;
++			goto EXIT;
++		}
++	}
++
++	if (stml0xx_misc_data->mode == BOOTMODE) {
++		/* For boot mode */
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Starting flash write, %d bytes to address 0x%08x",
++			count, stml0xx_misc_data->current_addr);
++
++BEGIN_WRITE:
++		while (write_retries--) {
++			/* Send write memory command and receive ACK */
++			if (stml0xx_boot_cmd_write(WRITE_MEMORY, true) < 0)
++				goto RETRY_WRITE;
++
++			/* Send start address */
++			stml0xx_cmdbuff[0] =
++			    (stml0xx_misc_data->current_addr >> 24) & 0xFF;
++			stml0xx_cmdbuff[1] =
++			    (stml0xx_misc_data->current_addr >> 16) & 0xFF;
++			stml0xx_cmdbuff[2] =
++			    (stml0xx_misc_data->current_addr >> 8) & 0xFF;
++			stml0xx_cmdbuff[3] =
++			    stml0xx_misc_data->current_addr & 0xFF;
++			if (stml0xx_boot_checksum_write(stml0xx_cmdbuff, 4)
++				< 0)
++				goto RETRY_WRITE;
++
++			/* Wait for ACK */
++			if (stml0xx_boot_spi_wait_for_ack(GET_ACK_RETRIES,
++							  GET_ACK_DELAY,
++							  true) < 0)
++				goto RETRY_WRITE;
++
++			/* Number of bytes to write (0-based) */
++			stml0xx_cmdbuff[0] = count - 1;
++
++			/* Copy payload */
++			if (copy_from_user(&stml0xx_cmdbuff[1], buff, count)) {
++				dev_err(&stml0xx_misc_data->spi->dev,
++					"Copy from user returned error");
++				err = -EINVAL;
++				goto EXIT;
++			}
++			/* Payload must be 32-bit aligned.
++			   Add 0xFF fillers if needed. */
++			fillers = (4 - (count % 4)) % 4;
++			if (fillers) {
++				stml0xx_cmdbuff[0] += fillers;
++				memset(&stml0xx_cmdbuff[count + 1], 0xFF,
++				       fillers);
++			}
++			/* Number of bytes + payload + checksum */
++			err = stml0xx_boot_checksum_write(stml0xx_cmdbuff,
++							count + 1 + fillers);
++			if (err < 0) {
++				dev_err(&stml0xx_misc_data->spi->dev,
++				"Error sending MEMORY_WRITE data 0x%02x [%d]",
++					stml0xx_readbuff[0], err);
++				goto RETRY_WRITE;
++			}
++			/* Wait for ACK */
++			if (stml0xx_boot_spi_wait_for_ack(WRITE_TIMEOUT,
++							  WRITE_DELAY,
++							  true) < 0)
++				goto RETRY_WRITE;
++
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"MEMORY_WRITE successful");
++			err = 0;
++			break;
++RETRY_WRITE:
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Retry MEMORY_WRITE, retries left [%d]",
++				write_retries);
++			err = -EIO;
++			msleep(COMMAND_DELAY);
++		}
++		if (err < 0)
++			goto EXIT;
++
++		dev_dbg(&stml0xx_misc_data->spi->dev, "Flash write completed");
++
++		while (read_retries--) {
++			/* Send read memory command */
++			if (stml0xx_boot_cmd_write(READ_MEMORY, true) < 0)
++				goto RETRY_READ;
++
++			/* Send read start address */
++			stml0xx_cmdbuff[0]
++			    = (stml0xx_misc_data->current_addr >> 24) & 0xFF;
++			stml0xx_cmdbuff[1]
++			    = (stml0xx_misc_data->current_addr >> 16) & 0xFF;
++			stml0xx_cmdbuff[2]
++			    = (stml0xx_misc_data->current_addr >> 8) & 0xFF;
++			stml0xx_cmdbuff[3]
++			    = stml0xx_misc_data->current_addr & 0xFF;
++			if (stml0xx_boot_checksum_write(stml0xx_cmdbuff, 4)
++				< 0)
++				goto RETRY_READ;
++
++			/* Wait for ACK */
++			if (stml0xx_boot_spi_wait_for_ack(GET_ACK_RETRIES,
++							  GET_ACK_DELAY,
++							  true) < 0)
++				goto RETRY_READ;
++
++			/* Number of bytes to read (0-based) */
++			stml0xx_cmdbuff[0] = count - 1;
++			/* XOR checksum */
++			stml0xx_cmdbuff[1] = ~(count - 1);
++			if (stml0xx_spi_write_no_reset(stml0xx_cmdbuff, 2) < 0)
++				goto RETRY_READ;
++
++			/* Wait for ACK */
++			if (stml0xx_boot_spi_wait_for_ack(GET_ACK_RETRIES,
++							  GET_ACK_DELAY,
++							  true) < 0)
++				goto RETRY_READ;
++
++			/* Read memory (read 1 extra byte for
++			   extra ACK in the beginning) */
++			if (stml0xx_spi_read_no_reset
++			    (stml0xx_readbuff, count + 1) < 0)
++				goto RETRY_READ;
++
++			/* Compare data */
++			for (index = 0; index < count; index++) {
++				if (stml0xx_readbuff[index + 1]
++					!= buff[index]) {
++					dev_dbg(&stml0xx_misc_data->spi->dev,
++						"Error verifying write 0x%08x 0x%02x 0x%02x 0x%02x",
++						stml0xx_misc_data->current_addr,
++						index,
++						stml0xx_readbuff[index + 1],
++						buff[index]);
++					bad_byte_cnt++;
++				}
++			}
++			err = 0;
++			if (!bad_byte_cnt)
++				dev_dbg(&stml0xx_misc_data->spi->dev,
++					"Data compare successful");
++			else
++				dev_err(&stml0xx_misc_data->spi->dev,
++					"Write error detected, %d/%d bytes",
++					bad_byte_cnt, count);
++			break;
++RETRY_READ:
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Retry READ_MEMORY, retries left [%d]",
++				read_retries);
++			err = -EIO;
++			msleep(COMMAND_DELAY);
++		}
++		if (bad_byte_cnt) {
++			bad_byte_cnt = 0;
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Retry WRITE_MEMORY, retries left [%d]",
++				write_retries);
++			goto BEGIN_WRITE;
++		}
++		stml0xx_misc_data->current_addr += count;
++	} else {
++		/* For normal mode */
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Normal mode write started");
++		if (copy_from_user(stml0xx_cmdbuff, buff, count)) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Copy from user returned error");
++			err = -EINVAL;
++		}
++
++		if (err == 0) {
++			stml0xx_wake(stml0xx_misc_data);
++			err =
++			    stml0xx_spi_write_no_reset(stml0xx_cmdbuff,
++						       (int)count);
++			stml0xx_sleep(stml0xx_misc_data);
++			err = count;
++		}
++	}
++
++EXIT:
++	mutex_unlock(&stml0xx_misc_data->lock);
++	return err;
++}
++
++const struct file_operations stml0xx_misc_fops = {
++	.owner = THIS_MODULE,
++	.open = stml0xx_misc_open,
++	.unlocked_ioctl = stml0xx_misc_ioctl,
++	.write = stml0xx_misc_write,
++};
+diff --git a/drivers/misc/stml0xx/stml0xx_ioctl.c b/drivers/misc/stml0xx/stml0xx_ioctl.c
+new file mode 100644
+index 00000000000..13e064e035e
+--- /dev/null
++++ b/drivers/misc/stml0xx/stml0xx_ioctl.c
+@@ -0,0 +1,590 @@
++/*
++ * Copyright (C) 2010-2014 Motorola Mobility LLC
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++ * 02111-1307, USA
++ */
++
++#include <linux/cdev.h>
++#include <linux/delay.h>
++#include <linux/dma-mapping.h>
++#include <linux/err.h>
++#include <linux/errno.h>
++#include <linux/export.h>
++#include <linux/of.h>
++#include <linux/of_gpio.h>
++#include <linux/fs.h>
++#include <linux/gpio.h>
++#include <linux/input.h>
++#include <linux/input-polldev.h>
++#include <linux/interrupt.h>
++#include <linux/irq.h>
++#include <linux/miscdevice.h>
++#include <linux/module.h>
++#include <linux/poll.h>
++#include <linux/regulator/consumer.h>
++#include <linux/slab.h>
++#include <linux/switch.h>
++#include <linux/time.h>
++#include <linux/uaccess.h>
++#include <linux/wakelock.h>
++#include <linux/workqueue.h>
++
++#include <linux/stml0xx.h>
++
++#define MAX_LOCAL_BUF_SIZE  64
++
++long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
++{
++	void __user *argp = (void __user *)arg;
++	static int lowpower_mode = 1;
++	int err = -ENOTTY;
++	struct stml0xx_data *ps_stml0xx = stml0xx_misc_data;
++	unsigned int addr, duration, algo_idx;
++	unsigned short delay;
++	unsigned int data_size = 0;
++	unsigned char buf[MAX_LOCAL_BUF_SIZE];
++	unsigned char len;
++	unsigned long current_posix_time;
++	struct timespec current_time;
++
++	if (!stml0xx_misc_data)
++		stml0xx_misc_data = file->private_data;
++
++	mutex_lock(&ps_stml0xx->lock);
++
++	stml0xx_wake(ps_stml0xx);
++
++	/* Commands accepted in any mode */
++	switch (cmd) {
++	case STML0XX_IOCTL_BOOTLOADERMODE:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_BOOTLOADERMODE");
++		err = switch_stml0xx_mode(BOOTMODE);
++		break;
++	case STML0XX_IOCTL_NORMALMODE:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_NORMALMODE");
++		err = switch_stml0xx_mode(NORMALMODE);
++		break;
++	case STML0XX_IOCTL_MASSERASE:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_MASSERASE");
++		err = stml0xx_boot_flash_erase();
++		break;
++	case STML0XX_IOCTL_SETSTARTADDR:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SETSTARTADDR");
++		if (copy_from_user(&addr, argp, sizeof(addr))) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Copy start address returned error");
++			err = -EFAULT;
++			break;
++		}
++		stml0xx_misc_data->current_addr = addr;
++		err = 0;
++		break;
++	case STML0XX_IOCTL_SET_FACTORY_MODE:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_FACTORY_MODE");
++		err = switch_stml0xx_mode(FACTORYMODE);
++		break;
++	case STML0XX_IOCTL_TEST_BOOTMODE:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_TEST_BOOTMODE");
++		err = switch_stml0xx_mode(BOOTMODE);
++		break;
++	case STML0XX_IOCTL_SET_DEBUG:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_DEBUG");
++		err = 0;
++		break;
++	case STML0XX_IOCTL_GET_VERNAME:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_GET_VERNAME");
++		if (copy_to_user(argp, &(ps_stml0xx->pdata->fw_version),
++				 FW_VERSION_SIZE))
++			err = -EFAULT;
++		else
++			err = 0;
++		break;
++	case STML0XX_IOCTL_GET_BOOTED:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_GET_BOOTED");
++		buf[0] = stml0xx_g_booted;
++		if (copy_to_user(argp, buf, 1))
++			err = -EFAULT;
++		else
++			err = 0;
++		break;
++	default:
++		if (ps_stml0xx->mode == BOOTMODE) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Attempted normal mode ioctl in boot");
++			stml0xx_sleep(ps_stml0xx);
++			mutex_unlock(&ps_stml0xx->lock);
++			return -EBUSY;
++		}
++	}
++
++	/* Commands accepted in normal/factory mode only */
++	switch (cmd) {
++	case STML0XX_IOCTL_GET_VERSION:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_GET_VERSION");
++		err = stml0xx_get_version(ps_stml0xx);
++		break;
++	case STML0XX_IOCTL_SET_ACC_DELAY:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_ACC_DELAY");
++		if (copy_from_user(&delay, argp, sizeof(delay))) {
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Copy acc delay returned error");
++			err = -EFAULT;
++			break;
++		}
++		buf[0] = delay;
++		stml0xx_g_acc_delay = delay;
++		err = stml0xx_spi_send_write_reg(ACCEL_UPDATE_RATE, buf, 1);
++		break;
++
++	case STML0XX_IOCTL_SET_MAG_DELAY:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_MAG_DELAY");
++		delay = 0;
++		if (copy_from_user(&delay, argp, sizeof(delay))) {
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Copy mag delay returned error");
++			err = -EFAULT;
++			break;
++		}
++		buf[0] = delay;
++		stml0xx_g_mag_delay = delay;
++		err = stml0xx_spi_send_write_reg(MAG_UPDATE_RATE, buf, 1);
++		break;
++	case STML0XX_IOCTL_SET_GYRO_DELAY:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_GYRO_DELAY");
++		delay = 0;
++		if (copy_from_user(&delay, argp, sizeof(delay))) {
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Copy gyro delay returned error");
++			err = -EFAULT;
++			break;
++		}
++		buf[0] = delay;
++		stml0xx_g_gyro_delay = delay;
++		err = stml0xx_spi_send_write_reg(GYRO_UPDATE_RATE, buf, 1);
++		break;
++	case STML0XX_IOCTL_SET_STEP_COUNTER_DELAY:
++		delay = 0;
++		if (copy_from_user(&delay, argp, sizeof(delay))) {
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Copy step counter delay returned error");
++			err = -EFAULT;
++			break;
++		}
++		buf[0] = (delay >> 8);
++		buf[1] = delay;
++		stml0xx_g_step_counter_delay = delay;
++		err =
++		    stml0xx_spi_send_write_reg(STEP_COUNTER_UPDATE_RATE, buf,
++					       2);
++		break;
++	case STML0XX_IOCTL_SET_PRES_DELAY:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_PRES_DELAY");
++		delay = 0;
++		if (copy_from_user(&delay, argp, sizeof(delay))) {
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Copy pres delay returned error");
++			err = -EFAULT;
++			break;
++		}
++		buf[0] = delay;
++		stml0xx_g_baro_delay = delay;
++		err = stml0xx_spi_send_write_reg(PRESSURE_UPDATE_RATE, buf, 1);
++		break;
++	case STML0XX_IOCTL_SET_SENSORS:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_SENSORS");
++		if (copy_from_user(buf, argp, 3 * sizeof(unsigned char))) {
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Copy set sensors returned error");
++			err = -EFAULT;
++			break;
++		}
++		stml0xx_g_nonwake_sensor_state = (buf[2] << 16)
++		    | (buf[1] << 8) | buf[0];
++		err = stml0xx_spi_send_write_reg(NONWAKESENSOR_CONFIG, buf, 3);
++		dev_dbg(&stml0xx_misc_data->spi->dev, "Sensor enable = 0x%lx",
++			stml0xx_g_nonwake_sensor_state);
++		break;
++	case STML0XX_IOCTL_GET_SENSORS:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_GET_SENSORS");
++		err = stml0xx_spi_send_read_reg(NONWAKESENSOR_CONFIG, buf, 3);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading get sensors failed");
++			break;
++		}
++		if (copy_to_user(argp, buf, 3 * sizeof(unsigned char)))
++			err = -EFAULT;
++		break;
++	case STML0XX_IOCTL_SET_WAKESENSORS:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_WAKESENSORS");
++		if (copy_from_user(buf, argp, 2 * sizeof(unsigned char))) {
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Copy set sensors returned error");
++			err = -EFAULT;
++			break;
++		}
++		stml0xx_g_wake_sensor_state = (buf[1] << 8) | buf[0];
++		err = stml0xx_spi_send_write_reg(WAKESENSOR_CONFIG, buf, 2);
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sensor enable = 0x%02X", stml0xx_g_wake_sensor_state);
++		break;
++	case STML0XX_IOCTL_GET_WAKESENSORS:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_GET_WAKESENSORS");
++		err = stml0xx_spi_send_read_reg(WAKESENSOR_CONFIG, buf, 2);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading get sensors failed");
++			break;
++		}
++		if (copy_to_user(argp, buf, 2 * sizeof(unsigned char)))
++			err = -EFAULT;
++		break;
++	case STML0XX_IOCTL_SET_ALGOS:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_ALGOS");
++		if (copy_from_user(buf, argp, 2 * sizeof(unsigned char))) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Copy set algos returned error");
++			err = -EFAULT;
++			break;
++		}
++		stml0xx_g_algo_state = (buf[1] << 8) | buf[0];
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Set algos config: 0x%x", stml0xx_g_algo_state);
++		err = stml0xx_spi_send_write_reg(ALGO_CONFIG, buf, 2);
++		break;
++	case STML0XX_IOCTL_GET_ALGOS:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_GET_ALGOS");
++		err = stml0xx_spi_send_read_reg(ALGO_CONFIG, buf, 2);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading get algos failed");
++			break;
++		}
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Get algos config: 0x%x", (buf[1] << 8) | buf[0]);
++		if (copy_to_user(argp, buf, 2 * sizeof(unsigned char)))
++			err = -EFAULT;
++		break;
++	case STML0XX_IOCTL_GET_MAG_CAL:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_GET_MAG_CAL");
++		err =
++		    stml0xx_spi_send_read_reg(MAG_CAL, buf,
++					      STML0XX_MAG_CAL_SIZE);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading get mag cal failed");
++			break;
++		}
++		if (copy_to_user(argp, buf, STML0XX_MAG_CAL_SIZE))
++			err = -EFAULT;
++		break;
++	case STML0XX_IOCTL_SET_MAG_CAL:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_MAG_CAL");
++		if (copy_from_user(buf, argp, STML0XX_MAG_CAL_SIZE)) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Copy set mag cal returned error");
++			err = -EFAULT;
++			break;
++		}
++		memcpy(stml0xx_g_mag_cal, buf, STML0XX_MAG_CAL_SIZE);
++		err =
++		    stml0xx_spi_send_write_reg(MAG_CAL, buf,
++					       STML0XX_MAG_CAL_SIZE);
++		break;
++	case STML0XX_IOCTL_SET_MOTION_DUR:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_MOTION_DUR");
++		if (copy_from_user(&duration, argp, sizeof(duration))) {
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Copy set motion dur returned error");
++			err = -EFAULT;
++			break;
++		}
++		buf[0] = duration & 0xFF;
++		stml0xx_g_motion_dur = buf[0];
++		err = stml0xx_spi_send_write_reg(MOTION_DUR, buf, 1);
++		break;
++	case STML0XX_IOCTL_SET_ZRMOTION_DUR:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_ZRMOTION_DUR");
++		if (copy_from_user(&duration, argp, sizeof(duration))) {
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Copy zmotion dur returned error");
++			err = -EFAULT;
++			break;
++		}
++		buf[0] = duration & 0xFF;
++		stml0xx_g_zmotion_dur = buf[0];
++		err = stml0xx_spi_send_write_reg(ZRMOTION_DUR, buf, 1);
++		break;
++	case STML0XX_IOCTL_GET_DOCK_STATUS:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_GET_DOCK_STATUS");
++		err = stml0xx_spi_send_read_reg(DOCK_DATA, buf, 1);
++		if (copy_to_user(argp, buf, sizeof(unsigned char)))
++			err = -EFAULT;
++		break;
++	case STML0XX_IOCTL_TEST_READ:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_TEST_READ");
++		err = stml0xx_spi_read(buf, 1);
++		/* stml0xx_spi_read will return num of bytes read or error */
++		if (err > 0)
++			err = buf[0];
++		break;
++	case STML0XX_IOCTL_TEST_WRITE:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_TEST_WRITE");
++		if (copy_from_user(buf, argp, sizeof(unsigned char))) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Copy test write returned error");
++			err = -EFAULT;
++			break;
++		}
++		err = stml0xx_spi_write(buf, 1);
++		break;
++	case STML0XX_IOCTL_SET_POSIX_TIME:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_POSIX_TIME");
++
++		if (copy_from_user(&current_posix_time, argp,
++				   sizeof(current_posix_time))) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Copy from user returned error");
++			err = -EFAULT;
++			break;
++		}
++		getnstimeofday(&current_time);
++		stml0xx_time_delta = current_posix_time - current_time.tv_sec;
++		buf[0] = (unsigned char)(current_posix_time >> 24);
++		buf[1] = (unsigned char)((current_posix_time >> 16) & 0xff);
++		buf[2] = (unsigned char)((current_posix_time >> 8) & 0xff);
++		buf[3] = (unsigned char)((current_posix_time) & 0xff);
++		err = stml0xx_spi_send_write_reg(AP_POSIX_TIME, buf, 4);
++		break;
++	case STML0XX_IOCTL_SET_ALGO_REQ:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_ALGO_REQ");
++		/* copy algo index */
++		if (copy_from_user(buf, argp, 2 * sizeof(unsigned char))) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Set algo req copy bytes returned error");
++			err = -EFAULT;
++			break;
++		}
++		algo_idx = (buf[1] << 8) | buf[0];
++		/* copy length */
++		if (copy_from_user(&len, argp + 2 * sizeof(unsigned char),
++				   sizeof(unsigned char))) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Set algo req copy byte returned error");
++			err = -EFAULT;
++			break;
++		}
++		/* algo req register */
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Set algo req, algo idx: %d, len: %u", algo_idx, len);
++		if (algo_idx < STML0XX_NUM_ALGOS) {
++			dev_dbg(&stml0xx_misc_data->spi->dev, "Register: 0x%x",
++				stml0xx_algo_info[algo_idx].req_register);
++		} else {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Set algo req invalid arg");
++			err = -EFAULT;
++			break;
++		}
++		if (len > ALGO_RQST_DATA_SIZE) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Set algo req invalid size arg");
++			err = -EFAULT;
++			break;
++		}
++		if (copy_from_user(&buf[1], argp + 2 * sizeof(unsigned char)
++				   + sizeof(len), len)) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Set algo req copy req info returned error");
++			err = -EFAULT;
++			break;
++		}
++		stml0xx_g_algo_requst[algo_idx].size = len;
++		memcpy(stml0xx_g_algo_requst[algo_idx].data, &buf[1], len);
++		err =
++		    stml0xx_spi_send_write_reg(stml0xx_algo_info
++					       [algo_idx].req_register, buf,
++					       len);
++		break;
++	case STML0XX_IOCTL_GET_ALGO_EVT:
++		dev_dbg(&stml0xx_misc_data->spi->dev, "STML0XX_IOCTL_GET_ALGO_EVT");
++		/* copy algo index */
++		if (copy_from_user(buf, argp, 2 * sizeof(unsigned char))) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Get algo evt copy bytes returned error");
++			err = -EFAULT;
++			break;
++		}
++		algo_idx = (buf[1] << 8) | buf[0];
++		/* algo evt register */
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Get algo evt, algo idx: %d", algo_idx);
++		if (algo_idx < STML0XX_NUM_ALGOS) {
++			dev_dbg(&stml0xx_misc_data->spi->dev, "Register: 0x%x",
++				stml0xx_algo_info[algo_idx].evt_register);
++		} else {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Get algo evt invalid arg");
++			err = -EFAULT;
++			break;
++		}
++		err =
++		    stml0xx_spi_send_read_reg(stml0xx_algo_info
++					      [algo_idx].evt_register, buf,
++					      stml0xx_algo_info
++					      [algo_idx].evt_size);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Get algo evt failed");
++			break;
++		}
++		if (copy_to_user(argp + 2 * sizeof(unsigned char),
++				 buf, stml0xx_algo_info[algo_idx].evt_size))
++			err = -EFAULT;
++		break;
++	case STML0XX_IOCTL_WRITE_REG:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_WRITE_REG");
++
++		/* copy addr and size */
++		if (copy_from_user(buf, argp, 4)) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Write Reg, copy bytes returned error");
++			err = -EFAULT;
++			break;
++		}
++		addr = (buf[0] << 8) | buf[1];
++		data_size = (buf[2] << 8) | buf[3];
++
++		/* fail if the write size is too large */
++		if (data_size > MAX_LOCAL_BUF_SIZE - 1) {
++			err = -EFAULT;
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Write Reg, data_size > %d",
++				MAX_LOCAL_BUF_SIZE - 1);
++			break;
++		}
++
++		/* copy in the data */
++		if (copy_from_user(buf, argp + 4, data_size)) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Write Reg copy from user returned error");
++			err = -EFAULT;
++			break;
++		}
++
++		err = stml0xx_spi_send_write_reg(addr, buf, data_size);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Write Reg unable to write to direct reg %d",
++				err);
++		}
++		break;
++	case STML0XX_IOCTL_READ_REG:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_READ_REG");
++
++		/* copy addr and size */
++		if (copy_from_user(buf, argp, 4)) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Read Reg, copy bytes returned error");
++			err = -EFAULT;
++			break;
++		}
++		addr = (buf[0] << 8) | buf[1];
++		data_size = (buf[2] << 8) | buf[3];
++
++		if (data_size > MAX_LOCAL_BUF_SIZE) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Read Reg error, size too large");
++			err = -EFAULT;
++			break;
++		}
++
++		/* setup the address */
++		err = stml0xx_spi_send_read_reg(addr, buf, data_size);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Read Reg, unable to read from direct reg %d",
++				err);
++			break;
++		}
++
++		if (copy_to_user(argp, buf, data_size)) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Read Reg error copying to user");
++			err = -EFAULT;
++			break;
++		}
++		break;
++	case STML0XX_IOCTL_SET_LOWPOWER_MODE:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_LOWPOWER_MODE");
++		if (copy_from_user(buf, argp, 1)) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Copy size from user returned error");
++			err = -EFAULT;
++			break;
++		}
++
++		err = 0;
++		if (buf[0] != 0 && lowpower_mode == 0) {
++			/* allow sensorhub to sleep */
++			stml0xx_sleep(ps_stml0xx);
++			lowpower_mode = buf[0];
++		} else if (buf[0] == 0 && lowpower_mode == 1) {
++			/* keep sensorhub awake */
++			stml0xx_wake(ps_stml0xx);
++			lowpower_mode = buf[0];
++		}
++		break;
++
++		/* No default here since previous switch could have
++		   handled the command and cannot over write that */
++	}
++
++	stml0xx_sleep(ps_stml0xx);
++	mutex_unlock(&ps_stml0xx->lock);
++	return err;
++}
+diff --git a/drivers/misc/stml0xx/stml0xx_irq.c b/drivers/misc/stml0xx/stml0xx_irq.c
+new file mode 100644
+index 00000000000..5dfff662dc8
+--- /dev/null
++++ b/drivers/misc/stml0xx/stml0xx_irq.c
+@@ -0,0 +1,328 @@
++/*
++ * Copyright (C) 2010-2014 Motorola Mobility LLC
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++ * 02111-1307, USA
++ */
++
++#include <linux/cdev.h>
++#include <linux/delay.h>
++#include <linux/dma-mapping.h>
++#include <linux/err.h>
++#include <linux/errno.h>
++#include <linux/export.h>
++#include <linux/of.h>
++#include <linux/of_gpio.h>
++#include <linux/fs.h>
++#include <linux/gpio.h>
++#include <linux/input.h>
++#include <linux/input-polldev.h>
++#include <linux/interrupt.h>
++#include <linux/irq.h>
++#include <linux/miscdevice.h>
++#include <linux/module.h>
++#include <linux/poll.h>
++#include <linux/regulator/consumer.h>
++#include <linux/slab.h>
++#include <linux/switch.h>
++#include <linux/time.h>
++#include <linux/uaccess.h>
++#include <linux/wakelock.h>
++#include <linux/workqueue.h>
++
++#include <linux/stml0xx.h>
++
++irqreturn_t stml0xx_isr(int irq, void *dev)
++{
++	struct stml0xx_data *ps_stml0xx = dev;
++
++	if (stml0xx_irq_disable)
++		return IRQ_HANDLED;
++
++	queue_work(ps_stml0xx->irq_work_queue, &ps_stml0xx->irq_work);
++	if (ps_stml0xx->irq_wake == -1)
++		queue_work(ps_stml0xx->irq_work_queue,
++			   &ps_stml0xx->irq_wake_work);
++	return IRQ_HANDLED;
++}
++
++void stml0xx_irq_work_func(struct work_struct *work)
++{
++	int err;
++	u32 irq_status;
++	struct stml0xx_data *ps_stml0xx = stml0xx_misc_data;
++	unsigned char buf[SPI_MSG_SIZE];
++
++	dev_dbg(&stml0xx_misc_data->spi->dev, "stml0xx_irq_work_func");
++	mutex_lock(&ps_stml0xx->lock);
++
++	stml0xx_wake(ps_stml0xx);
++
++	if (ps_stml0xx->mode == BOOTMODE)
++		goto EXIT;
++
++	if (ps_stml0xx->is_suspended)
++		goto EXIT;
++
++	/* read interrupt mask register */
++	err = stml0xx_spi_send_read_reg(INTERRUPT_STATUS, buf, 3);
++	if (err < 0) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Reading from stml0xx failed");
++		goto EXIT;
++	}
++	irq_status = (buf[IRQ_NOWAKE_HI] << 16) |
++	    (buf[IRQ_NOWAKE_MED] << 8) | buf[IRQ_NOWAKE_LO];
++
++	if (irq_status & M_ACCEL) {
++		/* read accelerometer values from STML0XX */
++		err = stml0xx_spi_send_read_reg(ACCEL_X, buf, 6);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading Accel from stml0xx failed");
++			goto EXIT;
++		}
++
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_ACCEL, buf, 6, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending acc(x,y,z)values:x=%d,y=%d,z=%d",
++			STM16_TO_HOST(ACCEL_RD_X), STM16_TO_HOST(ACCEL_RD_Y),
++			STM16_TO_HOST(ACCEL_RD_Z));
++	}
++	if (irq_status & M_LIN_ACCEL) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Invalid M_LIN_ACCEL bit set. irq_status = 0x%06x",
++			irq_status);
++
++		/* read linear accelerometer values from STML0XX */
++		err = stml0xx_spi_send_read_reg(LIN_ACCEL_X, buf, 6);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading Linear Accel from stml0xx failed");
++			goto EXIT;
++		}
++
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_LIN_ACCEL,
++					     buf, 6, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending lin_acc(x,y,z)values:x=%d,y=%d,z=%d",
++			STM16_TO_HOST(ACCEL_RD_X), STM16_TO_HOST(ACCEL_RD_Y),
++			STM16_TO_HOST(ACCEL_RD_Z));
++	}
++	if (irq_status & M_ECOMPASS) {
++		unsigned char status;
++		/*Read orientation values */
++		err = stml0xx_spi_send_read_reg(MAG_HX, buf, 13);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading Ecompass failed");
++			goto EXIT;
++		}
++		status = buf[COMPASS_STATUS];
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_MAG,
++					     buf, 6, status);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending mag(x,y,z)values:x=%d,y=%d,z=%d",
++			STM16_TO_HOST(MAG_X), STM16_TO_HOST(MAG_Y),
++			STM16_TO_HOST(MAG_Z));
++
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_ORIENT,
++					     buf + 6, 6, status);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending orient(x,y,z)values:x=%d,y=%d,z=%d",
++			STM16_TO_HOST(ORIENT_X), STM16_TO_HOST(ORIENT_Y),
++			STM16_TO_HOST(ORIENT_Z));
++	}
++	if (irq_status & M_GYRO) {
++		err = stml0xx_spi_send_read_reg(GYRO_X, buf, 6);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading Gyroscope failed");
++			goto EXIT;
++		}
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_GYRO, buf, 6, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending gyro(x,y,z)values:x=%d,y=%d,z=%d",
++			STM16_TO_HOST(GYRO_RD_X), STM16_TO_HOST(GYRO_RD_Y),
++			STM16_TO_HOST(GYRO_RD_Z));
++	}
++	/*MODIFIED UNCALIBRATED GYRO */
++	if (irq_status & M_UNCALIB_GYRO) {
++		err = stml0xx_spi_send_read_reg(UNCALIB_GYRO_X, buf, 12);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading Gyroscope failed");
++			goto EXIT;
++		}
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_UNCALIB_GYRO,
++					     buf, 12, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending Gyro uncalib(x,y,z)values:%d,%d,%d;%d,%d,%d",
++			STM16_TO_HOST(GYRO_RD_X), STM16_TO_HOST(GYRO_RD_Y),
++			STM16_TO_HOST(GYRO_RD_Z),
++			STM16_TO_HOST(GYRO_UNCALIB_X),
++			STM16_TO_HOST(GYRO_UNCALIB_Y),
++			STM16_TO_HOST(GYRO_UNCALIB_Z));
++	}
++	if (irq_status & M_UNCALIB_MAG) {
++		err = stml0xx_spi_send_read_reg(UNCALIB_MAG_X, buf, 12);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading Gyroscope failed");
++			goto EXIT;
++		}
++
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_UNCALIB_MAG,
++					     buf, 12, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending Gyro uncalib(x,y,z)values:%d,%d,%d;%d,%d,%d",
++			STM16_TO_HOST(MAG_X), STM16_TO_HOST(MAG_Y),
++			STM16_TO_HOST(MAG_Z), STM16_TO_HOST(MAG_UNCALIB_X),
++			STM16_TO_HOST(MAG_UNCALIB_Y),
++			STM16_TO_HOST(MAG_UNCALIB_Z));
++	}
++	if (irq_status & M_STEP_COUNTER) {
++		err = stml0xx_spi_send_read_reg(STEP_COUNTER, buf, 8);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading step counter failed");
++			goto EXIT;
++		}
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_STEP_COUNTER,
++					     buf, 8, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending step counter %X %X %X %X",
++			STM16_TO_HOST(STEP64_DATA), STM16_TO_HOST(STEP32_DATA),
++			STM16_TO_HOST(STEP16_DATA), STM16_TO_HOST(STEP8_DATA));
++	}
++	if (irq_status & M_STEP_DETECTOR) {
++		unsigned short detected_steps = 0;
++		err = stml0xx_spi_send_read_reg(STEP_DETECTOR, buf, 1);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading step detector failed");
++			goto EXIT;
++		}
++		detected_steps = buf[STEP_DETECT];
++		while (detected_steps-- != 0) {
++			stml0xx_as_data_buffer_write(ps_stml0xx,
++						     DT_STEP_DETECTOR, buf, 1,
++						     0);
++
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Sending step detector");
++		}
++	}
++	if (irq_status & M_ALS) {
++		err = stml0xx_spi_send_read_reg(ALS_LUX, buf, 2);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading ALS from stml0xx failed");
++			goto EXIT;
++		}
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_ALS, buf, 2, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending ALS %d", STM16_TO_HOST(ALS_VALUE));
++	}
++	if (irq_status & M_TEMPERATURE) {
++		/* Read temperature value */
++		err = stml0xx_spi_send_read_reg(TEMPERATURE_DATA, buf, 2);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading Temperature failed");
++			goto EXIT;
++		}
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_TEMP, buf, 2, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending temp(x)value:%d", STM16_TO_HOST(TEMP_VALUE));
++	}
++	if (irq_status & M_PRESSURE) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Invalid M_PRESSURE bit set. irq_status = 0x%06x",
++			irq_status);
++		/* Read pressure value */
++		err = stml0xx_spi_send_read_reg(CURRENT_PRESSURE, buf, 4);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading Pressure failed");
++			goto EXIT;
++		}
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_PRESSURE,
++					     buf, 4, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending pressure %d", STM32_TO_HOST(PRESSURE_VALUE));
++	}
++	if (irq_status & M_GRAVITY) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Invalid M_GRAVITY bit set. irq_status = 0x%06x",
++			irq_status);
++
++		/* read gravity values from STML0XX */
++		err = stml0xx_spi_send_read_reg(GRAVITY_X, buf, 6);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading Gravity from stml0xx failed");
++			goto EXIT;
++		}
++
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_GRAVITY, buf, 6, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending gravity(x,y,z)values:x=%d,y=%d,z=%d",
++			STM16_TO_HOST(GRAV_X), STM16_TO_HOST(GRAV_Y),
++			STM16_TO_HOST(GRAV_Z));
++	}
++	if (irq_status & M_DISP_ROTATE) {
++		/* Read Display Rotate value */
++		err = stml0xx_spi_send_read_reg(DISP_ROTATE_DATA, buf, 1);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading disp_rotate failed");
++			goto EXIT;
++		}
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_DISP_ROTATE,
++					     buf, 1, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending disp_rotate(x)value: %d", buf[DISP_VALUE]);
++	}
++	if (irq_status & M_DISP_BRIGHTNESS) {
++		err = stml0xx_spi_send_read_reg(DISPLAY_BRIGHTNESS, buf, 1);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading Display Brightness failed");
++			goto EXIT;
++		}
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_DISP_BRIGHT,
++					     buf, 1, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending Display Brightness %d", buf[DISP_VALUE]);
++	}
++EXIT:
++	stml0xx_sleep(ps_stml0xx);
++	/* For now HAE needs events even if the activity is still */
++	mutex_unlock(&ps_stml0xx->lock);
++}
+diff --git a/drivers/misc/stml0xx/stml0xx_queue.c b/drivers/misc/stml0xx/stml0xx_queue.c
+new file mode 100644
+index 00000000000..7f98b85df48
+--- /dev/null
++++ b/drivers/misc/stml0xx/stml0xx_queue.c
+@@ -0,0 +1,273 @@
++/*
++ * Copyright (C) 2010-2014 Motorola Mobility LLC
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++ * 02111-1307, USA
++ */
++
++#include <linux/cdev.h>
++#include <linux/delay.h>
++#include <linux/dma-mapping.h>
++#include <linux/err.h>
++#include <linux/errno.h>
++#include <linux/export.h>
++#include <linux/of.h>
++#include <linux/of_gpio.h>
++#include <linux/fs.h>
++#include <linux/gpio.h>
++#include <linux/input.h>
++#include <linux/input-polldev.h>
++#include <linux/interrupt.h>
++#include <linux/irq.h>
++#include <linux/miscdevice.h>
++#include <linux/module.h>
++#include <linux/poll.h>
++#include <linux/regulator/consumer.h>
++#include <linux/slab.h>
++#include <linux/switch.h>
++#include <linux/time.h>
++#include <linux/uaccess.h>
++#include <linux/wakelock.h>
++#include <linux/workqueue.h>
++
++#include <linux/stml0xx.h>
++
++int stml0xx_as_data_buffer_write(struct stml0xx_data *ps_stml0xx,
++				 unsigned char type, unsigned char *data,
++				 int size, unsigned char status)
++{
++	int new_head;
++	struct stml0xx_android_sensor_data *buffer;
++	struct timespec ts;
++	static bool error_reported;
++
++	new_head = (ps_stml0xx->stml0xx_as_data_buffer_head + 1)
++	    & STML0XX_AS_DATA_QUEUE_MASK;
++	if (new_head == ps_stml0xx->stml0xx_as_data_buffer_tail) {
++		if (!error_reported) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"as data buffer full");
++			error_reported = true;
++		}
++		wake_up(&ps_stml0xx->stml0xx_as_data_wq);
++		return 0;
++	}
++	buffer = &(ps_stml0xx->stml0xx_as_data_buffer[new_head]);
++	buffer->type = type;
++	buffer->status = status;
++	if (data != NULL && size > 0) {
++		if (size > sizeof(buffer->data)) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"size %d exceeds as buffer", size);
++			return 0;
++		}
++		memcpy(buffer->data, data, size);
++	}
++	buffer->size = size;
++
++	ktime_get_ts(&ts);
++	buffer->timestamp = ts.tv_sec * 1000000000LL + ts.tv_nsec;
++
++	ps_stml0xx->stml0xx_as_data_buffer_head = new_head;
++	wake_up(&ps_stml0xx->stml0xx_as_data_wq);
++
++	error_reported = false;
++	return 1;
++}
++
++int stml0xx_as_data_buffer_read(struct stml0xx_data *ps_stml0xx,
++				struct stml0xx_android_sensor_data *buff)
++{
++	int new_tail;
++
++	if (ps_stml0xx->stml0xx_as_data_buffer_tail
++	    == ps_stml0xx->stml0xx_as_data_buffer_head)
++		return 0;
++
++	new_tail = (ps_stml0xx->stml0xx_as_data_buffer_tail + 1)
++	    & STML0XX_AS_DATA_QUEUE_MASK;
++
++	*buff = ps_stml0xx->stml0xx_as_data_buffer[new_tail];
++
++	ps_stml0xx->stml0xx_as_data_buffer_tail = new_tail;
++
++	return 1;
++}
++
++int stml0xx_ms_data_buffer_write(struct stml0xx_data *ps_stml0xx,
++				 unsigned char type, unsigned char *data,
++				 int size)
++{
++	int new_head;
++	struct stml0xx_moto_sensor_data *buffer;
++	struct timespec ts;
++	static bool error_reported;
++
++	new_head = (ps_stml0xx->stml0xx_ms_data_buffer_head + 1)
++	    & STML0XX_MS_DATA_QUEUE_MASK;
++	if (new_head == ps_stml0xx->stml0xx_ms_data_buffer_tail) {
++		if (!error_reported) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"ms data buffer full");
++			error_reported = true;
++		}
++		wake_up(&ps_stml0xx->stml0xx_ms_data_wq);
++		return 0;
++	}
++	buffer = &(ps_stml0xx->stml0xx_ms_data_buffer[new_head]);
++	buffer->type = type;
++	if (data != NULL && size > 0) {
++		if (size > sizeof(buffer->data)) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"size %d exceeds ms buffer", size);
++			return 0;
++		}
++		memcpy(buffer->data, data, size);
++	}
++	buffer->size = size;
++
++	ktime_get_ts(&ts);
++	buffer->timestamp = ts.tv_sec * 1000000000LL + ts.tv_nsec;
++
++	ps_stml0xx->stml0xx_ms_data_buffer_head = new_head;
++	wake_up(&ps_stml0xx->stml0xx_ms_data_wq);
++
++	error_reported = false;
++	return 1;
++}
++
++int stml0xx_ms_data_buffer_read(struct stml0xx_data *ps_stml0xx,
++				struct stml0xx_moto_sensor_data *buff)
++{
++	int new_tail;
++
++	if (ps_stml0xx->stml0xx_ms_data_buffer_tail
++	    == ps_stml0xx->stml0xx_ms_data_buffer_head)
++		return 0;
++
++	new_tail = (ps_stml0xx->stml0xx_ms_data_buffer_tail + 1)
++	    & STML0XX_MS_DATA_QUEUE_MASK;
++
++	*buff = ps_stml0xx->stml0xx_ms_data_buffer[new_tail];
++
++	ps_stml0xx->stml0xx_ms_data_buffer_tail = new_tail;
++
++	return 1;
++}
++
++static int stml0xx_as_open(struct inode *inode, struct file *file)
++{
++	int err = 0;
++
++	dev_dbg(&stml0xx_misc_data->spi->dev, "stml0xx_as_open");
++
++	err = nonseekable_open(inode, file);
++	if (err < 0)
++		return err;
++	file->private_data = stml0xx_misc_data;
++
++	return err;
++}
++
++static ssize_t stml0xx_as_read(struct file *file, char __user *buffer,
++			       size_t size, loff_t *ppos)
++{
++	int ret;
++	struct stml0xx_android_sensor_data tmp_buff;
++	struct stml0xx_data *ps_stml0xx = file->private_data;
++
++	ret = stml0xx_as_data_buffer_read(ps_stml0xx, &tmp_buff);
++	if (ret == 0)
++		return 0;
++	ret = copy_to_user(buffer, &tmp_buff,
++			   sizeof(struct stml0xx_android_sensor_data));
++	if (ret != 0) {
++		dev_err(&stml0xx_misc_data->spi->dev, "Copy error");
++		return 0;
++	}
++
++	return sizeof(struct stml0xx_android_sensor_data);
++}
++
++static unsigned int stml0xx_as_poll(struct file *file,
++				    struct poll_table_struct *wait)
++{
++	unsigned int mask = 0;
++	struct stml0xx_data *ps_stml0xx = file->private_data;
++
++	poll_wait(file, &ps_stml0xx->stml0xx_as_data_wq, wait);
++	if (ps_stml0xx->stml0xx_as_data_buffer_head
++	    != ps_stml0xx->stml0xx_as_data_buffer_tail)
++		mask = POLLIN | POLLRDNORM;
++
++	return mask;
++}
++
++const struct file_operations stml0xx_as_fops = {
++	.owner = THIS_MODULE,
++	.open = stml0xx_as_open,
++	.read = stml0xx_as_read,
++	.poll = stml0xx_as_poll,
++};
++
++static int stml0xx_ms_open(struct inode *inode, struct file *file)
++{
++	int err = 0;
++
++	dev_dbg(&stml0xx_misc_data->spi->dev, "stml0xx_ms_open");
++
++	err = nonseekable_open(inode, file);
++	if (err < 0)
++		return err;
++	file->private_data = stml0xx_misc_data;
++
++	return err;
++}
++
++static ssize_t stml0xx_ms_read(struct file *file, char __user *buffer,
++			       size_t size, loff_t *ppos)
++{
++	int ret;
++	struct stml0xx_moto_sensor_data tmp_buff;
++	struct stml0xx_data *ps_stml0xx = file->private_data;
++
++	ret = stml0xx_ms_data_buffer_read(ps_stml0xx, &tmp_buff);
++	if (copy_to_user(buffer, &tmp_buff,
++			 sizeof(struct stml0xx_moto_sensor_data))
++	    != 0) {
++		dev_err(&stml0xx_misc_data->spi->dev, "Copy error");
++		ret = 0;
++	}
++
++	return ret;
++}
++
++static unsigned int stml0xx_ms_poll(struct file *file,
++				    struct poll_table_struct *wait)
++{
++	unsigned int mask = 0;
++	struct stml0xx_data *ps_stml0xx = file->private_data;
++	poll_wait(file, &ps_stml0xx->stml0xx_ms_data_wq, wait);
++	if (ps_stml0xx->stml0xx_ms_data_buffer_head
++	    != ps_stml0xx->stml0xx_ms_data_buffer_tail)
++		mask = POLLIN | POLLRDNORM;
++	return mask;
++}
++
++const struct file_operations stml0xx_ms_fops = {
++	.owner = THIS_MODULE,
++	.open = stml0xx_ms_open,
++	.read = stml0xx_ms_read,
++	.poll = stml0xx_ms_poll,
++};
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+new file mode 100644
+index 00000000000..b41dd7fb970
+--- /dev/null
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -0,0 +1,154 @@
++/*
++ * Copyright (C) 2010-2014 Motorola Mobility LLC
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++ * 02111-1307, USA
++ */
++
++#include <linux/cdev.h>
++#include <linux/delay.h>
++#include <linux/dma-mapping.h>
++#include <linux/err.h>
++#include <linux/errno.h>
++#include <linux/export.h>
++#include <linux/of.h>
++#include <linux/of_gpio.h>
++#include <linux/fs.h>
++#include <linux/gpio.h>
++#include <linux/input.h>
++#include <linux/input-polldev.h>
++#include <linux/interrupt.h>
++#include <linux/irq.h>
++#include <linux/miscdevice.h>
++#include <linux/module.h>
++#include <linux/poll.h>
++#include <linux/regulator/consumer.h>
++#include <linux/slab.h>
++#include <linux/switch.h>
++#include <linux/time.h>
++#include <linux/uaccess.h>
++#include <linux/wakelock.h>
++#include <linux/workqueue.h>
++
++#include <linux/stml0xx.h>
++
++void stml0xx_reset(struct stml0xx_platform_data *pdata, unsigned char *cmdbuff)
++{
++	dev_err(&stml0xx_misc_data->spi->dev, "stml0xx_reset");
++	msleep(stml0xx_spi_retry_delay);
++	gpio_set_value(pdata->gpio_reset, 0);
++	msleep(stml0xx_spi_retry_delay);
++	gpio_set_value(pdata->gpio_reset, 1);
++	msleep(STML0XX_RESET_DELAY);
++	stml0xx_detect_lowpower_mode(cmdbuff);
++}
++
++int stml0xx_reset_and_init(void)
++{
++	struct stml0xx_platform_data *pdata;
++	unsigned int i;
++	int err, ret_err = 0;
++	unsigned char *rst_cmdbuff = stml0xx_misc_data->spi_tx_buf;
++	unsigned char buf[SPI_MSG_SIZE];
++	dev_dbg(&stml0xx_misc_data->spi->dev, "stml0xx_reset_and_init");
++
++	if (rst_cmdbuff == NULL)
++		return -ENOMEM;
++
++	stml0xx_reset(stml0xx_misc_data->pdata, rst_cmdbuff);
++
++	wake_lock(&stml0xx_misc_data->reset_wakelock);
++
++	pdata = stml0xx_misc_data->pdata;
++
++	stml0xx_reset(pdata, rst_cmdbuff);
++	stml0xx_spi_retry_delay = 200;
++
++	stml0xx_wake(stml0xx_misc_data);
++
++	buf[0] = stml0xx_g_acc_delay;
++	err = stml0xx_spi_send_write_reg(ACCEL_UPDATE_RATE, buf, 1);
++	if (err < 0)
++		ret_err = err;
++
++	stml0xx_spi_retry_delay = 10;
++
++	buf[0] = stml0xx_g_nonwake_sensor_state & 0xFF;
++	buf[1] = (stml0xx_g_nonwake_sensor_state >> 8) & 0xFF;
++	buf[2] = stml0xx_g_nonwake_sensor_state >> 16;
++	err = stml0xx_spi_send_write_reg(NONWAKESENSOR_CONFIG, buf, 3);
++	if (err < 0)
++		ret_err = err;
++
++	buf[0] = stml0xx_g_wake_sensor_state & 0xFF;
++	buf[1] = stml0xx_g_wake_sensor_state >> 8;
++	err = stml0xx_spi_send_write_reg(WAKESENSOR_CONFIG, buf, 2);
++	if (err < 0)
++		ret_err = err;
++
++	buf[0] = stml0xx_g_algo_state & 0xFF;
++	buf[1] = stml0xx_g_algo_state >> 8;
++	err = stml0xx_spi_send_write_reg(ALGO_CONFIG, buf, 2);
++	if (err < 0)
++		ret_err = err;
++
++	buf[0] = stml0xx_g_motion_dur;
++	err = stml0xx_spi_send_write_reg(MOTION_DUR, buf, 1);
++	if (err < 0)
++		ret_err = err;
++
++	buf[0] = stml0xx_g_zmotion_dur;
++	err = stml0xx_spi_send_write_reg(ZRMOTION_DUR, buf, 1);
++	if (err < 0)
++		ret_err = err;
++
++	for (i = 0; i < STML0XX_NUM_ALGOS; i++) {
++		if (stml0xx_g_algo_requst[i].size > 0) {
++			memcpy(buf,
++			       stml0xx_g_algo_requst[i].data,
++			       stml0xx_g_algo_requst[i].size);
++			err =
++			    stml0xx_spi_send_write_reg(stml0xx_algo_info
++						       [i].req_register, buf,
++						       stml0xx_g_algo_requst
++						       [i].size);
++			if (err < 0)
++				ret_err = err;
++		}
++	}
++	err = stml0xx_spi_send_read_reg(INTERRUPT_STATUS, buf, 3);
++	err = stml0xx_spi_send_read_reg(WAKESENSOR_STATUS, buf, 2);
++
++	buf[0] = (pdata->ct406_detect_threshold >> 8) & 0xff;
++	buf[1] = pdata->ct406_detect_threshold & 0xff;
++	buf[2] = (pdata->ct406_undetect_threshold >> 8) & 0xff;
++	buf[3] = pdata->ct406_undetect_threshold & 0xff;
++	buf[4] = (pdata->ct406_recalibrate_threshold >> 8) & 0xff;
++	buf[5] = pdata->ct406_recalibrate_threshold & 0xff;
++	buf[6] = pdata->ct406_pulse_count & 0xff;
++	err = stml0xx_spi_send_write_reg(PROX_SETTINGS, buf, 7);
++	if (err < 0) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"unable to write proximity settings %d", err);
++		ret_err = err;
++	}
++
++	/* sending reset to slpc hal */
++	stml0xx_ms_data_buffer_write(stml0xx_misc_data, DT_RESET, NULL, 0);
++
++	stml0xx_sleep(stml0xx_misc_data);
++	wake_unlock(&stml0xx_misc_data->reset_wakelock);
++
++	return ret_err;
++}
+diff --git a/drivers/misc/stml0xx/stml0xx_spi.c b/drivers/misc/stml0xx/stml0xx_spi.c
+new file mode 100644
+index 00000000000..e902bb851e4
+--- /dev/null
++++ b/drivers/misc/stml0xx/stml0xx_spi.c
+@@ -0,0 +1,414 @@
++/*
++ * Copyright (C) 2014 Motorola Mobility LLC
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++ * 02111-1307, USA
++ */
++
++#include <linux/cdev.h>
++#include <linux/delay.h>
++#include <linux/dma-mapping.h>
++#include <linux/err.h>
++#include <linux/errno.h>
++#include <linux/export.h>
++#include <linux/of.h>
++#include <linux/of_gpio.h>
++#include <linux/fs.h>
++#include <linux/gpio.h>
++#include <linux/input.h>
++#include <linux/input-polldev.h>
++#include <linux/interrupt.h>
++#include <linux/irq.h>
++#include <linux/miscdevice.h>
++#include <linux/module.h>
++#include <linux/poll.h>
++#include <linux/regulator/consumer.h>
++#include <linux/slab.h>
++#include <linux/switch.h>
++#include <linux/time.h>
++#include <linux/uaccess.h>
++#include <linux/wakelock.h>
++#include <linux/workqueue.h>
++
++#include <linux/stml0xx.h>
++
++#define RESET_RETRIES		2
++
++int stml0xx_spi_sensorhub_ready(void)
++{
++	int timeout = SPI_SENSORHUB_TIMEOUT;
++
++	/* wait for the sensorhub to signal it's ready */
++	while (!gpio_get_value
++	       (stml0xx_misc_data->pdata->gpio_spi_ready_for_receive)
++	       && --timeout) {
++		udelay(1);
++	}
++
++	if (timeout <= 0)
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"data ready timeout: %d", timeout);
++	else
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"got data ready! %d", timeout);
++
++	return timeout;
++}
++
++/* Transfer data over SPI */
++int stml0xx_spi_transfer(unsigned char *tx_buf, unsigned char *rx_buf, int len)
++{
++	struct spi_message msg;
++	struct spi_transfer transfer;
++	int rc;
++
++	/* need to move the retries up to read/write reg
++	   because read reg will need to resend the header
++	   on errors */
++	int tries = SPI_RETRIES;
++
++	if ((!tx_buf && !rx_buf) || len == 0)
++		return -EFAULT;
++
++	if (!rx_buf)
++		rx_buf = stml0xx_misc_data->spi_rx_buf;
++
++	memset(rx_buf, 0, len);
++	memset(&transfer, 0, sizeof(transfer));
++	spi_message_init(&msg);
++	transfer.tx_buf = tx_buf;
++	transfer.rx_buf = rx_buf;
++	transfer.len = len;
++	transfer.bits_per_word = 8;
++	transfer.delay_usecs = 0;
++
++	if (stml0xx_misc_data->mode == BOOTMODE) {
++		/* boot mode clock speed */
++		transfer.speed_hz = SPI_FLASH_CLK_SPD_HZ;
++	} else {
++		transfer.speed_hz = SPI_NORMAL_CLK_SPD_HZ;
++	}
++
++	if (SPI_DMA_ENABLED) {
++		transfer.tx_dma = stml0xx_misc_data->spi_tx_dma;
++		transfer.rx_dma = stml0xx_misc_data->spi_rx_dma;
++		msg.is_dma_mapped = 1;
++	}
++
++	spi_message_add_tail(&transfer, &msg);
++
++	while (tries--) {
++		if (stml0xx_misc_data->mode != BOOTMODE
++			&& stml0xx_g_booted) {
++			if (stml0xx_spi_sensorhub_ready() < 0) {
++				/* sensorhub is not ready
++				   continue and try again */
++				continue;
++			}
++		}
++
++		rc = spi_sync(stml0xx_misc_data->spi, &msg);
++
++		if (stml0xx_misc_data->mode != BOOTMODE
++			&& stml0xx_g_booted) {
++			if (rc >= 0) {
++				/* wait for the hub to process the message
++				   and ack/nack */
++				stml0xx_spi_sensorhub_ready();
++
++				/* check for sensorhub ack */
++				if (!gpio_get_value
++				    (stml0xx_misc_data->
++				     pdata->gpio_spi_data_ack)) {
++					rc = -EIO;
++					/* need to change this back to error
++					   when spi is stable */
++					dev_dbg(&stml0xx_misc_data->spi->dev,
++						"SPI transfer error NACK");
++				}
++			}
++		}
++
++		if (rc >= 0) {
++			/* Successful write */
++#if ENABLE_VERBOSE_LOGGING
++			int i;
++			for (i = 0; i < len; i++) {
++				if (tx_buf) {
++					dev_dbg(&stml0xx_misc_data->spi->dev,
++						"SPI Write 0x%02x, Read 0x%02x"
++						, tx_buf[i], rx_buf[i]);
++				} else {
++					dev_dbg(&stml0xx_misc_data->spi->dev,
++						"SPI ----------, Read 0x%02x",
++						rx_buf[i]);
++				}
++			}
++#endif
++
++			goto EXIT;
++		}
++		/* need to change this back to error when spi is stable */
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"SPI transfer error [%d], retries left [%d]",
++			rc, tries);
++		msleep(SPI_RETRY_DELAY);
++	}
++
++	if (tx_buf)
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"SPI write failed [%d]", rc);
++	else
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"SPI read failed [%d]", rc);
++
++EXIT:
++	return rc;
++}
++
++/* Write then read over SPI */
++int stml0xx_spi_write_read_no_reset(unsigned char *tx_buf, int tx_len,
++				    unsigned char *rx_buf, int rx_len)
++{
++	int rc = stml0xx_spi_transfer(tx_buf, NULL, tx_len);
++	if (rc >= 0)
++		rc = stml0xx_spi_transfer(NULL, rx_buf, rx_len);
++	return rc;
++}
++
++/* Read bytes from SPI */
++int stml0xx_spi_read_no_reset(unsigned char *buf, int len)
++{
++	return stml0xx_spi_transfer(NULL, buf, len);
++}
++
++/* Write bytes over SPI */
++int stml0xx_spi_write_no_reset(unsigned char *buf, int len)
++{
++	return stml0xx_spi_transfer(buf, NULL, len);
++}
++
++int stml0xx_spi_write_read(unsigned char *tx_buf, int tx_len,
++			   unsigned char *rx_buf, int rx_len)
++{
++	int tries, err = 0;
++
++	if (stml0xx_misc_data->mode == BOOTMODE)
++		return -EFAULT;
++
++	if (tx_buf == NULL || rx_buf == NULL || tx_len == 0 || rx_len == 0)
++		return -EFAULT;
++
++	tries = 0;
++	do {
++		err =
++		    stml0xx_spi_write_read_no_reset(tx_buf, tx_len, rx_buf,
++						    rx_len);
++		if (err < 0)
++			stml0xx_reset_and_init();
++	} while ((err < 0) && (++tries < RESET_RETRIES));
++
++	if (err < 0) {
++		dev_err(&stml0xx_misc_data->spi->dev, "write_read error");
++		err = -EIO;
++	} else {
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"write_read successful:");
++	}
++
++	return err;
++}
++
++int stml0xx_spi_read(unsigned char *buf, int len)
++{
++	int tries, err = 0;
++
++	if (buf == NULL || len == 0)
++		return -EFAULT;
++
++	if (stml0xx_misc_data->mode == BOOTMODE)
++		return -EFAULT;
++
++	tries = 0;
++	do {
++		err = stml0xx_spi_read_no_reset(buf, len);
++		if (err < 0)
++			stml0xx_reset_and_init();
++	} while ((err < 0) && (++tries < RESET_RETRIES));
++	if (err < 0) {
++		dev_err(&stml0xx_misc_data->spi->dev, "read error");
++		err = -EIO;
++	} else {
++		dev_dbg(&stml0xx_misc_data->spi->dev, "read successful:");
++	}
++	return err;
++}
++
++int stml0xx_spi_write(unsigned char *buf, int len)
++{
++	int err = 0;
++	int tries = 0;
++
++	if (stml0xx_misc_data->mode == BOOTMODE)
++		return -EFAULT;
++
++	tries = 0;
++	do {
++		err = stml0xx_spi_write_no_reset(buf, len);
++		if (err < 0)
++			stml0xx_reset_and_init();
++	} while ((err < 0) && (++tries < RESET_RETRIES));
++
++	if (err < 0) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"write error - %x", buf[0]);
++		err = -EIO;
++	} else {
++		dev_dbg(&stml0xx_misc_data->spi->dev, "write successful");
++	}
++	return err;
++}
++
++int stml0xx_spi_send_write_reg(unsigned char reg_type,
++			       unsigned char *reg_data, int reg_data_size)
++{
++
++	int data_offset = 0, data_size;
++	int remaining_data_size = reg_data_size;
++	int ret = 0;
++
++	if (!reg_data || reg_data_size <= 0 ||
++		reg_data_size > STML0XX_MAX_REG_LEN) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Invalid buffer or buffer size");
++		ret = -EFAULT;
++		goto EXIT;
++	}
++
++	while (remaining_data_size > 0) {
++		/* Clear buffer */
++		memset(stml0xx_cmdbuff, 0, SPI_MSG_SIZE);
++
++		/* Populate header */
++		stml0xx_cmdbuff[0] = SPI_BARKER_1;
++		stml0xx_cmdbuff[1] = SPI_BARKER_2;
++		stml0xx_cmdbuff[2] = SPI_MSG_TYPE_WRITE_REG;
++		stml0xx_cmdbuff[3] = reg_type;
++
++		/* Payload data offset */
++		stml0xx_cmdbuff[4] = data_offset;
++		data_size = (remaining_data_size < SPI_MAX_PAYLOAD_LEN) ?
++		    remaining_data_size : SPI_MAX_PAYLOAD_LEN;
++		stml0xx_cmdbuff[5] = data_size;
++
++		/* Copy data and update data parameters */
++		memcpy(&stml0xx_cmdbuff[SPI_WRITE_REG_HDR_SIZE],
++		       reg_data + data_offset, data_size);
++		remaining_data_size -= data_size;
++		data_offset += data_size;
++
++		/* Swap all bytes */
++		stml0xx_spi_swap_bytes(stml0xx_cmdbuff,
++				       SPI_MSG_SIZE - SPI_CRC_LEN);
++
++		/* Append 2-byte CRC (unswapped) */
++		stml0xx_spi_append_crc(stml0xx_cmdbuff,
++				       SPI_MSG_SIZE - SPI_CRC_LEN);
++
++		/* Write write request to SPI */
++		ret = stml0xx_spi_write(stml0xx_cmdbuff, SPI_MSG_SIZE);
++		if (ret < 0)
++			goto EXIT;
++	}
++
++EXIT:
++	return ret;
++}
++
++int stml0xx_spi_send_read_reg(unsigned char reg_type,
++			      unsigned char *reg_data, int reg_data_size)
++{
++	unsigned short recv_crc, calc_crc;
++	int ret = 0;
++
++	/* TODO: No support for offset for now */
++	if (!reg_data || reg_data_size <= 0 ||
++		reg_data_size > SPI_MAX_PAYLOAD_LEN) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Invalid buffer or buffer size");
++		ret = -EFAULT;
++		goto EXIT;
++	}
++
++	/* Clear buffer */
++	memset(stml0xx_cmdbuff, 0, SPI_MSG_SIZE);
++
++	/* Populate header */
++	stml0xx_cmdbuff[0] = SPI_BARKER_1;
++	stml0xx_cmdbuff[1] = SPI_BARKER_2;
++	stml0xx_cmdbuff[2] = SPI_MSG_TYPE_READ_REG;
++	stml0xx_cmdbuff[3] = reg_type;
++	stml0xx_cmdbuff[4] = 0;	/* offset */
++	stml0xx_cmdbuff[5] = reg_data_size;
++
++	/* Swap all bytes */
++	stml0xx_spi_swap_bytes(stml0xx_cmdbuff, SPI_MSG_SIZE - SPI_CRC_LEN);
++
++	/* Append 2-byte CRC (unswapped) */
++	stml0xx_spi_append_crc(stml0xx_cmdbuff, SPI_MSG_SIZE - SPI_CRC_LEN);
++
++	/* Write read request to SPI */
++	ret = stml0xx_spi_write(stml0xx_cmdbuff, SPI_MSG_SIZE);
++	if (ret < 0) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Failed to send read reg request");
++		goto EXIT;
++	}
++
++	ret = stml0xx_spi_read(stml0xx_readbuff, SPI_MSG_SIZE);
++	if (ret < 0) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Failed to receive reg data");
++		goto EXIT;
++	}
++	/* Validate CRC */
++	recv_crc = (stml0xx_readbuff[30] << 8) | stml0xx_readbuff[31];
++	calc_crc = stml0xx_spi_calculate_crc(stml0xx_readbuff,
++					    SPI_MSG_SIZE - SPI_CRC_LEN);
++	if (recv_crc != calc_crc) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"CRC mismatch [0x%02x/0x%02x]. Discarding data.",
++			recv_crc, calc_crc);
++		ret = -EIO;
++		goto EXIT;
++	}
++	/* Swap bytes before extracting data */
++	stml0xx_spi_swap_bytes(stml0xx_readbuff, SPI_MSG_SIZE - SPI_CRC_LEN);
++
++	/* Extract payload */
++	memcpy(reg_data, stml0xx_readbuff, reg_data_size);
++
++EXIT:
++	return ret;
++}
++
++void stml0xx_spi_swap_bytes(unsigned char *data, int size)
++{
++	unsigned short *temp = (unsigned short *)data;
++	int len = size / 2;
++	int i;
++
++	for (i = 0; i < len; i++)
++		temp[i] = (temp[i] >> 8) | (temp[i] << 8);
++}
+diff --git a/drivers/misc/stml0xx/stml0xx_spi_crc.c b/drivers/misc/stml0xx/stml0xx_spi_crc.c
+new file mode 100644
+index 00000000000..f2e0ae5a9d7
+--- /dev/null
++++ b/drivers/misc/stml0xx/stml0xx_spi_crc.c
+@@ -0,0 +1,122 @@
++/*
++ * Copyright (C) 2014 Motorola Mobility LLC
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++ * 02111-1307, USA
++ */
++
++#include <linux/cdev.h>
++#include <linux/delay.h>
++#include <linux/dma-mapping.h>
++#include <linux/err.h>
++#include <linux/errno.h>
++#include <linux/export.h>
++#include <linux/of.h>
++#include <linux/of_gpio.h>
++#include <linux/fs.h>
++#include <linux/gpio.h>
++#include <linux/input.h>
++#include <linux/input-polldev.h>
++#include <linux/interrupt.h>
++#include <linux/irq.h>
++#include <linux/miscdevice.h>
++#include <linux/module.h>
++#include <linux/poll.h>
++#include <linux/regulator/consumer.h>
++#include <linux/slab.h>
++#include <linux/switch.h>
++#include <linux/time.h>
++#include <linux/uaccess.h>
++#include <linux/wakelock.h>
++#include <linux/workqueue.h>
++
++#include <linux/stml0xx.h>
++
++/*****************************************************************/
++/*                                                               */
++/* CRC LOOKUP TABLE                                              */
++/* ================                                              */
++/* The following CRC lookup table was generated automagically    */
++/* by the Rocksoft^tm Model CRC Algorithm Table Generation       */
++/* Program V1.0 using the following model parameters:            */
++/*                                                               */
++/*    Width   : 2 bytes.                                         */
++/*    Poly    : 0x1021                                           */
++/*    Reverse : FALSE.                                           */
++/*                                                               */
++/* For more information on the Rocksoft^tm Model CRC Algorithm,  */
++/* see the document titled "A Painless Guide to CRC Error        */
++/* Detection Algorithms" by Ross Williams                        */
++/* (ross@guest.adelaide.edu.au.). This document is likely to be  */
++/* in the FTP archive "ftp.adelaide.edu.au/pub/rocksoft".        */
++/*                                                               */
++/*****************************************************************/
++
++static unsigned short crctable[256] = {
++	0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50A5, 0x60C6, 0x70E7,
++	0x8108, 0x9129, 0xA14A, 0xB16B, 0xC18C, 0xD1AD, 0xE1CE, 0xF1EF,
++	0x1231, 0x0210, 0x3273, 0x2252, 0x52B5, 0x4294, 0x72F7, 0x62D6,
++	0x9339, 0x8318, 0xB37B, 0xA35A, 0xD3BD, 0xC39C, 0xF3FF, 0xE3DE,
++	0x2462, 0x3443, 0x0420, 0x1401, 0x64E6, 0x74C7, 0x44A4, 0x5485,
++	0xA56A, 0xB54B, 0x8528, 0x9509, 0xE5EE, 0xF5CF, 0xC5AC, 0xD58D,
++	0x3653, 0x2672, 0x1611, 0x0630, 0x76D7, 0x66F6, 0x5695, 0x46B4,
++	0xB75B, 0xA77A, 0x9719, 0x8738, 0xF7DF, 0xE7FE, 0xD79D, 0xC7BC,
++	0x48C4, 0x58E5, 0x6886, 0x78A7, 0x0840, 0x1861, 0x2802, 0x3823,
++	0xC9CC, 0xD9ED, 0xE98E, 0xF9AF, 0x8948, 0x9969, 0xA90A, 0xB92B,
++	0x5AF5, 0x4AD4, 0x7AB7, 0x6A96, 0x1A71, 0x0A50, 0x3A33, 0x2A12,
++	0xDBFD, 0xCBDC, 0xFBBF, 0xEB9E, 0x9B79, 0x8B58, 0xBB3B, 0xAB1A,
++	0x6CA6, 0x7C87, 0x4CE4, 0x5CC5, 0x2C22, 0x3C03, 0x0C60, 0x1C41,
++	0xEDAE, 0xFD8F, 0xCDEC, 0xDDCD, 0xAD2A, 0xBD0B, 0x8D68, 0x9D49,
++	0x7E97, 0x6EB6, 0x5ED5, 0x4EF4, 0x3E13, 0x2E32, 0x1E51, 0x0E70,
++	0xFF9F, 0xEFBE, 0xDFDD, 0xCFFC, 0xBF1B, 0xAF3A, 0x9F59, 0x8F78,
++	0x9188, 0x81A9, 0xB1CA, 0xA1EB, 0xD10C, 0xC12D, 0xF14E, 0xE16F,
++	0x1080, 0x00A1, 0x30C2, 0x20E3, 0x5004, 0x4025, 0x7046, 0x6067,
++	0x83B9, 0x9398, 0xA3FB, 0xB3DA, 0xC33D, 0xD31C, 0xE37F, 0xF35E,
++	0x02B1, 0x1290, 0x22F3, 0x32D2, 0x4235, 0x5214, 0x6277, 0x7256,
++	0xB5EA, 0xA5CB, 0x95A8, 0x8589, 0xF56E, 0xE54F, 0xD52C, 0xC50D,
++	0x34E2, 0x24C3, 0x14A0, 0x0481, 0x7466, 0x6447, 0x5424, 0x4405,
++	0xA7DB, 0xB7FA, 0x8799, 0x97B8, 0xE75F, 0xF77E, 0xC71D, 0xD73C,
++	0x26D3, 0x36F2, 0x0691, 0x16B0, 0x6657, 0x7676, 0x4615, 0x5634,
++	0xD94C, 0xC96D, 0xF90E, 0xE92F, 0x99C8, 0x89E9, 0xB98A, 0xA9AB,
++	0x5844, 0x4865, 0x7806, 0x6827, 0x18C0, 0x08E1, 0x3882, 0x28A3,
++	0xCB7D, 0xDB5C, 0xEB3F, 0xFB1E, 0x8BF9, 0x9BD8, 0xABBB, 0xBB9A,
++	0x4A75, 0x5A54, 0x6A37, 0x7A16, 0x0AF1, 0x1AD0, 0x2AB3, 0x3A92,
++	0xFD2E, 0xED0F, 0xDD6C, 0xCD4D, 0xBDAA, 0xAD8B, 0x9DE8, 0x8DC9,
++	0x7C26, 0x6C07, 0x5C64, 0x4C45, 0x3CA2, 0x2C83, 0x1CE0, 0x0CC1,
++	0xEF1F, 0xFF3E, 0xCF5D, 0xDF7C, 0xAF9B, 0xBFBA, 0x8FD9, 0x9FF8,
++	0x6E17, 0x7E36, 0x4E55, 0x5E74, 0x2E93, 0x3EB2, 0x0ED1, 0x1EF0
++};
++
++/*****************************************************************/
++/*                   End of CRC Lookup Table                     */
++/*****************************************************************/
++#define CRC_INIT 0x0000
++#define XOROT 0x0000
++
++unsigned short stml0xx_spi_calculate_crc(unsigned char *data, int len)
++{
++	unsigned short crc = CRC_INIT;
++
++	while (len--)
++		crc = crctable[((crc >> 8) ^ *data++) & 0xFFL] ^ (crc << 8);
++
++	return crc ^ XOROT;
++}
++
++void stml0xx_spi_append_crc(unsigned char *data, int len)
++{
++	unsigned short crc = stml0xx_spi_calculate_crc(data, len);
++	data[len] = crc >> 8;
++	data[len + 1] = crc;
++}
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+new file mode 100644
+index 00000000000..dc72bbcaa0b
+--- /dev/null
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -0,0 +1,395 @@
++/*
++ * Copyright (C) 2010-2014 Motorola Mobility LLC
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++ * 02111-1307, USA
++ */
++
++#include <linux/cdev.h>
++#include <linux/delay.h>
++#include <linux/dma-mapping.h>
++#include <linux/err.h>
++#include <linux/errno.h>
++#include <linux/export.h>
++#include <linux/of.h>
++#include <linux/of_gpio.h>
++#include <linux/fs.h>
++#include <linux/gpio.h>
++#include <linux/input.h>
++#include <linux/input-polldev.h>
++#include <linux/interrupt.h>
++#include <linux/irq.h>
++#include <linux/miscdevice.h>
++#include <linux/module.h>
++#include <linux/poll.h>
++#include <linux/regulator/consumer.h>
++#include <linux/slab.h>
++#include <linux/switch.h>
++#include <linux/time.h>
++#include <linux/uaccess.h>
++#include <linux/wakelock.h>
++#include <linux/workqueue.h>
++
++#include <linux/stml0xx.h>
++
++irqreturn_t stml0xx_wake_isr(int irq, void *dev)
++{
++	struct stml0xx_data *ps_stml0xx = dev;
++
++	if (stml0xx_irq_disable)
++		return IRQ_HANDLED;
++
++	wake_lock_timeout(&ps_stml0xx->wakelock, HZ);
++
++	queue_work(ps_stml0xx->irq_work_queue, &ps_stml0xx->irq_wake_work);
++	return IRQ_HANDLED;
++}
++
++void stml0xx_irq_wake_work_func(struct work_struct *work)
++{
++	int err;
++	unsigned short irq_status;
++	u32 irq2_status;
++	uint8_t irq3_status;
++	struct stml0xx_data *ps_stml0xx = stml0xx_misc_data;
++	unsigned char buf[SPI_MSG_SIZE];
++
++	dev_dbg(&stml0xx_misc_data->spi->dev, "stml0xx_irq_wake_work_func");
++	mutex_lock(&ps_stml0xx->lock);
++
++	if (ps_stml0xx->mode == BOOTMODE)
++		goto EXIT_NO_WAKE;
++
++	if (ps_stml0xx->is_suspended) {
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"setting pending_wake_work [true]");
++		ps_stml0xx->pending_wake_work = true;
++		goto EXIT_NO_WAKE;
++	}
++
++	stml0xx_wake(ps_stml0xx);
++
++	/* read interrupt mask register */
++	err = stml0xx_spi_send_read_reg(WAKESENSOR_STATUS, buf, 2);
++	if (err < 0) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Reading from stml0xx failed");
++		goto EXIT;
++	}
++	irq_status = (buf[IRQ_WAKE_MED] << 8)
++	    | buf[IRQ_WAKE_LO];
++
++	/* read algorithm interrupt status register */
++	err = stml0xx_spi_send_read_reg(ALGO_INT_STATUS, buf, 3);
++	if (err < 0) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Reading from stml0xx failed");
++		goto EXIT;
++	}
++	irq2_status = (buf[IRQ_WAKE_HI] << 16) |
++	    (buf[IRQ_WAKE_MED] << 8) | buf[IRQ_WAKE_LO];
++
++	/* read generic interrupt register */
++	err = stml0xx_spi_send_read_reg(GENERIC_INT_STATUS, buf, 1);
++	if (err < 0) {
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Reading from stm failed");
++		goto EXIT;
++	}
++	irq3_status = buf[0];
++
++	/* First, check for error messages */
++	if (irq_status & M_LOG_MSG) {
++		err = stml0xx_spi_send_read_reg(ERROR_STATUS, buf, ESR_SIZE);
++		if (err >= 0) {
++			memcpy(stat_string, buf, ESR_SIZE);
++			stat_string[ESR_SIZE] = 0;
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"STML0XX Error: %s", stat_string);
++		} else
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Failed to read error message %d", err);
++	}
++
++	/* Second, check for a reset request */
++	if (irq_status & M_HUB_RESET) {
++		unsigned char status;
++
++		if (strnstr(stat_string, "modality", ESR_SIZE))
++			status = 0x01;
++		else if (strnstr(stat_string, "Algo", ESR_SIZE))
++			status = 0x02;
++		else if (strnstr(stat_string, "Watchdog", ESR_SIZE))
++			status = 0x03;
++		else
++			status = 0x04;
++
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_RESET, &status, 1,
++					     0);
++
++		stml0xx_reset_and_init();
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"STML0XX requested a reset");
++		goto EXIT;
++	}
++
++	/* Check all other status bits */
++	if (irq_status & M_DOCK) {
++		int state;
++
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Invalid M_DOCK bit set. irq_status = 0x%06x",
++			irq_status);
++
++		err = stml0xx_spi_send_read_reg(DOCK_DATA, buf, 1);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading Dock state failed");
++			goto EXIT;
++		}
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_DOCK, buf, 1, 0);
++		state = buf[DOCK_STATE];
++		if (ps_stml0xx->dsdev.dev != NULL)
++			switch_set_state(&ps_stml0xx->dsdev, state);
++		if (ps_stml0xx->edsdev.dev != NULL)
++			switch_set_state(&ps_stml0xx->edsdev, state);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev, "Dock status:%d", state);
++	}
++	if (irq_status & M_PROXIMITY) {
++		err = stml0xx_spi_send_read_reg(PROXIMITY, buf, 1);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading prox from stml0xx failed");
++			goto EXIT;
++		}
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_PROX, buf, 1, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending Proximity distance %d", buf[PROX_DISTANCE]);
++	}
++	if (irq_status & M_COVER) {
++		int state;
++		err = stml0xx_spi_send_read_reg(COVER_DATA, buf, 1);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading Cover state failed");
++			goto EXIT;
++		}
++
++		state = buf[COVER_STATE];
++		if (state > 0)
++			state = 1;
++
++		input_report_switch(ps_stml0xx->input_dev, SW_LID, state);
++		input_sync(ps_stml0xx->input_dev);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Cover status: %d", state);
++	}
++	if (irq_status & M_FLATUP) {
++		err = stml0xx_spi_send_read_reg(FLAT_DATA, buf, 1);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading flat data from stml0xx failed");
++			goto EXIT;
++		}
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_FLAT_UP, buf, 1, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending Flat up %d", buf[FLAT_UP]);
++	}
++	if (irq_status & M_FLATDOWN) {
++		err = stml0xx_spi_send_read_reg(FLAT_DATA, buf, 1);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading flat data from stml0xx failed");
++			goto EXIT;
++		}
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_FLAT_DOWN,
++					     buf, 1, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending Flat down %d", buf[FLAT_DOWN]);
++	}
++	if (irq_status & M_STOWED) {
++		err = stml0xx_spi_send_read_reg(STOWED, buf, 1);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading stowed from stml0xx failed");
++			goto EXIT;
++		}
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_STOWED, buf, 1, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending Stowed status %d", buf[STOWED_STATUS]);
++	}
++	if (irq_status & M_CAMERA_ACT) {
++		err = stml0xx_spi_send_read_reg(CAMERA, buf, 2);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading camera data from stm failed");
++			goto EXIT;
++		}
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_CAMERA_ACT,
++					     buf, 2, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending Camera: %d", STM16_TO_HOST(CAMERA_VALUE));
++
++		input_report_key(ps_stml0xx->input_dev, KEY_CAMERA, 1);
++		input_report_key(ps_stml0xx->input_dev, KEY_CAMERA, 0);
++		input_sync(ps_stml0xx->input_dev);
++		dev_dbg(&stml0xx_misc_data->spi->dev, "Report camkey toggle");
++	}
++	if (irq_status & M_NFC) {
++		err = stml0xx_spi_send_read_reg(NFC, buf, 1);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading nfc data from stm failed");
++			goto EXIT;
++		}
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_NFC, buf, 1, 0);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending NFC value: %d", buf[NFC_VALUE]);
++
++	}
++	if (irq_status & M_SIM) {
++		err = stml0xx_spi_send_read_reg(SIM, buf, 2);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading sig_motion data from stm failed");
++			goto EXIT;
++		}
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_SIM, buf, 2, 0);
++
++		/* This is one shot sensor */
++		stml0xx_g_wake_sensor_state &= (~M_SIM);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending SIM Value=%d", STM16_TO_HOST(SIM_DATA));
++	}
++	if (irq2_status & M_MMOVEME) {
++		unsigned char status;
++		/* Client recieving action will be upper 2 most significant */
++		/* bits of the least significant byte of status. */
++		status = (irq2_status & STML0XX_CLIENT_MASK) | M_MMOVEME;
++		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_MMMOVE, &status, 1);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending meaningful movement event");
++	}
++	if (irq2_status & M_NOMMOVE) {
++		unsigned char status;
++		/* Client recieving action will be upper 2 most significant */
++		/* bits of the least significant byte of status. */
++		status = (irq2_status & STML0XX_CLIENT_MASK) | M_NOMMOVE;
++		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_NOMOVE, &status, 1);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending no meaningful movement event");
++	}
++	if (irq2_status & M_ALGO_MODALITY) {
++		err =
++		    stml0xx_spi_send_read_reg(stml0xx_algo_info
++				[STML0XX_IDX_MODALITY].evt_register,
++				buf, STML0XX_EVT_SZ_TRANSITION);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading modality event failed");
++			goto EXIT;
++		}
++		buf[ALGO_TYPE] = STML0XX_IDX_MODALITY;
++		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_ALGO_EVT, buf, 8);
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending modality event");
++	}
++	if (irq2_status & M_ALGO_ORIENTATION) {
++		err =
++		    stml0xx_spi_send_read_reg(stml0xx_algo_info
++				[STML0XX_IDX_ORIENTATION].evt_register,
++				buf, STML0XX_EVT_SZ_TRANSITION);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading orientation event failed");
++			goto EXIT;
++		}
++		buf[ALGO_TYPE] = STML0XX_IDX_ORIENTATION;
++		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_ALGO_EVT, buf, 8);
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending orientation event");
++	}
++	if (irq2_status & M_ALGO_STOWED) {
++		err =
++		    stml0xx_spi_send_read_reg(stml0xx_algo_info
++				[STML0XX_IDX_STOWED].evt_register,
++				buf, STML0XX_EVT_SZ_TRANSITION);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading stowed event failed");
++			goto EXIT;
++		}
++		buf[ALGO_TYPE] = STML0XX_IDX_STOWED;
++		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_ALGO_EVT, buf, 8);
++		dev_dbg(&stml0xx_misc_data->spi->dev, "Sending stowed event");
++	}
++	if (irq2_status & M_ALGO_ACCUM_MODALITY) {
++		err =
++		    stml0xx_spi_send_read_reg(stml0xx_algo_info
++				[STML0XX_IDX_ACCUM_MODALITY].evt_register,
++				buf, STML0XX_EVT_SZ_ACCUM_STATE);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading accum modality event failed");
++			goto EXIT;
++		}
++		buf[ALGO_TYPE] = STML0XX_IDX_ACCUM_MODALITY;
++		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_ALGO_EVT, buf, 8);
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending accum modality event");
++	}
++	if (irq2_status & M_ALGO_ACCUM_MVMT) {
++		err =
++		    stml0xx_spi_send_read_reg(stml0xx_algo_info
++				[STML0XX_IDX_ACCUM_MVMT].evt_register,
++				buf, STML0XX_EVT_SZ_ACCUM_MVMT);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading accum mvmt event failed");
++			goto EXIT;
++		}
++		buf[ALGO_TYPE] = STML0XX_IDX_ACCUM_MVMT;
++		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_ALGO_EVT, buf, 8);
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending accum mvmt event");
++	}
++	if (irq3_status & M_GENERIC_INTRPT) {
++
++		dev_err(&stml0xx_misc_data->spi->dev,
++			"Invalid M_GENERIC_INTRPT bit set. irq_status = 0x%06x"
++			, irq_status);
++
++		/* x (data1) : irq3_status */
++		stml0xx_ms_data_buffer_write(ps_stml0xx, DT_GENERIC_INT,
++					     &irq3_status, 1);
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending generic interrupt event:%d", irq3_status);
++	}
++
++EXIT:
++	stml0xx_sleep(ps_stml0xx);
++EXIT_NO_WAKE:
++	mutex_unlock(&ps_stml0xx->lock);
++}
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+new file mode 100644
+index 00000000000..a7c4bf91a0e
+--- /dev/null
++++ b/include/linux/stml0xx.h
+@@ -0,0 +1,718 @@
++/*
++ * Copyright (C) 2010-2014 Motorola, Inc.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++ * 02111-1307, USA
++ */
++
++#ifndef __STML0XX_H__
++#define __STML0XX_H__
++
++/* Log macros */
++#define ENABLE_VERBOSE_LOGGING 1
++
++/* SPI */
++#define SPI_DMA_ENABLED         true
++#define SPI_FLASH_CLK_SPD_HZ    4000000
++#define SPI_NORMAL_CLK_SPD_HZ    8000000
++#define SPI_BUFF_SIZE           1152
++#define SPI_RETRIES             5
++#define SPI_RETRY_DELAY         20
++#define SPI_SENSORHUB_TIMEOUT   1000
++#define SPI_BARKER_1            0xF9
++#define SPI_BARKER_2            0xAE
++#define SPI_HEADER_SIZE         6
++#define SPI_CRC_SIZE            2
++#define SPI_MAX_PAYLOAD_LEN     24
++#define SPI_MSG_TYPE_READ_REG       0x01
++#define SPI_MSG_TYPE_WRITE_REG      0x02
++#define SPI_MSG_TYPE_READ_SENSORS   0x03
++#define SPI_WRITE_REG_HDR_SIZE      6
++#define SPI_READ_REG_HDR_SIZE       6
++#define SPI_MSG_SIZE                32
++#define SPI_CRC_LEN                 2
++#define SPI_READ_SENSORS_HDR_SIZE   3
++
++/** The following define the IOCTL command values via the ioctl macros */
++#define STML0XX_IOCTL_BASE		77
++#define STML0XX_IOCTL_BOOTLOADERMODE	\
++		_IOW(STML0XX_IOCTL_BASE, 0, unsigned char)
++#define STML0XX_IOCTL_NORMALMODE	\
++		_IOW(STML0XX_IOCTL_BASE, 1, unsigned char)
++#define STML0XX_IOCTL_MASSERASE	\
++		_IOW(STML0XX_IOCTL_BASE, 2, unsigned char)
++#define STML0XX_IOCTL_SETSTARTADDR	\
++		_IOW(STML0XX_IOCTL_BASE, 3, unsigned int)
++#define STML0XX_IOCTL_TEST_READ	\
++		_IOR(STML0XX_IOCTL_BASE, 4, unsigned char)
++#define STML0XX_IOCTL_TEST_WRITE	\
++		_IOW(STML0XX_IOCTL_BASE, 5, unsigned char)
++#define STML0XX_IOCTL_TEST_WRITE_READ	\
++		_IOWR(STML0XX_IOCTL_BASE, 6, unsigned short)
++#define STML0XX_IOCTL_SET_MAG_DELAY	\
++		_IOW(STML0XX_IOCTL_BASE, 7, unsigned short)
++#define STML0XX_IOCTL_TEST_BOOTMODE	\
++		_IOW(STML0XX_IOCTL_BASE, 8, unsigned char)
++#define STML0XX_IOCTL_SET_ACC_DELAY	\
++		_IOW(STML0XX_IOCTL_BASE, 9,  unsigned short)
++#define STML0XX_IOCTL_SET_MOTION_DELAY	\
++		_IOW(STML0XX_IOCTL_BASE, 10, unsigned char)
++#define STML0XX_IOCTL_SET_GYRO_DELAY	\
++		_IOW(STML0XX_IOCTL_BASE, 11, unsigned short)
++#define STML0XX_IOCTL_SET_DEBUG	\
++		_IOW(STML0XX_IOCTL_BASE, 12, unsigned char)
++#define STML0XX_IOCTL_SET_USER_PROFILE	\
++		_IOW(STML0XX_IOCTL_BASE, 13, int)
++#define STML0XX_IOCTL_SET_GPS_DATA	\
++		_IOW(STML0XX_IOCTL_BASE, 14, int)
++#define STML0XX_IOCTL_SET_PRES_DELAY	\
++		_IOW(STML0XX_IOCTL_BASE, 15, unsigned short)
++#define STML0XX_IOCTL_SET_REF_ALTITUDE	\
++		_IOW(STML0XX_IOCTL_BASE, 16, int)
++#define STML0XX_IOCTL_SET_ACTIVE_MODE	\
++		_IOW(STML0XX_IOCTL_BASE, 17, unsigned char)
++#define STML0XX_IOCTL_SET_PASSIVE_MODE	\
++		_IOW(STML0XX_IOCTL_BASE, 18, unsigned char)
++#define STML0XX_IOCTL_SET_FACTORY_MODE	\
++		_IOW(STML0XX_IOCTL_BASE, 19, unsigned char)
++#define STML0XX_IOCTL_GET_SENSORS	\
++		_IOR(STML0XX_IOCTL_BASE, 20, unsigned char)
++#define STML0XX_IOCTL_SET_SENSORS	\
++		_IOW(STML0XX_IOCTL_BASE, 21, unsigned char)
++#define STML0XX_IOCTL_GET_VERSION	\
++		_IOR(STML0XX_IOCTL_BASE, 22, unsigned char)
++#define STML0XX_IOCTL_SET_MONITOR_DELAY	\
++		_IOW(STML0XX_IOCTL_BASE, 23, unsigned char)
++#define STML0XX_IOCTL_GET_DOCK_STATUS	\
++		_IOR(STML0XX_IOCTL_BASE, 24, unsigned char)
++#define STML0XX_IOCTL_SET_ORIENTATION_DELAY	\
++		_IOW(STML0XX_IOCTL_BASE, 25, unsigned char)
++#define STML0XX_IOCTL_SET_EQUIPMENT_TYPE	\
++		_IOW(STML0XX_IOCTL_BASE, 26, unsigned char)
++#define STML0XX_IOCTL_SET_POWER_MODE	\
++		_IOW(STML0XX_IOCTL_BASE, 27, unsigned char)
++#define STML0XX_IOCTL_GET_ALGOS	\
++		_IOR(STML0XX_IOCTL_BASE, 28, char*)
++#define STML0XX_IOCTL_SET_ALGOS	\
++		_IOW(STML0XX_IOCTL_BASE, 29, char*)
++#define STML0XX_IOCTL_GET_MAG_CAL \
++		_IOR(STML0XX_IOCTL_BASE, 30, unsigned char*)
++#define STML0XX_IOCTL_SET_MAG_CAL \
++		_IOW(STML0XX_IOCTL_BASE, 31, unsigned char*)
++/* 32 unused */
++#define STML0XX_IOCTL_SET_MOTION_DUR	\
++		_IOW(STML0XX_IOCTL_BASE, 33, unsigned int)
++/* 34 unused */
++#define STML0XX_IOCTL_SET_ZRMOTION_DUR	\
++		_IOW(STML0XX_IOCTL_BASE, 35, unsigned int)
++#define STML0XX_IOCTL_GET_WAKESENSORS	\
++		_IOR(STML0XX_IOCTL_BASE, 36, unsigned char)
++#define STML0XX_IOCTL_SET_WAKESENSORS	\
++		_IOW(STML0XX_IOCTL_BASE, 37, unsigned char)
++#define STML0XX_IOCTL_GET_VERNAME	\
++		_IOW(STML0XX_IOCTL_BASE, 38, char*)
++#define STML0XX_IOCTL_SET_POSIX_TIME	\
++		_IOW(STML0XX_IOCTL_BASE, 39, unsigned long)
++/* 40-42 unused */
++#define STML0XX_IOCTL_SET_ALGO_REQ \
++		_IOR(STML0XX_IOCTL_BASE, 43, char*)
++#define STML0XX_IOCTL_GET_ALGO_EVT \
++		_IOR(STML0XX_IOCTL_BASE, 44, char*)
++#define STML0XX_IOCTL_ENABLE_BREATHING \
++		_IOW(STML0XX_IOCTL_BASE, 45, unsigned char)
++#define STML0XX_IOCTL_WRITE_REG \
++		_IOR(STML0XX_IOCTL_BASE, 46, char*)
++#define STML0XX_IOCTL_READ_REG \
++		_IOR(STML0XX_IOCTL_BASE, 47, char*)
++#define STML0XX_IOCTL_SET_STEP_COUNTER_DELAY	\
++		_IOW(STML0XX_IOCTL_BASE, 48,  unsigned short)
++#define STML0XX_IOCTL_GET_IR_CONFIG \
++		_IOWR(STML0XX_IOCTL_BASE, 49, char*)
++#define STML0XX_IOCTL_SET_IR_CONFIG \
++		_IOW(STML0XX_IOCTL_BASE, 50, char*)
++#define STML0XX_IOCTL_SET_IR_GESTURE_DELAY	\
++		_IOW(STML0XX_IOCTL_BASE, 51,  unsigned short)
++#define STML0XX_IOCTL_SET_IR_RAW_DELAY	\
++		_IOW(STML0XX_IOCTL_BASE, 52,  unsigned short)
++#define STML0XX_IOCTL_GET_BOOTED \
++		_IOR(STML0XX_IOCTL_BASE, 53, unsigned char)
++#define STML0XX_IOCTL_SET_LOWPOWER_MODE \
++		_IOW(STML0XX_IOCTL_BASE, 54, char)
++
++#define FW_VERSION_SIZE 12
++#define STML0XX_CONTROL_REG_SIZE 200
++#define STML0XX_STATUS_REG_SIZE 8
++#define STML0XX_TOUCH_REG_SIZE  8
++#define STML0XX_MAG_CAL_SIZE 26
++#define STML0XX_AS_DATA_BUFF_SIZE 20
++#define STML0XX_MS_DATA_BUFF_SIZE 20
++
++#define STML0XX_CAMERA_DATA 0x01
++
++/* Mask values */
++
++/* Non wakable sensors */
++#define M_ACCEL			0x000001
++#define M_GYRO			0x000002
++#define M_PRESSURE		0x000004
++#define M_ECOMPASS		0x000008
++#define M_TEMPERATURE	0x000010
++#define M_ALS			0x000020
++#define M_STEP_DETECTOR	0x000040
++#define M_STEP_COUNTER	0x000080
++
++#define M_LIN_ACCEL		0x000100
++#define M_QUATERNION	0x000200
++#define M_GRAVITY		0x000400
++#define M_DISP_ROTATE		0x000800
++#define M_DISP_BRIGHTNESS	0x001000
++#define M_IR_GESTURE        0x002000
++#define M_IR_RAW            0x004000
++
++#define M_UNCALIB_GYRO		0x008000
++#define M_UNCALIB_MAG		0x010000
++#define M_IR_OBJECT		0x020000
++
++/* wake sensor status */
++#define M_DOCK			0x000001
++#define M_PROXIMITY		0x000002
++#define M_TOUCH			0x000004
++#define M_COVER			0x000008
++#define M_HUB_RESET		0x000080
++
++#define M_FLATUP		0x000100
++#define M_FLATDOWN		0x000200
++#define M_STOWED		0x000400
++#define M_CAMERA_ACT		0x000800
++#define M_NFC			0x001000
++#define M_SIM			0x002000
++#define M_LOG_MSG		0x008000
++
++#define M_IR_WAKE_GESTURE	0x200000
++
++/* algo config mask */
++#define M_MMOVEME               0x0001
++#define M_NOMMOVE               0x0002
++#define M_ALGO_MODALITY         0x0008
++#define M_ALGO_ORIENTATION      0x0010
++#define M_ALGO_STOWED           0x0020
++#define M_ALGO_ACCUM_MODALITY   0x0040
++#define M_ALGO_ACCUM_MVMT       0x0080
++
++/* generic interrupt mask */
++#define M_GENERIC_INTRPT        0x0080
++
++/* algo index */
++#define STML0XX_IDX_MODALITY        0
++#define STML0XX_IDX_ORIENTATION     1
++#define STML0XX_IDX_STOWED          2
++#define STML0XX_IDX_ACCUM_MODALITY  3
++#define STML0XX_IDX_ACCUM_MVMT      4
++
++#define STML0XX_NUM_ALGOS           5
++
++#define STML0XX_EVT_SZ_TRANSITION   7
++#define STML0XX_EVT_SZ_ACCUM_STATE  2
++#define STML0XX_EVT_SZ_ACCUM_MVMT   4
++
++struct stml0xx_android_sensor_data {
++	int64_t timestamp;
++	unsigned char type;
++	unsigned char data[STML0XX_AS_DATA_BUFF_SIZE];
++	int size;
++	unsigned char status;
++};
++
++struct stml0xx_moto_sensor_data {
++	int64_t timestamp;
++	unsigned char type;
++	unsigned char data[STML0XX_MS_DATA_BUFF_SIZE];
++	int size;
++};
++
++enum STML0XX_data_types {
++	DT_ACCEL,
++	DT_GYRO,
++	DT_PRESSURE,
++	DT_MAG,
++	DT_ORIENT,
++	DT_TEMP,
++	DT_ALS,
++	DT_LIN_ACCEL,
++	DT_QUATERNION,
++	DT_GRAVITY,
++	DT_DISP_ROTATE,
++	DT_DISP_BRIGHT,
++	DT_DOCK,
++	DT_PROX,
++	DT_COVER,
++	DT_FLAT_UP,
++	DT_FLAT_DOWN,
++	DT_STOWED,
++	DT_MMMOVE,
++	DT_NOMOVE,
++	DT_CAMERA_ACT,
++	DT_NFC,
++	DT_ALGO_EVT,
++	DT_ACCUM_MVMT,
++	DT_IR_GESTURE,
++	DT_IR_RAW,
++	DT_IR_OBJECT,
++	DT_SIM,
++	DT_RESET,
++	DT_GENERIC_INT,
++	DT_STEP_COUNTER,
++	DT_STEP_DETECTOR,
++	DT_UNCALIB_GYRO,
++	DT_UNCALIB_MAG,
++};
++
++enum {
++	NO_DOCK,
++	DESK_DOCK,
++	CAR_DOCK
++};
++
++enum stm_mode {
++	UNINITIALIZED,
++	BOOTMODE,
++	NORMALMODE,
++	FACTORYMODE
++};
++
++enum stm_commands {
++	PASSWORD_RESET,
++	MASS_ERASE,
++	PROGRAM_CODE,
++	END_FIRMWARE,
++	PASSWORD_RESET_DEFAULT,
++	CRC_CHECK
++};
++
++struct stm_response {
++	/* 0x0080 */
++	unsigned short header;
++	unsigned char len_lsb;
++	unsigned char len_msb;
++	unsigned char cmd;
++	unsigned char data;
++	unsigned char crc_lsb;
++	unsigned char crc_msb;
++};
++
++#ifdef __KERNEL__
++#include <linux/spi/spi.h>
++
++/* STML0XX memory map */
++#define ID                              0x00
++#define REV_ID                          0x01
++#define ERROR_STATUS                    0x02
++#define LOWPOWER_REG                    0x03
++
++#define STML0XX_PEEKDATA_REG             0x09
++#define STML0XX_PEEKSTATUS_REG           0x0A
++#define STML0XX_STATUS_REG               0x0B
++#define STML0XX_TOUCH_REG                0x0C
++#define STML0XX_CONTROL_REG              0x0D
++
++#define AP_POSIX_TIME                   0x10
++
++#define ACCEL_UPDATE_RATE               0x16
++#define MAG_UPDATE_RATE                 0x17
++#define PRESSURE_UPDATE_RATE            0x18
++#define GYRO_UPDATE_RATE                0x19
++
++#define NONWAKESENSOR_CONFIG            0x1A
++#define WAKESENSOR_CONFIG               0x1B
++
++#define IR_STATUS                       0x11
++#define IR_GESTURE_RATE                 0x12
++#define IR_RAW_RATE                     0x13
++#define IR_GESTURE                      0x1C
++#define IR_RAW                          0x1D
++#define IR_CONFIG                       0x1E
++#define IR_STATE                        0x1F
++
++#define MOTION_DUR                      0x20
++#define ZRMOTION_DUR                    0x22
++
++#define BYPASS_MODE                     0x24
++#define SLAVE_ADDRESS                   0x25
++
++#define ALGO_CONFIG                     0x26
++#define ALGO_INT_STATUS                 0x27
++#define GENERIC_INT_STATUS              0x28
++
++#define MOTION_DATA                     0x2D
++
++#define PROX_SETTINGS                   0x33
++
++#define LUX_TABLE_VALUES                0x34
++#define BRIGHTNESS_TABLE_VALUES         0x35
++#define STEP_COUNTER_UPDATE_RATE        0x36
++
++#define INTERRUPT_MASK                  0x37
++#define WAKESENSOR_STATUS               0x39
++#define INTERRUPT_STATUS                0x3A
++
++#define ACCEL_X                         0x3B
++#define LIN_ACCEL_X                     0x3C
++#define GRAVITY_X                       0x3D
++#define STEP_COUNTER			0X3E
++
++#define DOCK_DATA                       0x3F
++
++#define COVER_DATA                      0x40
++
++#define TEMPERATURE_DATA                0x41
++
++#define GYRO_X                          0x43
++#define UNCALIB_GYRO_X			0x45
++#define UNCALIB_MAG_X			0x46
++
++#define STEP_DETECTOR			0X47
++
++#define MAG_CAL                         0x48
++#define MAG_HX                          0x49
++
++#define DISP_ROTATE_DATA                0x4A
++#define FLAT_DATA                       0x4B
++#define CAMERA                          0x4C
++#define NFC                             0x4D
++#define SIM                             0x4E
++
++#define ALGO_CFG_ACCUM_MODALITY         0x5D
++#define ALGO_REQ_ACCUM_MODALITY         0x60
++#define ALGO_EVT_ACCUM_MODALITY         0x63
++
++#define CURRENT_PRESSURE                0x66
++
++#define ALS_LUX                         0x6A
++
++#define DISPLAY_BRIGHTNESS              0x6B
++
++#define PROXIMITY                       0x6C
++
++#define STOWED                          0x6D
++
++#define ALGO_CFG_MODALITY               0x6E
++#define ALGO_CFG_ORIENTATION            0x6F
++#define ALGO_CFG_STOWED                 0x70
++#define ALGO_CFG_ACCUM_MVMT             0x71
++
++#define ALGO_REQ_MODALITY               0x72
++#define ALGO_REQ_ORIENTATION            0x73
++#define ALGO_REQ_STOWED                 0x74
++#define ALGO_REQ_ACCUM_MVMT             0x75
++
++#define ALGO_EVT_MODALITY               0x76
++#define ALGO_EVT_ORIENTATION            0x77
++#define ALGO_EVT_STOWED                 0x78
++#define ALGO_EVT_ACCUM_MVMT             0x79
++
++#define RESET                           0x7F
++/* STML0XX memory map end */
++
++#define LIGHTING_TABLE_SIZE 32
++
++#define STML0XX_AS_DATA_QUEUE_SIZE       0x20
++#define STML0XX_AS_DATA_QUEUE_MASK       0x1F
++#define STML0XX_MS_DATA_QUEUE_SIZE       0x08
++#define STML0XX_MS_DATA_QUEUE_MASK       0x07
++
++#define STML0XX_CLIENT_MASK		0xF0
++
++#define STML0XX_BUSY_STATUS_MASK	0x80
++#define STML0XX_BUSY_SLEEP_USEC	10000
++#define STML0XX_BUSY_RESUME_COUNT	14
++#define STML0XX_BUSY_SUSPEND_COUNT	6
++
++#define STML0XX_MAX_REG_LEN         255
++
++#define ESR_SIZE			24
++
++#define STML0XX_RESET_DELAY		50
++
++#define I2C_RESPONSE_LENGTH		8
++
++#define STML0XX_MAXDATA_LENGTH		256
++
++#define STML0XX_IR_GESTURE_CNT      8
++#define STML0XX_IR_SZ_GESTURE       4
++#define STML0XX_IR_SZ_RAW           20
++#define STML0XX_IR_CONFIG_REG_SIZE  200
++
++/* stml0xx_readbuff offsets. */
++#define IRQ_WAKE_LO  0
++#define IRQ_WAKE_MED 1
++#define IRQ_WAKE_HI  2
++
++#define IRQ_NOWAKE_LO   0
++#define IRQ_NOWAKE_MED  1
++#define IRQ_NOWAKE_HI   2
++
++#define DOCK_STATE	0
++#define PROX_DISTANCE	0
++#define COVER_STATE	0
++#define TOUCH_REASON	1
++#define FLAT_UP		0
++#define FLAT_DOWN	0
++#define STOWED_STATUS	0
++#define NFC_VALUE	0
++#define ALGO_TYPE	7
++#define COMPASS_STATUS	12
++#define DISP_VALUE	0
++#define ACCEL_RD_X	0
++#define ACCEL_RD_Y	2
++#define ACCEL_RD_Z	4
++#define MAG_X		0
++#define MAG_Y		2
++#define MAG_Z		4
++#define MAG_UNCALIB_X   6
++#define MAG_UNCALIB_Y   8
++#define MAG_UNCALIB_Z   10
++#define ORIENT_X	6
++#define ORIENT_Y	8
++#define ORIENT_Z	10
++#define GYRO_RD_X	0
++#define GYRO_RD_Y	2
++#define GYRO_RD_Z	4
++#define GYRO_UNCALIB_X	6
++#define GYRO_UNCALIB_Y	8
++#define GYRO_UNCALIB_Z	10
++#define ALS_VALUE	0
++#define TEMP_VALUE	0
++#define PRESSURE_VALUE	0
++#define GRAV_X		0
++#define GRAV_Y		2
++#define GRAV_Z		4
++#define CAMERA_VALUE	0
++#define IR_GESTURE_EVENT    0
++#define IR_GESTURE_ID       1
++#define IR_STATE_STATE  0
++#define STEP8_DATA	0
++#define STEP16_DATA	2
++#define STEP32_DATA	4
++#define STEP64_DATA	6
++#define SIM_DATA	0
++#define STEP_DETECT	0
++
++/* The following macros are intended to be called with the stm IRQ handlers */
++/* only and refer to local variables in those functions. */
++#define STM16_TO_HOST(x) ((short) be16_to_cpu( \
++		*((u16 *) (stml0xx_readbuff+(x)))))
++#define STM32_TO_HOST(x) ((short) be32_to_cpu( \
++		*((u32 *) (stml0xx_readbuff+(x)))))
++
++struct stml0xx_platform_data {
++	int (*init) (void);
++	void (*exit) (void);
++	int (*power_on) (void);
++	int (*power_off) (void);
++	int gpio_reset;
++	int gpio_bslen;
++	int gpio_wakeirq;
++	int gpio_int;
++	int gpio_sh_wake;
++	int gpio_spi_ready_for_receive;
++	int gpio_spi_data_ack;
++	unsigned int bslen_pin_active_value;
++	u16 lux_table[LIGHTING_TABLE_SIZE];
++	u8 brightness_table[LIGHTING_TABLE_SIZE];
++	char fw_version[FW_VERSION_SIZE];
++	int ct406_detect_threshold;
++	int ct406_undetect_threshold;
++	int ct406_recalibrate_threshold;
++	int ct406_pulse_count;
++};
++
++struct stml0xx_data {
++	struct spi_device *spi;
++	struct stml0xx_platform_data *pdata;
++	/* to avoid two spi communications at the same time */
++	struct mutex lock;
++	struct work_struct irq_work;
++	struct work_struct irq_wake_work;
++	struct work_struct clear_interrupt_status_work;
++	struct workqueue_struct *irq_work_queue;
++	struct wake_lock wakelock;
++	struct wake_lock reset_wakelock;
++	struct input_dev *input_dev;
++
++	struct mutex sh_wakeup_lock;
++	int sh_wakeup_count;
++	int sh_lowpower_enabled;
++
++	int hw_initialized;
++
++	/* SPI DMA */
++	bool spi_dma_enabled;
++	unsigned char *spi_tx_buf;
++	unsigned char *spi_rx_buf;
++	dma_addr_t spi_tx_dma;
++	dma_addr_t spi_rx_dma;
++
++	atomic_t enabled;
++	int irq;
++	int irq_wake;
++	unsigned int current_addr;
++	enum stm_mode mode;
++	unsigned char intp_mask;
++
++	dev_t stml0xx_dev_num;
++	struct class *stml0xx_class;
++	struct cdev as_cdev;
++	struct cdev ms_cdev;
++
++	struct switch_dev dsdev;	/* Standard Dock switch */
++	struct switch_dev edsdev;	/* Motorola Dock switch */
++
++	struct stml0xx_android_sensor_data
++	 stml0xx_as_data_buffer[STML0XX_AS_DATA_QUEUE_SIZE];
++	int stml0xx_as_data_buffer_head;
++	int stml0xx_as_data_buffer_tail;
++	wait_queue_head_t stml0xx_as_data_wq;
++
++	struct stml0xx_moto_sensor_data
++	 stml0xx_ms_data_buffer[STML0XX_MS_DATA_QUEUE_SIZE];
++	int stml0xx_ms_data_buffer_head;
++	int stml0xx_ms_data_buffer_tail;
++	wait_queue_head_t stml0xx_ms_data_wq;
++
++	struct regulator *regulator_1;
++	struct regulator *regulator_2;
++
++	bool is_suspended;
++	bool pending_wake_work;
++};
++
++/* per algo config, request, and event registers */
++struct stml0xx_algo_info_t {
++	unsigned short config_bit;
++	unsigned char cfg_register;
++	unsigned char req_register;
++	unsigned char evt_register;
++	unsigned short evt_size;
++};
++
++#define ALGO_RQST_DATA_SIZE 28
++struct stml0xx_algo_requst_t {
++	char size;
++	char data[ALGO_RQST_DATA_SIZE];
++};
++
++irqreturn_t stml0xx_isr(int irq, void *dev);
++void stml0xx_irq_work_func(struct work_struct *work);
++
++irqreturn_t stml0xx_wake_isr(int irq, void *dev);
++void stml0xx_irq_wake_work_func(struct work_struct *work);
++int stml0xx_process_ir_gesture(struct stml0xx_data *ps_stml0xx);
++
++long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
++
++void stml0xx_reset(struct stml0xx_platform_data *pdata, unsigned char *cmdbuff);
++int stml0xx_reset_and_init(void);
++
++int stml0xx_as_data_buffer_write(struct stml0xx_data *ps_stml0xx,
++				 unsigned char type, unsigned char *data,
++				 int size, unsigned char status);
++int stml0xx_as_data_buffer_read(struct stml0xx_data *ps_stml0xx,
++				struct stml0xx_android_sensor_data *buff);
++int stml0xx_ms_data_buffer_write(struct stml0xx_data *ps_stml0xx,
++				 unsigned char type, unsigned char *data,
++				 int size);
++int stml0xx_ms_data_buffer_read(struct stml0xx_data *ps_stml0xx,
++				struct stml0xx_moto_sensor_data *buff);
++
++/* SPI-related functions */
++int stml0xx_spi_transfer(unsigned char *tx_buf, unsigned char *rx_buf, int len);
++int stml0xx_spi_write_read_no_reset(unsigned char *tx_buf, int tx_len,
++				    unsigned char *rx_buf, int rx_len);
++int stml0xx_spi_read_no_reset(unsigned char *buf, int len);
++int stml0xx_spi_write_no_reset(unsigned char *buf, int len);
++int stml0xx_spi_write_read(unsigned char *tx_buf, int tx_len,
++			   unsigned char *rx_buf, int rx_len);
++int stml0xx_spi_read(unsigned char *buf, int len);
++int stml0xx_spi_write(unsigned char *buf, int len);
++int stml0xx_spi_transfer(unsigned char *tx_buf, unsigned char *rx_buf, int len);
++int stml0xx_spi_send_write_reg(unsigned char reg_type,
++			       unsigned char *reg_data, int reg_data_size);
++int stml0xx_spi_send_read_reg(unsigned char reg_type,
++			      unsigned char *reg_data, int reg_data_size);
++void stml0xx_spi_swap_bytes(unsigned char *data, int size);
++unsigned short stml0xx_spi_calculate_crc(unsigned char *data, int len);
++void stml0xx_spi_append_crc(unsigned char *data, int len);
++
++int stml0xx_enable(void);
++void stml0xx_wake(struct stml0xx_data *ps_stml0xx);
++void stml0xx_sleep(struct stml0xx_data *ps_stml0xx);
++void stml0xx_detect_lowpower_mode(unsigned char *cmdbuff);
++
++int stml0xx_load_brightness_table(void);
++
++int stml0xx_irq_wake_work_func_display_locked(struct stml0xx_data *ps_stml0xx,
++					      unsigned short irq_status);
++unsigned short stml0xx_get_interrupt_status(struct stml0xx_data *ps_stml0xx,
++					    unsigned char reg, int *err);
++
++int stml0xx_boot_flash_erase(void);
++int stml0xx_get_version(struct stml0xx_data *ps_stml0xx);
++int switch_stml0xx_mode(enum stm_mode mode);
++int stml0xx_bootloadermode(struct stml0xx_data *ps_stml0xx);
++
++extern struct stml0xx_data *stml0xx_misc_data;
++
++extern unsigned short stml0xx_g_acc_delay;
++extern unsigned short stml0xx_g_mag_delay;
++extern unsigned short stml0xx_g_gyro_delay;
++extern unsigned short stml0xx_g_baro_delay;
++extern unsigned short stml0xx_g_ir_gesture_delay;
++extern unsigned short stml0xx_g_ir_raw_delay;
++extern unsigned short stml0xx_g_step_counter_delay;
++extern unsigned long stml0xx_g_nonwake_sensor_state;
++extern unsigned short stml0xx_g_algo_state;
++extern unsigned char stml0xx_g_motion_dur;
++extern unsigned char stml0xx_g_zmotion_dur;
++extern unsigned char stml0xx_g_control_reg[STML0XX_CONTROL_REG_SIZE];
++extern unsigned char stml0xx_g_mag_cal[STML0XX_MAG_CAL_SIZE];
++extern unsigned short stml0xx_g_control_reg_restore;
++extern unsigned char stml0xx_g_ir_config_reg[STML0XX_IR_CONFIG_REG_SIZE];
++extern bool stml0xx_g_ir_config_reg_restore;
++extern bool stml0xx_g_booted;
++
++extern unsigned char *stml0xx_cmdbuff;
++extern unsigned char *stml0xx_readbuff;
++
++extern unsigned short stml0xx_spi_retry_delay;
++
++extern const struct stml0xx_algo_info_t stml0xx_algo_info[];
++
++extern struct stml0xx_algo_requst_t stml0xx_g_algo_requst[];
++
++extern long stml0xx_time_delta;
++
++extern unsigned int stml0xx_irq_disable;
++
++extern unsigned short stml0xx_g_wake_sensor_state;
++
++extern unsigned char stat_string[];
++
++extern const struct file_operations stml0xx_as_fops;
++extern const struct file_operations stml0xx_ms_fops;
++extern const struct file_operations stml0xx_misc_fops;
++extern struct miscdevice stml0xx_misc_device;
++
++#endif /* __KERNEL__ */
++
++#endif /* __STML0XX_H__ */
+-- 
+2.11.0
+

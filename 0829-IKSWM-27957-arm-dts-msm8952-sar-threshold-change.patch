@@ -1,0 +1,34 @@
+From c489ae2802aec71c2b0a9c8af9b5be8d25cef536 Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Sat, 26 Mar 2016 14:06:10 -0500
+Subject: [PATCH 829/959] IKSWM-27957:arm/dts: msm8952: sar threshold change
+
+sar threshold change from 50mm to 60mm
+Change-Id: I294fc5bd20c3a26f4839bf1ca1a056b1928ba0a3
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/837784
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 78828fd8637..dbd8ccd901c 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -962,7 +962,7 @@
+ 		pinctrl-names = "laser_default", "laser_suspend";
+ 		pinctrl-0 = <&laser_active >;
+ 		pinctrl-1 = <&laser_suspend >;
+-		st,sensorthreshold = <40 50>;
++		st,sensorthreshold = <40 60>;
+ 		st,xtalkval = <19>;
+ 	};
+ 
+-- 
+2.11.0
+

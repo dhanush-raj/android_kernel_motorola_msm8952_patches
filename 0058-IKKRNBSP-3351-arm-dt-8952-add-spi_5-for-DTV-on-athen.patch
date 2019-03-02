@@ -1,0 +1,177 @@
+From d41deb91d051fd66813162e26d802445b66edcc9 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Mon, 31 Aug 2015 15:04:49 -0500
+Subject: [PATCH 058/959] IKKRNBSP-3351 arm/dt: 8952: add spi_5 for DTV on
+ athene
+
+Provision spi_5 interface for athene HW, set speed to 50 MHz.
+Add device tree for DTV hardware, create separate dtsi for
+DTV specific configurations.
+
+Change-Id: I0920dcdc43708b865edf271ae0d1df17de08389a
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/780341
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/Makefile               |   3 +-
+ arch/arm/boot/dts/qcom/msm8952-athene-p0d.dts |  21 ++++++
+ arch/arm/boot/dts/qcom/msm8952-moto-dtv.dtsi  | 101 ++++++++++++++++++++++++++
+ 3 files changed, 124 insertions(+), 1 deletion(-)
+ create mode 100644 arch/arm/boot/dts/qcom/msm8952-athene-p0d.dts
+ create mode 100644 arch/arm/boot/dts/qcom/msm8952-moto-dtv.dtsi
+
+diff --git a/arch/arm/boot/dts/qcom/Makefile b/arch/arm/boot/dts/qcom/Makefile
+index 5055da44ace..41787e2cd77 100644
+--- a/arch/arm/boot/dts/qcom/Makefile
++++ b/arch/arm/boot/dts/qcom/Makefile
+@@ -168,7 +168,8 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
+ 	msm8929-cdp-jdi.dtb
+ endif # CONFIG_MMI_DEVICE_DTBS
+ 
+-dtb-$(CONFIG_ARCH_MSM8916) += msm8952-athene-p0.dtb
++dtb-$(CONFIG_ARCH_MSM8916) += msm8952-athene-p0.dtb \
++	msm8952-athene-p0d.dtb
+ 
+ dtb-$(CONFIG_ARCH_MSM8226) += msm8226-sim.dtb \
+ 	msm8226-fluid.dtb \
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene-p0d.dts b/arch/arm/boot/dts/qcom/msm8952-athene-p0d.dts
+new file mode 100644
+index 00000000000..8696ab886a4
+--- /dev/null
++++ b/arch/arm/boot/dts/qcom/msm8952-athene-p0d.dts
+@@ -0,0 +1,21 @@
++/* Copyright (c) 2015, Motorola Mobility Inc. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++
++/dts-v1/;
++
++#include "msm8952-athene.dtsi"
++#include "msm8952-moto-dtv.dtsi"
++
++/ {
++	qcom,board-id = <0x41 0x800d>;
++};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-dtv.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-dtv.dtsi
+new file mode 100644
+index 00000000000..7a8451bacfa
+--- /dev/null
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-dtv.dtsi
+@@ -0,0 +1,101 @@
++/* Copyright (c) 2015, Motorola Mobility Inc. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++/ {
++	aliases {
++		spi5 = &spi_5;
++	};
++};
++
++&tlmm_pinmux {
++
++	spi5_active {
++		/* BLSP6 MOSI, MISO, CLK */
++		qcom,pins = <&gp 20>, <&gp 21>, <&gp 23>;
++		qcom,num-grp-pins = <3>;
++		qcom,pin-func = <1>;
++		label = "spi5-active";
++		/* active state */
++		spi5_default: spi5_default {
++			drive-strength = <12>; /* 12 MA */
++			bias-disable = <0>; /* No PULL */
++		};
++	};
++
++	spi5_suspend {
++		/* BLSP6 MOSI, MISO, CLK */
++		qcom,pins = <&gp 20>, <&gp 21>, <&gp 23>;
++		qcom,num-grp-pins = <3>;
++		qcom,pin-func = <0>;
++		label = "spi5-suspend";
++		/* suspended state */
++		spi5_sleep: spi5_sleep {
++			drive-strength = <2>; /* 2 MA */
++			bias-pull-down; /* PULL Down */
++		};
++	};
++
++	spi5_cs0_active {
++		/* BLSP6 CS */
++		qcom,pins = <&gp 22>;
++		qcom,num-grp-pins = <1>;
++		qcom,pin-func = <1>;
++		label = "spi5-cs0-active";
++		spi5_cs0_active: cs0_active {
++			drive-strength = <2>;
++			bias-disable = <0>;
++		};
++	};
++
++	spi5_cs0_suspend {
++		/* BLSP6 CS */
++		qcom,pins = <&gp 22>;
++		qcom,num-grp-pins = <1>;
++		qcom,pin-func = <0>;
++		label = "spi5-cs0-suspend";
++		spi5_cs0_sleep: cs0_sleep {
++			drive-strength = <2>;
++			bias-disable = <0>;
++		};
++	};
++};
++
++&soc {
++	spi_5: spi@7af6000 { /* BLSP2 QUP2 */
++		compatible = "qcom,spi-qup-v2";
++		#address-cells = <1>;
++		#size-cells = <0>;
++		reg-names = "spi_physical", "spi_bam_physical";
++		reg = <0x7af6000 0x600>,
++		      <0x7ac4000 0x1f000>;
++		interrupt-names = "spi_irq", "spi_bam_irq";
++		/* IRQ 239 for BLSP2 */
++		interrupts = <0 300 0>, <0 239 0>;
++		spi-max-frequency = <50000000>;
++		pinctrl-names = "spi_default", "spi_sleep";
++		pinctrl-0 = <&spi5_default &spi5_cs0_active>;
++		pinctrl-1 = <&spi5_sleep &spi5_cs0_sleep>;
++		clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
++			 <&clock_gcc clk_gcc_blsp2_qup2_spi_apps_clk>;
++		clock-names = "iface_clk", "core_clk";
++		qcom,infinite-mode = <0>;
++		qcom,use-bam;
++		qcom,use-pinctrl;
++		qcom,ver-reg-exists;
++		/* need to check pipe index setting*/
++		qcom,bam-consumer-pipe-index = <6>;
++		qcom,bam-producer-pipe-index = <7>;
++		/* master-id for BLSP2 is MSM_BUS_MASTER_BLSP_2 or 84 */
++		qcom,master-id = <84>;
++		status = "ok";
++	};
++};
+-- 
+2.11.0
+

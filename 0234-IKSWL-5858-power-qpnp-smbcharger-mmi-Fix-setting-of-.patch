@@ -1,0 +1,40 @@
+From b683339dafa913fddde5ad503570586a1e1ba912 Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Wed, 1 Apr 2015 11:19:07 -0500
+Subject: [PATCH 234/959] IKSWL-5858: power: qpnp-smbcharger-mmi: Fix setting
+ of BAT_MISSING_ALGORITHM
+
+"qcom,bmd-algo-disabled" should disable the Battery Missing Algorithm.
+Currently it is configured to enable the algorithm if the device tree
+node (qcom,bmd-algo-disabled) is defined.
+
+Change-Id: Ibf893a575fd29f6e1729f5466ec7fa11d1e9bb66
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/730760
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravi Chebolu <arc095@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Vidyadhar Gurram <rnh786@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 7a2ab17221c..57398a35c34 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -4904,7 +4904,7 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
+ 
+ 	/* battery missing detection */
+ 	mask =  BATT_MISSING_ALGO_BIT;
+-	reg = chip->bmd_algo_disabled ? BATT_MISSING_ALGO_BIT : 0;
++	reg = chip->bmd_algo_disabled ? 0 : BATT_MISSING_ALGO_BIT;
+ 	if (chip->bmd_pin_src < BPD_TYPE_DEFAULT) {
+ 		mask |= BMD_PIN_SRC_MASK;
+ 		reg |= chip->bmd_pin_src << PIN_SRC_SHIFT;
+-- 
+2.11.0
+

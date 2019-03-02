@@ -1,0 +1,57 @@
+From 45547d568fcb301e8f2af26aeacded6f032f606f Mon Sep 17 00:00:00 2001
+From: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Date: Fri, 15 Mar 2013 16:10:20 -0500
+Subject: [PATCH 003/959] IKKRNBSP-1446 build: allow boards to declare "extra"
+ configuration sets
+
+A product can set KERNEL_EXTRA_CONFIG in its AndroidBoard.mk file such
+that additional files are appended to the generated defconfig file.
+
+The order of precedence from lowest to highest is:
+
+  - $(KERNEL_DEFCONFIG)
+  - ext_config/$(KERNEL_EXTRA_CONFIG).config
+  - ext_config/eng_bld.config (for eng and userdebug builds only)
+  - ext_config/eng_bld-$(KERNEL_EXTRA_CONFIG).config (for eng and
+    userdebug builds only)
+
+Change-Id: I71d6cc5ca3979bb5172a4d747cfe55b357cde250
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/525118
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Check Patch <CHEKPACH@motorola.com>
+Reviewed-by: Klocwork kwcheck <klocwork-kwcheck@sourceforge.mot.com>
+Reviewed-by: John Zafiris <qemx13@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-by: John Michelau <w14107@motorola.com>
+(cherry picked from commit 741d9499cc35027d76be8241753d9d404ab8858a)
+(cherry picked from commit 19239810d0ce7f2735b9e21c57d92436da412fd2)
+---
+ defconfig.mk | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/defconfig.mk b/defconfig.mk
+index 977dd3da6a3..968c4f94be1 100644
+--- a/defconfig.mk
++++ b/defconfig.mk
+@@ -3,9 +3,17 @@ LJAPDEFCONFIGSRC		:= ${DEFCONFIGSRC}/ext_config
+ PRODUCT_SPECIFIC_DEFCONFIGS	:= $(DEFCONFIGSRC)/$(KERNEL_DEFCONFIG)
+ TARGET_DEFCONFIG		:= $(KERNEL_OUT)/mapphone_defconfig
+ 
++ifneq ($(KERNEL_EXTRA_CONFIG),)
++PRODUCT_SPECIFIC_DEFCONFIGS += $(LJAPDEFCONFIGSRC)/$(KERNEL_EXTRA_CONFIG).config
++endif
++
+ # build eng kernel for eng and userdebug Android variants
+ ifneq ($(TARGET_BUILD_VARIANT), user)
+ PRODUCT_SPECIFIC_DEFCONFIGS += ${LJAPDEFCONFIGSRC}/eng_bld.config
++
++ifneq ($(KERNEL_EXTRA_CONFIG),)
++PRODUCT_SPECIFIC_DEFCONFIGS += $(LJAPDEFCONFIGSRC)/eng_bld-$(KERNEL_EXTRA_CONFIG).config
++endif
+ endif
+ 
+ define do-make-defconfig
+-- 
+2.11.0
+

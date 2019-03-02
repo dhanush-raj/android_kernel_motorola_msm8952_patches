@@ -1,0 +1,35 @@
+From 14c223652abf3dcbacca5d6f4d8ee8d96a5ae655 Mon Sep 17 00:00:00 2001
+From: weiweij <weiweij@motorola.com>
+Date: Thu, 21 Jan 2016 10:26:41 +0800
+Subject: [PATCH 636/959] IKSWM-16954: arm/dts: enable 9V hv charging
+
+Enable 9v hv charging.
+
+Change-Id: If57dc0c773bc7e18a1fa01751d4cfacd0cfb8c1c
+Signed-off-by: weiweij <weiweij@motorola.com>
+Reviewed-on: http://gerrit.mot.com/813965
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index f84c497c729..24e7683e2c4 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -436,6 +436,7 @@
+ 	qcom,usbid-disabled;
+ 	qcom,force-aicl-rerun;
+ 	qcom,auto-voltage-comp-mv = <150>;
++	qcom,enable-hvdcp-9v;
+ };
+ 
+ /{
+-- 
+2.11.0
+

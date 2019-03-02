@@ -1,0 +1,35 @@
+From 30d59b47ecc65f3cbe8f6d5c13ec48eced76c4f9 Mon Sep 17 00:00:00 2001
+From: Xuehui Ye <yexh1@motorola.com>
+Date: Mon, 7 Mar 2016 09:49:52 +0800
+Subject: [PATCH 742/959] IKSWM-23670: arm/dts: 8952: Add tuning for host mode
+
+Add Separate phy tuning for host mode.
+
+Change-Id: If6e7c6128785cae95da179ff433f214be700f032
+Signed-off-by: Xuehui Ye <yexh1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/829066
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 7b16f9945d7..31bfddd58de 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -395,6 +395,8 @@
+ 	vbus_otg-supply = <&smbcharger_charger_otg>;
+ 	qcom,hsusb-otg-phy-init-seq =
+ 		<0x73 0x80 0x59 0x81 0x36 0x82 0x3c 0x83 0xffffffff>;
++	qcom,hsusb-otg-host-phy-init-seq =
++		<0x73 0x80 0x68 0x81 0x24 0x82 0xffffffff>;
+ };
+ 
+ &pmi8950_charger {
+-- 
+2.11.0
+

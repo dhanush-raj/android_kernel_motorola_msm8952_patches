@@ -1,0 +1,63 @@
+From 4323a4b66bba0713a125cdf7a79d7d2f11e72e03 Mon Sep 17 00:00:00 2001
+From: Zac Crosby <zac@motorola.com>
+Date: Mon, 11 Aug 2014 17:56:09 -0500
+Subject: [PATCH 162/959] IKKRNBSP-3366: msm: mdss: Allow bootloader to disable
+ ESD check
+
+Allow bootloader to disable the kernel's periodic ESD check.  This can be
+done either via an ESD utag, or the bare board flag.
+
+'commit 1c93476a0a48 ("IKKRNBSP-2622 msm: mdss: Allow bootloader
+to disable ESD check")'
+Signed-off-by: Zac Crosby <zac@motorola.com>
+Signed-off-by: Parasuraman <parasur@motorola.com>
+Change-Id: Ia8eb8ad2228529f969ddc2279018988daa5ab6ae
+Reviewed-on: http://gerrit.mot.com/784115
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index dec47129659..f68b5e6da78 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -1724,6 +1724,7 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
+ 	struct mdss_dsi_ctrl_pdata *ctrl)
+ {
+ 	struct mdss_panel_info *pinfo;
++	struct mdss_panel_config *pcfg;
+ 
+ 	if (!np || !ctrl) {
+ 		pr_err("%s: Invalid arguments\n", __func__);
+@@ -1731,6 +1732,7 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
+ 	}
+ 
+ 	pinfo = &ctrl->panel_data.panel_info;
++	pcfg = &ctrl->panel_config;
+ 
+ 	pinfo->partial_update_supported = of_property_read_bool(np,
+ 		"qcom,partial-update-enabled");
+@@ -1764,7 +1766,12 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
+ 	pinfo->panel_ack_disabled = of_property_read_bool(np,
+ 				"qcom,panel-ack-disabled");
+ 
+-	mdss_dsi_parse_esd_params(np, ctrl);
++	if (pcfg->bare_board || !pcfg->esd_enable) {
++		pinfo->esd_check_enabled = false;
++		pr_info("%s: ESD check disabled by bootloader panel config, bare_board = %d, esd_enable = %d\n",
++				__func__, pcfg->bare_board, pcfg->esd_enable);
++	} else
++		mdss_dsi_parse_esd_params(np, ctrl);
+ 
+ 	if (pinfo->panel_ack_disabled && pinfo->esd_check_enabled) {
+ 		pr_warn("ESD should not be enabled if panel ACK is disabled\n");
+-- 
+2.11.0
+

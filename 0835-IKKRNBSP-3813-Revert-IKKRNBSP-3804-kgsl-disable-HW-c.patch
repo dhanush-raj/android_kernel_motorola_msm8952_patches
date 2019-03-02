@@ -1,0 +1,41 @@
+From 6bdef5155d283f15460760d8e4a113a945bf10a8 Mon Sep 17 00:00:00 2001
+From: Patrick Auchter <auchter@motorola.com>
+Date: Wed, 30 Mar 2016 11:47:36 -0500
+Subject: [PATCH 835/959] IKKRNBSP-3813: Revert "IKKRNBSP-3804: kgsl: disable
+ HW clock gating in all GPU blocks"
+
+This debug change is no longer needed.
+
+This reverts commit 8fd780c956c30f06ede14360938d0b034f6ad9c4.
+
+Change-Id: I5f849f2a3325560a27ea414861b92d86054fc1cd
+Signed-off-by: Patrick Auchter <auchter@motorola.com>
+Reviewed-on: http://gerrit.mot.com/838754
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Fred Fettinger <fettinge@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/gpu/msm/adreno_a4xx.c | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/drivers/gpu/msm/adreno_a4xx.c b/drivers/gpu/msm/adreno_a4xx.c
+index cad2fff34dd..01bf2415254 100644
+--- a/drivers/gpu/msm/adreno_a4xx.c
++++ b/drivers/gpu/msm/adreno_a4xx.c
+@@ -551,10 +551,6 @@ static void a4xx_enable_hwcg(struct kgsl_device *device)
+ 		kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL, 0);
+ 	else
+ 		kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL, 0xAAAAAAAA);
+-
+-	/* MMI_STOPSHIP: Disable HW clock gating in all GPU blocks */
+-	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL, 0);
+-
+ 	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2, 0);
+ }
+ 
+-- 
+2.11.0
+

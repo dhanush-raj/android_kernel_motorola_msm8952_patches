@@ -1,0 +1,45 @@
+From be61ec227e089fec4adb8ae782fe7d36da8c090c Mon Sep 17 00:00:00 2001
+From: Jason Knopsnyder <jasonk@motorola.com>
+Date: Tue, 30 Aug 2016 14:18:03 -0500
+Subject: [PATCH 919/959] arm/dt: msm8952: Add front/back temp to sensor info
+
+Add the front_temp and back_temp sensors to sensor information.
+
+Moto-CRs-fixed: IKKRNBSP-4105
+
+Change-Id: Ic2b52df410ad93f3be171ad2c89877fa7b46514b
+Signed-off-by: Jason Knopsnyder <jasonk@motorola.com>
+Reviewed-on: https://gerrit.mot.com/893573
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 192c7c621f9..7762ca8250f 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -742,6 +742,16 @@
+ 			qcom,alias-name  = "batt_therm";
+ 			qcom,scaling-factor = <1000>;
+ 		};
++		sensor_information18: qcom,sensor-information@18 {
++			qcom,sensor-type = "adc";
++			qcom,sensor-name = "front_temp";
++			qcom,scaling-factor = <1000>;
++		};
++		sensor_information19: qcom,sensor-information@19 {
++			qcom,sensor-type = "adc";
++			qcom,sensor-name = "back_temp";
++			qcom,scaling-factor = <1000>;
++		};
+ 	};
+ 
+ 	qcom,msm-thermal {
+-- 
+2.11.0
+

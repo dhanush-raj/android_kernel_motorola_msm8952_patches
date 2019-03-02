@@ -1,0 +1,80 @@
+From d013abb8b01eb87933fe888afc39eeaa24a5ec48 Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Sat, 10 Oct 2015 09:10:41 -0500
+Subject: [PATCH 396/959] IKQCOMSD1-2951: arm/dt: 8952: Add laser focus device
+ cci config
+
+laser device cci config for p0, the change is for p0 only.
+
+Change-Id: Id9aa411832542f3bb52ff365fdf2d7f8d5f7dd31
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/790440
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Reviewed-by: Oleg Klementiev <oleg@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sumit Jamadar <xkbr38@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-athene-p0.dts | 47 ++++++++++++++++++++++++++++
+ 1 file changed, 47 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+index 769cbc26875..1684dff6aae 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
++++ b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+@@ -23,3 +23,50 @@
+ &mdss_dsi0 {
+ 	qcom,dsi-pref-prim-pan = <&mot_tdi_546_1080p_cmd_v0>;
+ };
++
++&cci {
++	st,stmvl53l0
++	{
++		cell-index = <1>;
++		compatible = "st,stmvl53l0";
++		qcom,cci-master = <0>;
++		gpios = <&msm_gpio 86 0>,
++			<&msm_gpio 43 0>;
++		qcom,gpio-reset = <0>;
++		qcom,gpio-req-tbl-num = <0 1>;
++		qcom,gpio-req-tbl-flags = <0 1>;
++		qcom,gpio-req-tbl-label ="TOF_XSHUTDOWN","TOF_INT";
++		pinctrl-names = "laser_default", "laser_suspend";
++		pinctrl-0 = <&laser_active >;
++		pinctrl-1 = <&laser_suspend >;
++	};
++};
++
++&soc {
++	tlmm_pinmux: pinctrl@1000000 {
++		laser_active {
++			/* reset, interrupt */
++			qcom,pins = <&gp 86>,<&gp 43>;
++			qcom,num-grp-pins = <2>;
++			qcom,pin-func = <0>;
++			label = "laser-active";
++			/* active state */
++			laser_active: laser_active {
++				drive-strength = <2>; /* 2 MA */
++				bias-disable; /* No PULL */
++			};
++		};
++		laser_suspend {
++			/* reset,interrupt  */
++			qcom,pins = <&gp 86>,<&gp 43> ;
++			qcom,num-grp-pins = <2>;
++			qcom,pin-func = <1>;
++			label = "laser-suspend";
++			/*suspended state */
++			laser_suspend: laser_suspend {
++				drive-strength = <2>; /* 2 MA */
++				bias-disable; /* No PULL */
++			};
++		};
++	};
++};
+-- 
+2.11.0
+

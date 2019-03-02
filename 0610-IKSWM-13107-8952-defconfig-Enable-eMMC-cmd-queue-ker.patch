@@ -1,0 +1,32 @@
+From 2148f32ef61821df774dfd01cdd3a04de0ddda0d Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Tue, 12 Jan 2016 15:03:48 -0800
+Subject: [PATCH 610/959] IKSWM-13107:8952/defconfig: Enable eMMC cmd queue
+ kernel option
+
+ Enable CONFIG_MMC_CQ_HCI and fix gcc warnning.
+
+Change-Id: I825628cb4aeffa66270251b0a35e7f68a92f60d5
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/811811
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index de57cc5e772..c3aa421ba83 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -59,3 +59,4 @@ CONFIG_MMC_FFU=y
+ CONFIG_SUSPEND_DEBUG=y
+ CONFIG_ALSA_TO_H2W=y
+ CONFIG_ESD_FS=y
++CONFIG_MMC_CQ_HCI=y
+-- 
+2.11.0
+

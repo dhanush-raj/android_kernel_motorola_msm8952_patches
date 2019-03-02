@@ -1,0 +1,82 @@
+From 8b9d4e3782c5f3f48a0bfecf70146f1042899805 Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Mon, 29 Sep 2014 15:48:48 -0500
+Subject: [PATCH 078/959] IKLOCSEN-1715 drivers: misc: stml0xx: Report headset
+ state
+
+Check the wakeable interrupt status register for headset
+state changes.
+
+Change-Id: If772f3ad4d78b0c81b67fee8eb970f4a72fff256
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/674586
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_wake_irq.c | 14 ++++++++++++++
+ include/linux/stml0xx.h                 |  5 +++++
+ 2 files changed, 19 insertions(+)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index 89959ecbcf3..5e4957c6eef 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -198,6 +198,20 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Cover status: %d", state);
+ 	}
++	if (irq_status & M_HEADSET) {
++		int state;
++		err = stml0xx_spi_send_read_reg(HEADSET_DATA, buf, 1);
++		if (err < 0) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++				"Reading Headset state failed");
++			goto EXIT;
++		}
++
++		state = buf[HEADSET_STATE];
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Headset state: 0x%02x", state);
++	}
+ 	if (irq_status & M_INIT_COMPLETE) {
+ 		/* set the init complete register, */
+ 		/* to let the hub know it was received */
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 951c466563f..85600d9a4d4 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -188,9 +188,11 @@
+ #define M_PROXIMITY		0x000002
+ #define M_TOUCH			0x000004
+ #define M_COVER			0x000008
++#define M_HEADSET               0x000020
+ #define M_INIT_COMPLETE         0x000040
+ #define M_HUB_RESET		0x000080
+ 
++
+ #define M_FLATUP		0x000100
+ #define M_FLATDOWN		0x000200
+ #define M_STOWED		0x000400
+@@ -352,6 +354,8 @@ struct stm_response {
+ 
+ #define MOTION_DATA                     0x2D
+ 
++#define HEADSET_DATA                    0x2F
++
+ #define PROX_SETTINGS                   0x33
+ 
+ #define LUX_TABLE_VALUES                0x34
+@@ -453,6 +457,7 @@ struct stm_response {
+ #define DOCK_STATE	0
+ #define PROX_DISTANCE	0
+ #define COVER_STATE	0
++#define HEADSET_STATE   0
+ #define TOUCH_REASON	1
+ #define FLAT_UP		0
+ #define FLAT_DOWN	0
+-- 
+2.11.0
+

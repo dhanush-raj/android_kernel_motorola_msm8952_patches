@@ -1,0 +1,31 @@
+From ea73a518b3d78d54719e54b8903d5d03e861a70c Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Thu, 12 Nov 2015 11:24:44 -0800
+Subject: [PATCH 475/959] IKSWM-11228: 8952/defconfig: Enable MMC_FFU
+
+  Enable CONFIG_EMMC_FFU
+
+Change-Id: I1d315302a9e8e65c33e61922c0299d44257ce82a
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/799512
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index 2bcf3bca6dd..0beb8d9e8b3 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -54,3 +54,4 @@ CONFIG_LEDS_ATC=y
+ CONFIG_INPUT_KEYCHORD=y
+ CONFIG_STMVL53L0=y
+ CONFIG_SENSORS_FPC_1020=y
++CONFIG_MMC_FFU=y
+-- 
+2.11.0
+

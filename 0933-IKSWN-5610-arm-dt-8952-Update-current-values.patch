@@ -1,0 +1,96 @@
+From 03d98dcb10fa6948be5612bf7c5d4efd37d3e1b5 Mon Sep 17 00:00:00 2001
+From: chenyb1 <chenyb1@motorola.com>
+Date: Fri, 14 Oct 2016 11:16:05 +0800
+Subject: [PATCH 933/959] IKSWN-5610: arm/dt: 8952: Update current values
+
+Update current values in cpu node for computing stats.
+
+Change-Id: Ibd6a0e4328c4d8b42b99a15ff4d36d790c95811b
+Signed-off-by: chenyb1 <chenyb1@motorola.com>
+Reviewed-on: https://gerrit.mot.com/907931
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 63 +++++++++++++++++++++++++
+ 1 file changed, 63 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 7762ca8250f..a2dd0dc0773 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -19,6 +19,69 @@
+ #include <moto-mem-reserve.h>
+ 
+ / {
++	cpus {
++		CPU0: cpu@100 {
++			current = < 150853 //960000 kHz
++				187492 //1094400 kHz
++				246083 //1344000 kHz
++				278579 //1440000 kHz
++				323918 >; //1516800 kHz
++		};
++
++		CPU1: cpu@101 {
++			current = < 150853 //960000 kHz
++				187492 //1094400 kHz
++				246083 //1344000 kHz
++				278579 //1440000 kHz
++				323918 >; //1516800 kHz
++		};
++
++		CPU2: cpu@102 {
++			current = < 150853 //960000 kHz
++				187492 //1094400 kHz
++				246083 //1344000 kHz
++				278579 //1440000 kHz
++				323918 >; //1516800 kHz
++		};
++
++		CPU3: cpu@103 {
++			current = < 150853 //960000 kHz
++				187492 //1094400 kHz
++				246083 //1344000 kHz
++				278579 //1440000 kHz
++				323918 >; //1516800 kHz
++		};
++
++		CPU4: cpu@0 {
++			current = < 103932 //806400 kHz
++				126985 //998400 kHz
++				173601 //1094400 kHz
++				198966 >; //1209600 kHz
++		};
++
++		CPU5: cpu@1 {
++			current = < 103932 //806400 kHz
++				126985 //998400 kHz
++				173601 //1094400 kHz
++				198966 >; //1209600 kHz
++		};
++
++		CPU6: cpu@2 {
++			current = < 103932 //806400 kHz
++				126985 //998400 kHz
++				173601 //1094400 kHz
++				198966 >; //1209600 kHz
++		};
++
++		CPU7: cpu@3 {
++			current = < 103932 //806400 kHz
++				126985 //998400 kHz
++				173601 //1094400 kHz
++				198966 >; //1209600 kHz
++		};
++	};
++};
++/ {
+ 	aliases {
+ 		serial0 = &blsp1_uart2;
+ 		spi4 = &spi_4;
+-- 
+2.11.0
+

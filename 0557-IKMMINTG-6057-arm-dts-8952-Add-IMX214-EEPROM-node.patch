@@ -1,0 +1,125 @@
+From 3433d646a62c6c53d8076f9d69c9a247ac72d815 Mon Sep 17 00:00:00 2001
+From: chensheng1 <chensheng1@lenovo.com>
+Date: Fri, 4 Dec 2015 17:18:59 +0800
+Subject: [PATCH 557/959] IKMMINTG-6057: arm/dts: 8952: Add IMX214 EEPROM node
+
+Add devtree entry to probe eeprom for imx214 on 8952 platform.
+
+Change-Id: I2398fd9d436b12ee06eae1d22a3dd4334c9839d4
+Signed-off-by: chensheng1 <chensheng1@lenovo.com>
+Reviewed-on: http://gerrit.mot.com/804913
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sumit Jamadar <xkbr38@motorola.com>
+Reviewed-by: Satya Prasad Kottisa <fvgm76@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ .../boot/dts/qcom/msm8952-camera-sensor-moto.dtsi  | 73 +++++++++++++++++++++-
+ 1 file changed, 70 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi b/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
+index f3eea7257f4..2253c62c7f3 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
+@@ -52,11 +52,10 @@
+ 		status = "ok";
+ 	};
+ 
+-
+ 	/* OV5693 OTP */
+ 	eeprom1: qcom,eeprom@1 {
+ 		cell-index = <1>;
+-		reg = <0x02>;
++		reg = <0x01>;
+ 		qcom,eeprom-name = "omnivision_ov5693";
+ 		compatible = "qcom,eeprom";
+ 		qcom,slave-addr = <0x6c>;
+@@ -263,6 +262,72 @@
+ 		status = "ok";
+ 	};
+ 
++	/* IMX214 EEPROM */
++	eeprom2: qcom,eeprom@2 {
++		cell-index = <2>;
++		reg = <0x2>;
++		qcom,eeprom-name = "mot_imx214";
++		compatible = "qcom,eeprom";
++		qcom,slave-addr = <0xA0>;
++		qcom,cci-master = <0>;
++		qcom,i2c-freq-mode = <1>;
++		qcom,num-blocks = <8>;
++
++		qcom,page0 = <0 0x00 1 0x00 1 0>;
++		qcom,poll0 = <0 0x00 1 0x00 1 0>;
++		qcom,saddr0 = <0xA0>;
++		qcom,mem0 = <256 0x00 1 0x00 1 0>;
++
++		qcom,page1 = <0 0x00 1 0x00 1 0>;
++		qcom,poll1 = <0 0x00 1 0x00 1 0>;
++		qcom,saddr1 = <0xA2>;
++		qcom,mem1 = <256 0x00 1 0x00 1 0>;
++
++		qcom,page2 = <0 0x00 1 0x00 1 0>;
++		qcom,poll2 = <0 0x00 1 0x00 1 0>;
++		qcom,saddr2 = <0xA4>;
++		qcom,mem2 = <256 0x00 1 0x00 1 0>;
++
++		qcom,page3 = <0 0x00 1 0x00 1 0>;
++		qcom,poll3 = <0 0x00 1 0x00 1 0>;
++		qcom,saddr3 = <0xA6>;
++		qcom,mem3 = <256 0x00 1 0x00 1 0>;
++
++		qcom,page4 = <0 0x00 1 0x00 1 0>;
++		qcom,poll4 = <0 0x00 1 0x00 1 0>;
++		qcom,saddr4 = <0xA8>;
++		qcom,mem4 = <256 0x00 1 0x00 1 0>;
++
++		qcom,page5 = <0 0x00 1 0x00 1 0>;
++		qcom,poll5 = <0 0x00 1 0x00 1 0>;
++		qcom,saddr5 = <0xAA>;
++		qcom,mem5 = <256 0x00 1 0x00 1 0>;
++
++		qcom,page6 = <0 0x00 1 0x00 1 0>;
++		qcom,poll6 = <0 0x00 1 0x00 1 0>;
++		qcom,saddr6 = <0xAC>;
++		qcom,mem6 = <256 0x00 1 0x00 1 0>;
++
++		qcom,page7 = <0 0x00 1 0x00 1 0>;
++		qcom,poll7 = <0 0x00 1 0x00 1 0>;
++		qcom,saddr7 = <0xAE>;
++		qcom,mem7 = <256 0x00 1 0x00 1 0>;
++
++		cam_vio-supply = <&pm8950_l10>;
++		qcom,cam-vreg-name = "cam_vio";
++		qcom,cam-vreg-min-voltage = <1800000> ;
++		qcom,cam-vreg-max-voltage = <1800000>;
++		qcom,cam-vreg-op-mode = <1800000>;
++		qcom,gpio-no-mux = <0>;
++
++		qcom,cam-power-seq-type = "sensor_vreg";
++		qcom,cam-power-seq-val = "cam_vio";
++		qcom,cam-power-seq-cfg-val = <1>;
++		qcom,cam-power-seq-delay = <3>;
++
++		status = "ok";
++	};
++
+ 	actuator0: qcom,actuator@0 {
+ 		cell-index = <0>;
+ 		reg = <0x0>;
+@@ -283,7 +348,9 @@
+ 		qcom,mount-angle = <90>;
+ 		qcom,led-flash-src = <&led_flash0>;
+ 		qcom,actuator-src = <&actuator0>;
+-		qcom,eeprom-src = <&eeprom0>;
++		/* TODO: Add eeprom2 to athene_13mp-p1 dts file once
++		 * 13mp boards available */
++		qcom,eeprom-src = <&eeprom0 &eeprom2>;
+ 		cam_vdig-supply = <&pm8950_s4>;
+ 		cam_vio-supply = <&pm8950_l10>;
+ 		qcom,cam-vreg-name = "cam_vdig", "cam_vio";
+-- 
+2.11.0
+

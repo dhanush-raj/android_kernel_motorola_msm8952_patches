@@ -1,0 +1,88 @@
+From 8f043ac410983e700cd6d3232b9da21e3d84c407 Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Tue, 26 Jul 2016 14:30:13 -0700
+Subject: [PATCH 925/959] IKKRNBSP-4124: arm/dts: Athene: send panel parameters
+ in HS mode
+
+To minimize overhead of sending panel parameters over DSI bus, send them
+in HS mode unless explicitly requested to be LP in spec.
+
+Change-Id: Ib85c590541979c2ce19d78da06a6afacbf5e5cc9
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+(cherry picked from commit e5029aff6e2e8bfdd73c9fbda129dfd8c0305b95)
+Reviewed-on: https://gerrit.mot.com/898853
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi | 5 +++++
+ arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi | 5 +++++
+ arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi | 5 +++++
+ 3 files changed, 15 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+index c63b321a0ea..ea6b36fd23e 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+@@ -65,10 +65,15 @@ qcom,mdss-dsi-off-command = [
+ 	05 01 00 00 55 00 01 10];
+ 
+ qcom,mdss-dsi-cabc-ui-command = [15 01 00 00 00 00 02 55 01];
++qcom,mdss-dsi-cabc-ui-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-cabc-mv-command = [15 01 00 00 00 00 02 55 03];
++qcom,mdss-dsi-cabc-mv-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-cabc-dis-command = [15 01 00 00 00 00 02 55 00];
++qcom,mdss-dsi-cabc-dis-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-hbm-on-command = [15 01 00 00 00 00 02 51 FF];
++qcom,mdss-dsi-hbm-on-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 CC];
++qcom,mdss-dsi-hbm-off-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-hbm-type = "lcd-dcs-wled";
+ 
+ qcom,mdss-dsi-use-blank-in-progress-notifier;
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+index d0d618a38af..815f2aed8e9 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -62,10 +62,15 @@ qcom,mdss-dsi-off-command = [
+ 	05 01 00 00 55 00 01 10];	/* enter sleep mode */
+ 
+ qcom,mdss-dsi-cabc-ui-command = [15 01 00 00 00 00 02 55 01];
++qcom,mdss-dsi-cabc-ui-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-cabc-mv-command = [15 01 00 00 00 00 02 55 03];
++qcom,mdss-dsi-cabc-mv-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-cabc-dis-command = [15 01 00 00 00 00 02 55 00];
++qcom,mdss-dsi-cabc-dis-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-hbm-on-command = [15 01 00 00 00 00 02 51 D6];
++qcom,mdss-dsi-hbm-on-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 AB];
++qcom,mdss-dsi-hbm-off-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-hbm-type = "lcd-dcs-wled";
+ 
+ qcom,mdss-dsi-use-blank-in-progress-notifier;
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
+index 357c38eab54..426710b7023 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
+@@ -69,10 +69,15 @@ qcom,mdss-dsi-off-command = [
+ 	05 01 00 00 78 00 01 10];	/* enter sleep mode */
+ 
+ qcom,mdss-dsi-cabc-ui-command = [15 01 00 00 00 00 02 55 01];
++qcom,mdss-dsi-cabc-ui-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-cabc-mv-command = [15 01 00 00 00 00 02 55 03];
++qcom,mdss-dsi-cabc-mv-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-cabc-dis-command = [15 01 00 00 00 00 02 55 00];
++qcom,mdss-dsi-cabc-dis-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-hbm-on-command = [15 01 00 00 00 00 02 51 FF];
++qcom,mdss-dsi-hbm-on-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 CC];
++qcom,mdss-dsi-hbm-off-command-state = "dsi_hs_mode";
+ qcom,mdss-dsi-hbm-type = "lcd-dcs-wled";
+ 
+ qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+-- 
+2.11.0
+

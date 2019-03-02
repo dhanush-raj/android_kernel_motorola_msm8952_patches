@@ -1,0 +1,44 @@
+From 6a47f44c675f3ca73e4411f86c66ede8921fbf3e Mon Sep 17 00:00:00 2001
+From: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Date: Fri, 8 Apr 2016 14:04:26 -0500
+Subject: [PATCH 845/959] IKLOCSEN-2636 include/uapi/linux: motosh_vmm: support
+ motion history
+
+Create a new vmm register that keeps a buffer of the last 8 seconds
+of motion states at a 1s resolution
+
+Change-Id: I6bee5f8d47334ad7dc0159091b7f3a4b690e128a
+Signed-off-by: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Reviewed-on: http://gerrit.mot.com/842732
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Gabriel Burca <Gabriel.Burca@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Reviewed-by: Eric Hefner <ehefner@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ include/uapi/linux/motosh_vmm.h | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/include/uapi/linux/motosh_vmm.h b/include/uapi/linux/motosh_vmm.h
+index 9ac2f68026e..06d7edf5289 100644
+--- a/include/uapi/linux/motosh_vmm.h
++++ b/include/uapi/linux/motosh_vmm.h
+@@ -127,9 +127,9 @@ VMM_ENTRY(0x1F, SENSOR_TEST_CONFIG,					TRUE,
+ VMM_ENTRY(0x20, MOTION_DUR,						TRUE,
+ 		&vmm_motion_dur0,
+ 		sizeof(vmm_motion_dur0))
+-VMM_ENTRY(0x21, UNUSED_21,						FALSE,
+-		0,
+-		0)
++VMM_ENTRY(0x21, MOTION_HISTORY,						FALSE,
++		&vmm_motion_history,
++		sizeof(vmm_motion_history))
+ VMM_ENTRY(0x22, ZMOTION_DUR,						TRUE,
+ 		&vmm_zmotion_dur0,
+ 		sizeof(vmm_zmotion_dur0))
+-- 
+2.11.0
+

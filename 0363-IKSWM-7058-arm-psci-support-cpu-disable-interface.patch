@@ -1,0 +1,36 @@
+From ab68f293c814a3b47659a863070ef97764ee4eb4 Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Mon, 12 Oct 2015 11:26:57 -0700
+Subject: [PATCH 363/959] IKSWM-7058 arm: psci: support cpu disable interface
+
+The platform need the cpu disable interface to check if cpu
+can be shutdown or not, especially for cpu0. The cpu0 can
+not be shutdown without it.
+
+Change-Id: I00bd45a385a5263c4d92f34707752713fd6dc986
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/790633
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Yi-Wei Zhao <gbjc64@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/kernel/psci_smp.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/kernel/psci_smp.c b/arch/arm/kernel/psci_smp.c
+index 4387949b21c..7ffbc01bb7b 100644
+--- a/arch/arm/kernel/psci_smp.c
++++ b/arch/arm/kernel/psci_smp.c
+@@ -62,6 +62,7 @@ static int psci_cpu_disable(unsigned int cpu)
+ 	/* Fail early if we don't have CPU_OFF support */
+ 	if (!psci_ops.cpu_off)
+ 		return -EOPNOTSUPP;
++
+ 	return 0;
+ }
+ 
+-- 
+2.11.0
+

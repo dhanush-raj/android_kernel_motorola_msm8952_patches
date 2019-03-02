@@ -1,0 +1,38 @@
+From d841d43192ed66cb77bb6173048b687d955d8d68 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Tue, 11 Nov 2014 08:49:05 -0600
+Subject: [PATCH 049/959] IKKRNBSP-2758 misc: utags: build utags dir only in
+ DLKM
+
+Use MODULE condition to include utag directory building
+only in DLKM mode. For static module it always fails because
+by-name path is not available yet.
+
+Change-Id: I370bb2e114d4b18f10188624bcda37ad52b3ac64
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/688078
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/utag/utags.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/misc/utag/utags.c b/drivers/misc/utag/utags.c
+index 1d1809f9669..35d3929303e 100644
+--- a/drivers/misc/utag/utags.c
++++ b/drivers/misc/utag/utags.c
+@@ -1003,7 +1003,9 @@ static int __init config_init(void)
+ 		return -EIO;
+ 	}
+ 
++#ifdef MODULE
+ 	build_utags_directory();
++#endif
+ 
+ 	return 0;
+ }
+-- 
+2.11.0
+

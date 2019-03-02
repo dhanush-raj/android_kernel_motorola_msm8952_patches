@@ -1,0 +1,112 @@
+From af58f8c97672e3721b4247a77645353108428c08 Mon Sep 17 00:00:00 2001
+From: Shengzhe Zhao <a18689@motorola.com>
+Date: Fri, 1 Apr 2016 11:42:37 -0500
+Subject: [PATCH 839/959] IKSWM-28542 esdfs: truncate inode for all 3 mount
+ points.
+
+This is for fixing the panic below:
+
+__delete_from_page_cache+0xcc/0x138
+delete_from_page_cache+0x3c/0x6c
+truncate_inode_page+0x74/0x88
+truncate_inode_pages_range+0xf8/0x338
+truncate_inode_pages+0xc/0x18
+truncate_pagecache+0x40/0x68
+ext4_setattr+0x41c/0x4d0
+notify_change+0x180/0x280
+sdcardfs_setattr+0x1d8/0x2c4
+notify_change+0x180/0x280
+do_truncate+0x68/0x8c
+do_last.isra.37+0x8e8/0x9fc
+path_openat.isra.38+0xb4/0x400
+do_filp_open+0x2c/0x80
+do_sys_open+0x128/0x1c0
+SyS_openat+0xc/0x18
+
+This issue could happen to f2fs as well.
+The problme is there are 3 mount points. when different processes open
+same one file in different mount point to do different operations,
+could caused unsynchronized inodes in different mount points for the
+same one file, then trigger this problem.
+Here change is when esdfs_setattr is calling truncate_setsize, will
+also search the inodes existing in other mount points and truncate
+them to keep synchronized inodes.
+
+Change-Id: I4cdbf57120b8e4de87b2b483e24b0139166b1a3d
+Signed-off-by: Shengzhe Zhao <a18689@motorola.com>
+Reviewed-on: http://gerrit.mot.com/840377
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jiang-Li Yuan <jlyuan@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/esdfs/esdfs.h |  1 +
+ fs/esdfs/inode.c |  1 +
+ fs/esdfs/super.c | 25 +++++++++++++++++++++++++
+ 3 files changed, 27 insertions(+)
+
+diff --git a/fs/esdfs/esdfs.h b/fs/esdfs/esdfs.h
+index e879bb5e665..73fe5675ea9 100644
+--- a/fs/esdfs/esdfs.h
++++ b/fs/esdfs/esdfs.h
+@@ -173,6 +173,7 @@ extern unsigned esdfs_package_list_version;
+ void esdfs_drop_shared_icache(struct super_block *, struct inode *);
+ void esdfs_drop_sb_icache(struct super_block *, unsigned long);
+ void esdfs_add_super(struct esdfs_sb_info *, struct super_block *);
++void esdfs_truncate_share(struct super_block *, struct inode *, loff_t newsize);
+ 
+ #define ESDFS_INODE_IS_STALE(i) ((i)->version != esdfs_package_list_version)
+ #define ESDFS_INODE_CAN_LINK(i) (test_opt(ESDFS_SB((i)->i_sb), \
+diff --git a/fs/esdfs/inode.c b/fs/esdfs/inode.c
+index 3b962b1e522..6bc03565876 100644
+--- a/fs/esdfs/inode.c
++++ b/fs/esdfs/inode.c
+@@ -379,6 +379,7 @@ static int esdfs_setattr(struct dentry *dentry, struct iattr *ia)
+ 		if (err)
+ 			goto out;
+ 		truncate_setsize(inode, ia->ia_size);
++		esdfs_truncate_share(inode->i_sb, lower_dentry->d_inode, ia->ia_size);
+ 	}
+ 
+ 	/*
+diff --git a/fs/esdfs/super.c b/fs/esdfs/super.c
+index baf011be495..7ce04708a6f 100644
+--- a/fs/esdfs/super.c
++++ b/fs/esdfs/super.c
+@@ -49,6 +49,31 @@ static void esdfs_remove_super(struct esdfs_sb_info *sbi)
+ 	spin_unlock(&esdfs_list_lock);
+ }
+ 
++void esdfs_truncate_share(struct super_block *sb, struct inode *lower_inode, loff_t newsize)
++{
++	struct list_head *p;
++	struct esdfs_sb_info *sbi;
++	struct super_block *lower_sb = lower_inode->i_sb;
++	struct inode *inode;
++
++	spin_lock(&esdfs_list_lock);
++	p = esdfs_list.next;
++	while (p != &esdfs_list) {
++		sbi = list_entry(p, struct esdfs_sb_info, s_list);
++		if (sbi->s_sb == sb || sbi->lower_sb != lower_sb) {
++			p = p->next;
++			continue;
++		}
++		spin_unlock(&esdfs_list_lock);
++		inode = ilookup(sbi->s_sb, lower_inode->i_ino);
++		if (inode)
++			truncate_setsize(inode, newsize);
++		spin_lock(&esdfs_list_lock);
++		p = p->next;
++	}
++	spin_unlock(&esdfs_list_lock);
++}
++
+ void esdfs_drop_shared_icache(struct super_block *sb, struct inode *lower_inode)
+ {
+ 	struct list_head *p;
+-- 
+2.11.0
+

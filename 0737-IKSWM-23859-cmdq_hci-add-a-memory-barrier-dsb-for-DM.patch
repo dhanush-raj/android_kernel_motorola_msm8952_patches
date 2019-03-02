@@ -1,0 +1,69 @@
+From 084a2c5e499a8febe37eed28e82e23e00d2be2a6 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Fri, 4 Mar 2016 19:13:22 -0800
+Subject: [PATCH 737/959] IKSWM-23859: cmdq_hci: add a memory barrier(dsb) for
+ DMCD
+
+  The root cause of CMDQ issue:
+   The cmdq DCMD task_desc was mapped as DMA memory(share-device),
+   which will skip cpu L1/L2 cache. But the data may be still in
+   CPU write_buffer. So DMA fetches wrong data in DMA memory area.
+
+  Solution:
+    Add a special memory barrier(DSB) to drain write buffer to
+    make sure that task_desc data is coherent in the DMA memory area.
+    In addtion, we also  disable the local irq to make sure the
+    "store memory/dsb" operations will not be preempted and migratged
+    to another CPU.
+
+Change-Id: Iab64f4e3d224af78d95c892f1c1bddfa8ec71a45
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/829474
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/mmc/host/cmdq_hci.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/mmc/host/cmdq_hci.c b/drivers/mmc/host/cmdq_hci.c
+index fbb0117f96a..f722a7f92c6 100644
+--- a/drivers/mmc/host/cmdq_hci.c
++++ b/drivers/mmc/host/cmdq_hci.c
+@@ -562,6 +562,7 @@ static void cmdq_prep_dcmd_desc(struct mmc_host *mmc,
+ 	__le64 *dataddr;
+ 	struct cmdq_host *cq_host = mmc_cmdq_private(mmc);
+ 	u8 timing;
++	unsigned long flags;
+ 
+ 	if (!(mrq->cmd->flags & MMC_RSP_PRESENT)) {
+ 		resp_type = 0x0;
+@@ -576,6 +577,7 @@ static void cmdq_prep_dcmd_desc(struct mmc_host *mmc,
+ 		}
+ 	}
+ 
++	local_irq_save(flags);
+ 	task_desc = (__le64 __force *)get_desc(cq_host, cq_host->dcmd_slot);
+ 	memset(task_desc, 0, cq_host->task_desc_len);
+ 	data |= (VALID(1) |
+@@ -587,11 +589,13 @@ static void cmdq_prep_dcmd_desc(struct mmc_host *mmc,
+ 		 CMD_TIMING(timing) | RESP_TYPE(resp_type));
+ 	*task_desc |= data;
+ 	desc = (u8 *)task_desc;
+-	pr_debug("cmdq: dcmd: cmd: %d timing: %d resp: %d\n",
+-		mrq->cmd->opcode, timing, resp_type);
+ 	dataddr = (__le64 __force *)(desc + 4);
+ 	dataddr[0] = cpu_to_le64((u64)mrq->cmd->arg);
++	mb();
++	local_irq_restore(flags);
+ 
++	pr_debug("cmdq: dcmd: cmd: %d timing: %d resp: %d\n",
++		mrq->cmd->opcode, timing, resp_type);
+ }
+ 
+ static int cmdq_request(struct mmc_host *mmc, struct mmc_request *mrq)
+-- 
+2.11.0
+

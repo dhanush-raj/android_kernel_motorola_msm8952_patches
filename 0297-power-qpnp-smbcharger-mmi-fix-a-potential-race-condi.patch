@@ -1,0 +1,50 @@
+From 676ada5716043b53171b6031e898417fa506c2e5 Mon Sep 17 00:00:00 2001
+From: Subbaraman Narayanamurthy <subbaram@codeaurora.org>
+Date: Fri, 12 Jun 2015 16:25:15 -0700
+Subject: [PATCH 297/959] power: qpnp-smbcharger-mmi: fix a potential race
+ condition in accessing dc_psy
+
+Commit abc711031653f5af30de63fdf41e878d9b4a09c1 (power:
+qpnp-smbcharger-mmi: Fix uninitialized access to dc_psy) tried
+fixing an uninitialized access to dc_psy. However, there is
+a race condition where dc_psy_type can get set just after
+reading from device tree node but the dc_psy itself was not
+registered at all.
+
+This ends up in a system crash when the driver tries to call
+power_supply_changed of dc_psy when it's not even registered.
+Fix this by checking whether the dc_psy is registered before
+calling power_supply_changed.
+
+CRs-Fixed: 852821
+Change-Id: Ic5f032107e0f5f1190b335e9d5de3e5497fd1e3c
+Signed-off-by: Subbaraman Narayanamurthy <subbaram@codeaurora.org>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 3ea8ce6e1c3..92f4f1edbbd 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -1515,7 +1515,7 @@ static int smbchg_dc_en(struct smbchg_chip *chip, bool enable,
+ 		goto out;
+ 	}
+ 
+-	if (chip->dc_psy_type != -EINVAL)
++	if (chip->dc_psy_type != -EINVAL && chip->psy_registered)
+ 		power_supply_changed(&chip->dc_psy);
+ 	pr_smb(PR_STATUS, "dc charging %s, suspended = %02x\n",
+ 			suspended == 0 ? "enabled"
+@@ -4489,7 +4489,7 @@ static irqreturn_t dcin_uv_handler(int irq, void *_chip)
+ 	if (chip->dc_present != dc_present) {
+ 		/* dc changed */
+ 		chip->dc_present = dc_present;
+-		if (chip->psy_registered)
++		if (chip->dc_psy_type != -EINVAL && chip->psy_registered)
+ 			power_supply_changed(&chip->dc_psy);
+ 		smbchg_charging_status_change(chip);
+ 		smbchg_aicl_deglitch_wa_check(chip);
+-- 
+2.11.0
+

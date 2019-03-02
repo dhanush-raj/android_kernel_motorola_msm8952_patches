@@ -1,0 +1,79 @@
+From a3d53e284c30f8cb230edf15370198186344caf6 Mon Sep 17 00:00:00 2001
+From: Ray Essick <are002@motorola.com>
+Date: Thu, 5 Feb 2015 12:19:00 -0600
+Subject: [PATCH 755/959] IKSWM-24183: exec: reserve full virtual stack space
+ at execve()
+
+grows the main process stack at execve() time so that it can reach it's
+maximum allowed size. No RAM is allocated until the stack actually uses this
+space.
+
+This prevents problems observed around address space randomization where
+large heaps grew into and collided with the main process' stack. This
+prevented the main stack from growing later.  Early workarounds had the
+particular application allocating its stack to be large before going off
+to execute the work that grew the heap; that saved the stack's virtual
+space but also allocated RAM ahead of the stack needing it.
+
+Signed-off-by: Ray Essick <are002@motorola.com>
+Change-Id: I48d6c548b92f2bbccf4b67b64b0fe131354b6cd4
+Reviewed-on: http://gerrit.mot.com/712443
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830270
+SME-Granted: SME Approvals Granted
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ fs/exec.c | 18 ++++++++++--------
+ 1 file changed, 10 insertions(+), 8 deletions(-)
+
+diff --git a/fs/exec.c b/fs/exec.c
+index a9f4bf1faaf..35b735d99f2 100644
+--- a/fs/exec.c
++++ b/fs/exec.c
+@@ -55,6 +55,7 @@
+ #include <linux/pipe_fs_i.h>
+ #include <linux/oom.h>
+ #include <linux/compat.h>
++#include <linux/resource.h>
+ 
+ #include <asm/uaccess.h>
+ #include <asm/mmu_context.h>
+@@ -717,23 +718,24 @@ int setup_arg_pages(struct linux_binprm *bprm,
+ 	/* mprotect_fixup is overkill to remove the temporary stack flags */
+ 	vma->vm_flags &= ~VM_STACK_INCOMPLETE_SETUP;
+ 
++#ifdef _STK_LIM
++	/* save all the virtual space we're allowed */
++	stack_expand = ((_STK_LIM) & (PAGE_MASK));
++#else
+ 	stack_expand = 131072UL; /* randomly 32*4k (or 2*64k) pages */
++#endif
+ 	stack_size = vma->vm_end - vma->vm_start;
+ 	/*
+ 	 * Align this down to a page boundary as expand_stack
+ 	 * will align it up.
+ 	 */
+ 	rlim_stack = rlimit(RLIMIT_STACK) & PAGE_MASK;
+-#ifdef CONFIG_STACK_GROWSUP
+ 	if (stack_size + stack_expand > rlim_stack)
+-		stack_base = vma->vm_start + rlim_stack;
+-	else
+-		stack_base = vma->vm_end + stack_expand;
++		stack_expand = rlim_stack - stack_size;
++#ifdef CONFIG_STACK_GROWSUP
++	stack_base = vma->vm_end + stack_expand;
+ #else
+-	if (stack_size + stack_expand > rlim_stack)
+-		stack_base = vma->vm_end - rlim_stack;
+-	else
+-		stack_base = vma->vm_start - stack_expand;
++	stack_base = vma->vm_start - stack_expand;
+ #endif
+ 	current->mm->start_stack = bprm->p;
+ 	ret = expand_stack(vma, stack_base);
+-- 
+2.11.0
+

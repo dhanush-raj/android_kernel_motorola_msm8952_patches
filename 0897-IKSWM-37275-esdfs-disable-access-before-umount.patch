@@ -1,0 +1,91 @@
+From c9f5a37bcc6656e22fdadaf877d410f5438602b2 Mon Sep 17 00:00:00 2001
+From: Shengzhe Zhao <a18689@motorola.com>
+Date: Mon, 16 May 2016 17:32:21 -0700
+Subject: [PATCH 897/959] IKSWM-37275 esdfs: disable access before umount
+
+some processes in Android system could be restarted and open the
+file under esdfs immediately after killing them. so before umount
+esdfs, need to disable the access from upper processes then kill
+the processes using esdfs, then umount esdfs so that umounting
+can always get success.
+
+Change-Id: I0bad3b6d9474af2ef0a2da4836e848167c581e57
+Signed-off-by: Shengzhe Zhao <a18689@motorola.com>
+Reviewed-on: http://gerrit.mot.com/857145
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jiang-Li Yuan <jlyuan@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/863308
+---
+ fs/esdfs/esdfs.h |  5 +++++
+ fs/esdfs/file.c  | 16 ++++++++++++++++
+ 2 files changed, 21 insertions(+)
+
+diff --git a/fs/esdfs/esdfs.h b/fs/esdfs/esdfs.h
+index 73fe5675ea9..d5fe0d51d09 100644
+--- a/fs/esdfs/esdfs.h
++++ b/fs/esdfs/esdfs.h
+@@ -32,6 +32,10 @@
+ /* the file system name */
+ #define ESDFS_NAME "esdfs"
+ 
++/* ioctl command */
++#define ESDFS_IOCTL_MAGIC	'e'
++#define ESDFS_IOC_DIS_ACCESS	_IO(ESDFS_IOCTL_MAGIC, 1)
++
+ /* esdfs root inode number */
+ #define ESDFS_ROOT_INO     1
+ 
+@@ -44,6 +48,7 @@
+ #define ESDFS_MOUNT_DERIVE_MULTI	0x00000004
+ #define ESDFS_MOUNT_DERIVE_PUBLIC	0x00000008
+ #define ESDFS_MOUNT_DERIVE_CONFINE	0x00000010
++#define ESDFS_MOUNT_ACCESS_DISABLE	0x00000020
+ 
+ #define clear_opt(sbi, option)	(sbi->options &= ~ESDFS_MOUNT_##option)
+ #define set_opt(sbi, option)	(sbi->options |= ESDFS_MOUNT_##option)
+diff --git a/fs/esdfs/file.c b/fs/esdfs/file.c
+index a81f19c315a..08b140c2cfc 100644
+--- a/fs/esdfs/file.c
++++ b/fs/esdfs/file.c
+@@ -89,6 +89,16 @@ static long esdfs_unlocked_ioctl(struct file *file, unsigned int cmd,
+ 	if (!creds)
+ 		return -ENOMEM;
+ 
++	if (cmd == ESDFS_IOC_DIS_ACCESS) {
++		if (!capable(CAP_SYS_ADMIN)) {
++			err = -EPERM;
++			goto out;
++		}
++		set_opt(sbi, ACCESS_DISABLE);
++		err = 0;
++		goto out;
++	}
++
+ 	lower_file = esdfs_lower_file(file);
+ 
+ 	/* XXX: use vfs_ioctl if/when VFS exports it */
+@@ -202,11 +212,17 @@ static int esdfs_open(struct inode *inode, struct file *file)
+ 	int err = 0;
+ 	struct file *lower_file = NULL;
+ 	struct path lower_path;
++	struct esdfs_sb_info *sbi = ESDFS_SB(inode->i_sb);
+ 	const struct cred *creds =
+ 			esdfs_override_creds(ESDFS_SB(inode->i_sb), NULL);
+ 	if (!creds)
+ 		return -ENOMEM;
+ 
++	if (test_opt(sbi, ACCESS_DISABLE)) {
++		esdfs_revert_creds(creds, NULL);
++		return -ENOENT;
++	}
++
+ 	/* don't open unhashed/deleted files */
+ 	if (d_unhashed(file->f_path.dentry)) {
+ 		err = -ENOENT;
+-- 
+2.11.0
+

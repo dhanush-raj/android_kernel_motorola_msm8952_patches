@@ -1,0 +1,37 @@
+From f3b34d3816aeffe4fd5286190049ea2e69a0c540 Mon Sep 17 00:00:00 2001
+From: Jason Hrycay <jason.hrycay@motorola.com>
+Date: Sun, 4 Nov 2012 18:43:33 -0600
+Subject: [PATCH 006/959] IKQCOMSD1-1733 make: compile DTSs during kernel
+ compile
+
+Build the dtbs target during normal kernel compilation to generate
+all of the .dtb.  These can then be used to generate a combined
+device tree binary and appended to the boot images.
+
+Change-Id: I41dc253e0743c61330d6cc47428728182e06c2a3
+Signed-off-by: Jason Hrycay <jason.hrycay@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/494008
+Tested-by: Jira Key <JIRAKEY@motorola.com>
+Reviewed-by: Jason Hrycay <e50276@motorola.com>
+(cherry picked from commit 1a086b9f345f63a066c9b62254f4893c3014537d)
+(cherry picked from commit 73120ad6be45c6ff2518b27c9e007ac927f7f25a)
+(cherry picked from commit a2dbad5b933e82102aaaa86210f1c4a79c997bfb)
+---
+ AndroidKernel.mk | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/AndroidKernel.mk b/AndroidKernel.mk
+index 398791cc215..b4bb7b49816 100644
+--- a/AndroidKernel.mk
++++ b/AndroidKernel.mk
+@@ -113,6 +113,7 @@ $(TARGET_PREBUILT_INT_KERNEL): $(KERNEL_OUT) $(KERNEL_CONFIG) $(KERNEL_HEADERS_I
+ 	$(hide) echo "Building kernel..."
+ 	$(hide) rm -rf $(KERNEL_OUT)/arch/$(KERNEL_ARCH)/boot/dts
+ 	$(MAKE) -C kernel O=../$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_CFLAGS)
++	$(MAKE) -C kernel O=../$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_CFLAGS) dtbs
+ 	$(MAKE) -C kernel O=../$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_CFLAGS) modules
+ 	$(MAKE) -C kernel O=../$(KERNEL_OUT) INSTALL_MOD_PATH=../../$(KERNEL_MODULES_INSTALL) INSTALL_MOD_STRIP=1 ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) modules_install
+ 	$(mv-modules)
+-- 
+2.11.0
+

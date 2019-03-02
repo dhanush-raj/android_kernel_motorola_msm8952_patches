@@ -1,0 +1,89 @@
+From 52c4757743c8207a12de40c91a171a5d06a41df5 Mon Sep 17 00:00:00 2001
+From: Alexander Filonenko <alexf@motorola.com>
+Date: Mon, 31 Aug 2015 17:23:54 -0500
+Subject: [PATCH 378/959] IKSWM-7604 input: synaptics_dsx_i2c: add F12 ctrl 10
+
+Add F12 control register 10 to enable patching via device tree.
+
+Change-Id: Ice6b768e320e62b36e487ed93b1a1415b628df8f
+Signed-off-by: Alexander Filonenko <alexf@motorola.com>
+---
+ drivers/input/touchscreen/synaptics_dsx_i2c.c | 25 ++++++++++++++++++++-----
+ 1 file changed, 20 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.c b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+index e6d0f68d29a..654999e96ed 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.c
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+@@ -163,6 +163,13 @@ static struct {
+ } f12_c15_0;
+ 
+ static struct {
++	unsigned char noise_floor;
++	unsigned char min_peak_amplitude;
++	unsigned char peak_merge_threshold_lsb;
++	unsigned char peak_merge_threshold_msb;
++} f12_c10_0;
++
++static struct {
+ 	unsigned char data[128];
+ } dummy_subpkt;
+ 
+@@ -192,7 +199,7 @@ static struct synaptics_rmi4_subpkt f12_c09[] = {
+ };
+ 
+ static struct synaptics_rmi4_subpkt f12_c10[] = {
+-	RMI4_SUBPKT(dummy_subpkt),
++	RMI4_SUBPKT(f12_c10_0),
+ };
+ 
+ static struct synaptics_rmi4_subpkt f12_c11[] = {
+@@ -925,6 +932,7 @@ static struct synaptics_rmi4_packet_reg *find_packet_reg(
+ {
+ 	struct synaptics_rmi4_packet_reg *reg = NULL;
+ 	int r;
++
+ 	for (r = 0; r < regs->nr_regs; r++)
+ 		if (number == regs->regs[r].r_number) {
+ 			reg = &regs->regs[r];
+@@ -5181,7 +5189,7 @@ static int synaptics_rmi4_query_device(struct synaptics_rmi4_data *rmi4_data)
+ 						"%s: No handler for F%x\n",
+ 						__func__, rmi_fd.fn_number);
+ 				}
+-					break;
++				break;
+ 
+ 			case SYNAPTICS_RMI4_F34:
+ 				retval = synaptics_rmi4_i2c_read(rmi4_data,
+@@ -5247,8 +5255,12 @@ static int synaptics_rmi4_query_device(struct synaptics_rmi4_data *rmi4_data)
+ 
+ 				retval = synaptics_rmi4_f11_init(rmi4_data,
+ 						fhandler, &rmi_fd, intr_count);
+-				if (retval < 0)
++				if (retval < 0) {
++					dev_err(&rmi4_data->i2c_client->dev,
++						"%s: Failed to init F11\n",
++						__func__);
+ 					return retval;
++				}
+ 				break;
+ 
+ 			case SYNAPTICS_RMI4_F12:
+@@ -5266,9 +5278,12 @@ static int synaptics_rmi4_query_device(struct synaptics_rmi4_data *rmi4_data)
+ 
+ 				retval = synaptics_rmi4_f12_init(rmi4_data,
+ 						fhandler, &rmi_fd, intr_count);
+-				if (retval < 0)
++				if (retval < 0) {
++					dev_err(&rmi4_data->i2c_client->dev,
++						"%s: Failed to init F12\n",
++						__func__);
+ 					return retval;
+-
++				}
+ 				break;
+ 
+ 			case SYNAPTICS_RMI4_F1A:
+-- 
+2.11.0
+

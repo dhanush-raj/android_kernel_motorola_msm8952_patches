@@ -1,0 +1,60 @@
+From ec3021abbe85a940f5312654508e2a4bab68921d Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Thu, 24 Sep 2015 18:19:42 -0700
+Subject: [PATCH 188/959] IKSWM-4458 power:reset: Store restart reason to pmic
+ reg
+
+In case of system doing a cold reset, the power up reason saving
+in shared memory will be lost. Consequently, the power up reason on
+next boot up time will be normal boot instead of correct ones. To
+resolve this issue, we can use the two spared pmic registers which
+are power lost safe to save the restart reason for these cases.
+
+Cases handled:
+1. restore AP PANIC bit in case PMIC init
+2. record IMEM flag in case PMIC has not init(early panic case)
+
+Merged commit:
+91fbe6a2e4c45c9b71e25255622b3f1b0094a556
+efdbd073bb6562722f6c23503806acd421786be8
+27522d98c49de2c34e65c0b1f5e49bce47842d85
+
+Change-Id: I4f0f784bcc6d61283cb1fa8a4b59db006dca3a66
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ drivers/power/reset/msm-poweroff.c | 5 +++++
+ include/linux/qpnp/power-on.h      | 2 ++
+ 2 files changed, 7 insertions(+)
+
+diff --git a/drivers/power/reset/msm-poweroff.c b/drivers/power/reset/msm-poweroff.c
+index e61a8f73945..cbc979e1944 100644
+--- a/drivers/power/reset/msm-poweroff.c
++++ b/drivers/power/reset/msm-poweroff.c
+@@ -283,6 +283,11 @@ static void msm_restart_prepare(const char *cmd)
+ 		} else {
+ 			__raw_writel(0x77665501, restart_reason);
+ 		}
++	} else if (in_panic == 1) {
++		__raw_writel(0x77665505, restart_reason);
++		qpnp_pon_store_extra_reset_info(RESET_EXTRA_PANIC_REASON, 0xFF);
++	} else {
++		__raw_writel(0x77665501, restart_reason);
+ 	}
+ 
+ 	flush_cache_all();
+diff --git a/include/linux/qpnp/power-on.h b/include/linux/qpnp/power-on.h
+index af1371d48e9..11a088d9228 100644
+--- a/include/linux/qpnp/power-on.h
++++ b/include/linux/qpnp/power-on.h
+@@ -54,6 +54,8 @@ enum pon_restart_reason {
+ 	PON_RESTART_REASON_RTC		= 0x03,
+ };
+ 
++#define RESET_EXTRA_PANIC_REASON	BIT(3)
++
+ #ifdef CONFIG_QPNP_POWER_ON
+ int qpnp_pon_system_pwr_off(enum pon_power_off_type type);
+ int qpnp_pon_is_warm_reset(void);
+-- 
+2.11.0
+

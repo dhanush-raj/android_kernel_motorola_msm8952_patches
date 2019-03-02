@@ -1,0 +1,46 @@
+From 277fd8032ab6b92033d90c7e1e603323ca5fcdcd Mon Sep 17 00:00:00 2001
+From: Andrew Lenart <w16741@motorola.com>
+Date: Wed, 3 Feb 2016 11:45:23 -0600
+Subject: [PATCH 671/959] IKMMINTG-7927: dts: 8952: Enable MPP_4 as flash
+ strobe input
+
+On the pmi8952, we need to enable the multi purpose pin 4
+in order to have the pmic get the flash led strobe signal from the
+camera sensor's strobe output.
+
+Change-Id: Id003b0cc8497c5540006a335faa82c54b824bb42
+Signed-off-by: Andrew Lenart <w16741@motorola.com>
+Reviewed-on: http://gerrit.mot.com/818517
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Reviewed-by: Satya Prasad Kottisa <fvgm76@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index a92fffbb3c5..9f5a7873258 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -981,6 +981,15 @@
+ 		qcom,master-en = <1>;
+ 		qcom,src-sel = <0>; /* Function constant */
+ 	};
++	mpp@a300 {
++		/* FLASH_STROBE MPP_4 */
++		status = "ok";
++		qcom,mode = <0>; /* Digital input */
++		qcom,invert = <0>; /* Disable Invert */
++		qcom,vin-sel = <1>; /* 1.8V */
++		qcom,master-en = <1>;
++		qcom,pin-num = <4>;
++	};
+ };
+ 
+ &pmi8950_vadc {
+-- 
+2.11.0
+

@@ -1,0 +1,36 @@
+From 420bc6b2e79ce6b61619e6eb2c054a9154ba6308 Mon Sep 17 00:00:00 2001
+From: caoyi1 <caoyi1@lenovo.com>
+Date: Wed, 2 Mar 2016 20:52:49 +0800
+Subject: [PATCH 732/959] IKSWM-23266:input misc epl8802,modify auto
+ calibration parameter
+
+Change-Id: I5f03f6ffe2d800d4082ab78823d5abb43b7eff16
+Signed-off-by: caoyi1 <caoyi1@lenovo.com>
+Reviewed-on: http://gerrit.mot.com/828256
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jing-Nan Zhu <jingnanzhu@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/epl8802.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/input/misc/epl8802.c b/drivers/input/misc/epl8802.c
+index 612eaba08cb..ffeefee8bf2 100644
+--- a/drivers/input/misc/epl8802.c
++++ b/drivers/input/misc/epl8802.c
+@@ -239,7 +239,7 @@ int epl_sensor_als_dyn_report(bool report_flag);
+  ******************************************************************************/
+ #if PS_DYN_K_ONE
+ static bool ps_dyn_flag = false;
+-#define PS_MAX_CT	10000
++#define PS_MAX_CT	7600
+ #define PS_MAX_IR	50000
+ #define PS_DYN_H_OFFSET 6943
+ #define PS_DYN_L_OFFSET 2024
+-- 
+2.11.0
+

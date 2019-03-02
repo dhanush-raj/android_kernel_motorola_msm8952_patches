@@ -1,0 +1,127 @@
+From a3c5a5b6b8dbc66e58407d5a8caec755925be327 Mon Sep 17 00:00:00 2001
+From: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Date: Tue, 16 Dec 2014 13:40:26 -0600
+Subject: [PATCH 108/959] IKVPREL1L-5084 stml0xx: Prevent version check from
+ being blocked
+
+Some IOCTLs can be handled immediately without waiting for a mutex lock.
+This change is needed to prevent version checks to return immediately
+with an error code while firmware is being flashed in the factory.
+
+Signed-off-by: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Change-Id: I51b55d53ac790f0d210a2837a620375c37a26cc7
+Reviewed-on: http://gerrit.mot.com/698442
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-by: Philip Lee <pglee@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_ioctl.c | 65 +++++++++++++++++++++++++-----------
+ 1 file changed, 45 insertions(+), 20 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_ioctl.c b/drivers/misc/stml0xx/stml0xx_ioctl.c
+index 5cca3a6a453..bbbcc0a3721 100644
+--- a/drivers/misc/stml0xx/stml0xx_ioctl.c
++++ b/drivers/misc/stml0xx/stml0xx_ioctl.c
+@@ -59,14 +59,52 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 	unsigned long current_posix_time;
+ 	unsigned int handle;
+ 	struct timespec current_time;
++	bool cmd_handled;
+ 
+ 	if (!stml0xx_misc_data)
+ 		stml0xx_misc_data = file->private_data;
+ 
+-	wake_lock(&ps_stml0xx->wakelock);
++	/* Commands to respond immediately without waiting for the mutex lock */
++	cmd_handled = true;
++	switch (cmd) {
++	case STML0XX_IOCTL_GET_BOOTED:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_GET_BOOTED");
++		buf[0] = stml0xx_g_booted;
++		if (copy_to_user(argp, buf, 1))
++			err = -EFAULT;
++		else
++			err = 0;
++		break;
++	case STML0XX_IOCTL_GET_VERNAME:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_GET_VERNAME");
++		if (copy_to_user(argp, &(ps_stml0xx->pdata->fw_version),
++				 FW_VERSION_SIZE))
++			err = -EFAULT;
++		else
++			err = 0;
++		break;
++	case STML0XX_IOCTL_GET_VERSION:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_GET_VERSION");
++		if (!stml0xx_g_booted)
++			err = -EBUSY;
++		else
++			cmd_handled = false;
++		break;
++	default:
++		/* Continue to the next switch statement */
++		cmd_handled = false;
++		break;
++	}
+ 
+-	mutex_lock(&ps_stml0xx->lock);
++	if (cmd_handled)
++		goto EXIT;
+ 
++	/* Wait for mutex lock */
++	wake_lock(&ps_stml0xx->wakelock);
++	mutex_lock(&ps_stml0xx->lock);
+ 	stml0xx_wake(ps_stml0xx);
+ 
+ 	/* Commands accepted in any mode */
+@@ -113,24 +151,6 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 			"STML0XX_IOCTL_SET_DEBUG");
+ 		err = 0;
+ 		break;
+-	case STML0XX_IOCTL_GET_VERNAME:
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"STML0XX_IOCTL_GET_VERNAME");
+-		if (copy_to_user(argp, &(ps_stml0xx->pdata->fw_version),
+-				 FW_VERSION_SIZE))
+-			err = -EFAULT;
+-		else
+-			err = 0;
+-		break;
+-	case STML0XX_IOCTL_GET_BOOTED:
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"STML0XX_IOCTL_GET_BOOTED");
+-		buf[0] = stml0xx_g_booted;
+-		if (copy_to_user(argp, buf, 1))
+-			err = -EFAULT;
+-		else
+-			err = 0;
+-		break;
+ 	case STML0XX_IOCTL_GET_VERSION:
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"STML0XX_IOCTL_GET_VERSION");
+@@ -670,10 +690,15 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 				(char *)&handle, 4, 0,
+ 				ts_to_ns(current_time));
+ 		break;
++	default:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Invalid IOCTL [%d]", cmd);
++		break;
+ 	}
+ 
+ 	stml0xx_sleep(ps_stml0xx);
+ 	mutex_unlock(&ps_stml0xx->lock);
+ 	wake_unlock(&ps_stml0xx->wakelock);
++EXIT:
+ 	return err;
+ }
+-- 
+2.11.0
+

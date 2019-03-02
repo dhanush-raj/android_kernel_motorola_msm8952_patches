@@ -1,0 +1,41 @@
+From 796dbd2d539642054d50398bec929479264941c1 Mon Sep 17 00:00:00 2001
+From: Yuanyuan Zhong <zyy@motorola.com>
+Date: Thu, 11 Dec 2014 18:03:34 -0600
+Subject: [PATCH 788/959] IKVPREL1L-11712: mm: vmscan: do not count anon pages
+ as reclaimable if swap is small
+
+When swap size is smaller than ram size, not all anon pages can be
+written to swap space. So do not count anon pages as reclaimable.
+This will increase the slab scan rate under memory pressure.
+
+Change-Id: Ic4fe3c5f3e98e56fad1248f555f916cd75189324
+Signed-off-by: Yuanyuan Zhong <zyy@motorola.com>
+(cherry picked from commit bc0d09af782178758f17ca23bae8017cbf7dd933)
+Reviewed-on: http://gerrit.mot.com/697880
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/832096
+SME-Granted: SME Approvals Granted
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ mm/vmscan.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mm/vmscan.c b/mm/vmscan.c
+index e02e3bfe378..2330fafc94a 100644
+--- a/mm/vmscan.c
++++ b/mm/vmscan.c
+@@ -168,7 +168,7 @@ static unsigned long zone_reclaimable_pages(struct zone *zone)
+ 	nr = zone_page_state(zone, NR_ACTIVE_FILE) +
+ 	     zone_page_state(zone, NR_INACTIVE_FILE);
+ 
+-	if (get_nr_swap_pages() > 0)
++	if (get_nr_swap_pages() > 0 && total_swap_pages >= totalram_pages)
+ 		nr += zone_page_state(zone, NR_ACTIVE_ANON) +
+ 		      zone_page_state(zone, NR_INACTIVE_ANON);
+ 
+-- 
+2.11.0
+

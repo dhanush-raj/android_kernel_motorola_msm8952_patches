@@ -1,0 +1,138 @@
+From 9e058dbf7ee4d2dd7bc752be744db5204d14b58e Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Thu, 8 Jan 2015 14:56:50 -0600
+Subject: [PATCH 112/959] IKXLUPGRD-10395:drivers:misc:stml0xx: Allow SPI
+ driver to map DMA
+
+Our DMA mapping is not working on 64bit.  Making this change
+to let the QC SPI driver do the DMA mapping.
+
+Change-Id: I9aa0e016976d5407f000f1c214f0345e132dceed
+Signed-off-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/702323
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Philip Lee <pglee@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c | 43 ++++++-------------------------------
+ drivers/misc/stml0xx/stml0xx_spi.c  |  6 ------
+ include/linux/stml0xx.h             |  4 ----
+ 3 files changed, 7 insertions(+), 46 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 88bb868b081..8c7f6cc38d6 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -18,7 +18,6 @@
+ 
+ #include <linux/cdev.h>
+ #include <linux/delay.h>
+-#include <linux/dma-mapping.h>
+ #include <linux/err.h>
+ #include <linux/errno.h>
+ #include <linux/export.h>
+@@ -722,37 +721,14 @@ static int stml0xx_probe(struct spi_device *spi)
+ 		err = -ENODEV;
+ 		goto err_pdata;
+ 	}
+-	/* Allocate DMA buffers */
+-	ps_stml0xx->spi_dma_enabled = SPI_DMA_ENABLED;
+-	if (ps_stml0xx->spi_dma_enabled) {
+-		spi->dev.coherent_dma_mask = ~0;
+-		/* Minimum coherent DMA allocation is PAGE_SIZE, so allocate
+-		   that much and share it between Tx and Rx DMA buffers. */
+-		ps_stml0xx->spi_tx_buf =
+-		    dma_alloc_coherent(&spi->dev, PAGE_SIZE,
+-				       &ps_stml0xx->spi_tx_dma, GFP_DMA);
+-
+-		if (ps_stml0xx->spi_tx_buf) {
+-			ps_stml0xx->spi_rx_buf = (ps_stml0xx->spi_tx_buf
+-						  + (PAGE_SIZE / 2));
+-			ps_stml0xx->spi_rx_dma =
+-			    (dma_addr_t) (ps_stml0xx->spi_tx_dma +
+-					  (PAGE_SIZE / 2));
+-		} else {
+-			/* Fall back to non-DMA */
+-			ps_stml0xx->spi_dma_enabled = false;
+-		}
+-	}
+ 
+-	if (!ps_stml0xx->spi_dma_enabled) {
+-		/* Allocate non-DMA buffers */
+-		ps_stml0xx->spi_tx_buf =
+-			devm_kzalloc(&spi->dev, SPI_BUFF_SIZE, GFP_KERNEL);
+-		ps_stml0xx->spi_rx_buf =
+-			devm_kzalloc(&spi->dev, SPI_BUFF_SIZE, GFP_KERNEL);
+-		if (!ps_stml0xx->spi_tx_buf || !ps_stml0xx->spi_rx_buf)
+-			goto err_nomem;
+-	}
++	/* Allocate SPI buffers */
++	ps_stml0xx->spi_tx_buf =
++		devm_kzalloc(&spi->dev, SPI_BUFF_SIZE, GFP_KERNEL);
++	ps_stml0xx->spi_rx_buf =
++		devm_kzalloc(&spi->dev, SPI_BUFF_SIZE, GFP_KERNEL);
++	if (!ps_stml0xx->spi_tx_buf || !ps_stml0xx->spi_rx_buf)
++		goto err_nomem;
+ 
+ 	/* global buffers used exclusively in bootloader mode */
+ 	stml0xx_boot_cmdbuff = ps_stml0xx->spi_tx_buf;
+@@ -1014,11 +990,6 @@ err_gpio_init:
+ 	regulator_put(ps_stml0xx->regulator_1);
+ err_regulator:
+ err_nomem:
+-	if (ps_stml0xx->spi_dma_enabled) {
+-		dma_free_coherent(&spi->dev, PAGE_SIZE,
+-				  ps_stml0xx->spi_tx_buf,
+-				  ps_stml0xx->spi_tx_dma);
+-	}
+ err_pdata:
+ err_other:
+ 	return err;
+diff --git a/drivers/misc/stml0xx/stml0xx_spi.c b/drivers/misc/stml0xx/stml0xx_spi.c
+index 2b20da53757..08d47c4f75c 100644
+--- a/drivers/misc/stml0xx/stml0xx_spi.c
++++ b/drivers/misc/stml0xx/stml0xx_spi.c
+@@ -102,12 +102,6 @@ int stml0xx_spi_transfer(unsigned char *tx_buf, unsigned char *rx_buf, int len)
+ 		transfer.speed_hz = SPI_NORMAL_CLK_SPD_HZ;
+ 	}
+ 
+-	if (SPI_DMA_ENABLED) {
+-		transfer.tx_dma = stml0xx_misc_data->spi_tx_dma;
+-		transfer.rx_dma = stml0xx_misc_data->spi_rx_dma;
+-		msg.is_dma_mapped = 1;
+-	}
+-
+ 	spi_message_add_tail(&transfer, &msg);
+ 
+ 	if (stml0xx_misc_data->mode != BOOTMODE && stml0xx_g_booted) {
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 3fdbc7a8f1e..110b2e0ff79 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -32,7 +32,6 @@
+ #define ENABLE_VERBOSE_LOGGING 0
+ 
+ /* SPI */
+-#define SPI_DMA_ENABLED         true
+ #define SPI_FLASH_CLK_SPD_HZ    4000000
+ #define SPI_NORMAL_CLK_SPD_HZ    4000000
+ #define SPI_BUFF_SIZE           1152
+@@ -600,11 +599,8 @@ struct stml0xx_data {
+ 	/* SPI */
+ 	struct spi_device *spi;
+ 	struct mutex spi_lock;
+-	bool spi_dma_enabled;
+ 	unsigned char *spi_tx_buf;
+ 	unsigned char *spi_rx_buf;
+-	dma_addr_t spi_tx_dma;
+-	dma_addr_t spi_rx_dma;
+ 
+ 	atomic_t enabled;
+ 	int irq;
+-- 
+2.11.0
+

@@ -1,0 +1,168 @@
+From b434604e1f1797a9999ff1b1cb96e8f95dc0be90 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Mon, 7 Apr 2014 12:05:08 -0700
+Subject: [PATCH 202/959] IKSWM-4458 kernel: softlockup: initiate watchdog
+ reset when softlockup on IPI call
+
+Original softlockup logs for ipi call hang issue can't provide
+the backtrace on other CPUs. Since msm8960 can provide ramdump
+when watchdog bark, we can leverage it to find out the other
+cpu's backtrace by initiating a watchdog reset when this kind
+of softlockup occurs.
+
+Change-Id: Idc434b35d216bd8bc443a079bb14d6312dc3113f
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ include/linux/smp.h | 14 ++++++++++++++
+ kernel/smp.c        | 23 +++++++++++++++++++++++
+ kernel/watchdog.c   | 18 +++++++++++++++++-
+ lib/Kconfig.debug   | 16 ++++++++++++++++
+ 4 files changed, 70 insertions(+), 1 deletion(-)
+
+diff --git a/include/linux/smp.h b/include/linux/smp.h
+index 868dcf0b2eb..41a7d704a30 100644
+--- a/include/linux/smp.h
++++ b/include/linux/smp.h
+@@ -35,6 +35,7 @@ int smp_call_function_single(int cpuid, smp_call_func_t func, void *info,
+ #include <linux/kernel.h>
+ #include <linux/compiler.h>
+ #include <linux/thread_info.h>
++#include <asm/percpu.h>
+ #include <asm/smp.h>
+ 
+ /*
+@@ -219,6 +220,19 @@ static inline void kick_all_cpus_sync(void) {  }
+ #define get_cpu()		({ preempt_disable(); smp_processor_id(); })
+ #define put_cpu()		preempt_enable()
+ 
++#ifdef CONFIG_LOCKUP_IPI_CALL_WDT
++DECLARE_PER_CPU(int, csd_lock_waiting_flag);
++static inline int is_csd_lock_waiting(void)
++{
++	return __get_cpu_var(csd_lock_waiting_flag);
++}
++#else
++static inline int is_csd_lock_waiting(void)
++{
++	return 0;
++}
++#endif
++
+ /*
+  * Callback to arch code if there's nosmp or maxcpus=0 on the
+  * boot command line:
+diff --git a/kernel/smp.c b/kernel/smp.c
+index 6b772c0efbe..83c6a7b7a00 100644
+--- a/kernel/smp.c
++++ b/kernel/smp.c
+@@ -40,6 +40,27 @@ static cpumask_var_t boot_cpu_mask;
+ static DEFINE_PER_CPU_SHARED_ALIGNED(struct call_single_queue, call_single_queue);
+ 
+ static void flush_smp_call_function_queue(bool warn_cpu_offline);
++#ifdef CONFIG_LOCKUP_IPI_CALL_WDT
++/*
++ * csd_lock_waiting_flag : per cpu flag.
++ * it's only used to indicate whether it's in csd_lock_waiting().
++ * Because when csd_lock_waiting() is invoked, 1) preemption will
++ * always be disabled;  2) not in irq context, it's safe to set or
++ * clear the flag directly.
++ */
++DEFINE_PER_CPU(int, csd_lock_waiting_flag);
++static inline void set_csd_lock_waiting_flag(void)
++{
++	__get_cpu_var(csd_lock_waiting_flag) = 1;
++}
++static inline void clear_csd_lock_waiting_flag(void)
++{
++	__get_cpu_var(csd_lock_waiting_flag) = 0;
++}
++#else
++static inline void set_csd_lock_waiting_flag(void) { }
++static inline void clear_csd_lock_waiting_flag(void) { }
++#endif
+ 
+ static int
+ hotplug_cfd(struct notifier_block *nfb, unsigned long action, void *hcpu)
+@@ -123,8 +144,10 @@ void __init call_function_init(void)
+  */
+ static void csd_lock_wait(struct call_single_data *csd)
+ {
++	set_csd_lock_waiting_flag();
+ 	while (csd->flags & CSD_FLAG_LOCK)
+ 		cpu_relax();
++	clear_csd_lock_waiting_flag();
+ }
+ 
+ static void csd_lock(struct call_single_data *csd)
+diff --git a/kernel/watchdog.c b/kernel/watchdog.c
+index d19d1d7c460..08ea77ca59e 100644
+--- a/kernel/watchdog.c
++++ b/kernel/watchdog.c
+@@ -24,11 +24,14 @@
+ #include <linux/sysctl.h>
+ #include <linux/smpboot.h>
+ #include <linux/sched/rt.h>
++#include <linux/smp.h>
+ 
+ #include <asm/irq_regs.h>
+ #include <linux/kvm_para.h>
+ #include <linux/perf_event.h>
+ 
++#include <soc/qcom/watchdog.h>
++
+ int watchdog_enabled = 1;
+ int __read_mostly watchdog_thresh = 5;
+ static int __read_mostly watchdog_disabled;
+@@ -401,8 +404,21 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
+ 		else
+ 			dump_stack();
+ 
+-		if (softlockup_panic)
++		if (softlockup_panic) {
++
++			if (is_csd_lock_waiting()) {
++				printk(KERN_ERR "softlockup: trigger watchdog reset!\n");
++				/*
++				 * Preemption has been diabled in current
++				 * context. And in case it fails to trigger
++				 * watchdog reset, handle it as normal
++				 * softlockup panic.
++				 */
++				msm_trigger_wdog_bite();
++			}
++
+ 			panic("softlockup: hung tasks");
++		}
+ 		__this_cpu_write(soft_watchdog_warn, true);
+ 	} else
+ 		__this_cpu_write(soft_watchdog_warn, false);
+diff --git a/lib/Kconfig.debug b/lib/Kconfig.debug
+index e4a12a80b2b..04ca2dc38df 100644
+--- a/lib/Kconfig.debug
++++ b/lib/Kconfig.debug
+@@ -1647,6 +1647,22 @@ config SOFTLOCKUP_WATCHDOG_TEST
+ 
+          Say N if you are unsure.
+ 
++config LOCKUP_IPI_CALL_WDT
++       bool "Trigger Watchdog Reset when Softlockup on IPI Call"
++       depends on LOCKUP_DETECTOR
++       help
++         Say Y here to enable the kernel to trigger watchdog reset when it
++         detects softlockup happens during current cpu is waiting for ipi replying
++         from other CPUs.
++
++         Original softlockup logs for ipi call hang issue can't provide
++         the backtrace on other CPUs. Since some machine may provide
++         ramdump when watchdog happens, we can leverage it to find out the
++         the other cpus' backtrace by initiating a watchdog reset
++         when this kind of softlockup occurs.
++
++         Say N if unsure.
++
+ source "samples/Kconfig"
+ 
+ source "lib/Kconfig.kgdb"
+-- 
+2.11.0
+

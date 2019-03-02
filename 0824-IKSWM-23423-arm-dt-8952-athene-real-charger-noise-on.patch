@@ -1,0 +1,55 @@
+From 395d56960204f75e4547ed7250dfff51c41e4245 Mon Sep 17 00:00:00 2001
+From: Konstantin Makariev <kmakariev@motorola.com>
+Date: Wed, 23 Mar 2016 15:52:08 -0500
+Subject: [PATCH 824/959] IKSWM-23423 arm/dt: 8952: athene: real charger noise
+ on BOE
+
+Same name commit submitted earlier, in fact, was contradicting with
+touch config modifiers change and thus never took effect. This
+change uses modifier to achieve better charging noise immunity on BOE
+
+Change-Id: Iae185e2db2bc8d9750a5c37423a1d11b121f2e0e
+Signed-off-by: Konstantin Makariev <kmakariev@motorola.com>
+Reviewed-on: http://gerrit.mot.com/836788
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-athene.dtsi | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene.dtsi b/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+index 4875dae394b..51f491e9c31 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-athene.dtsi
+@@ -91,12 +91,11 @@
+ 			<&msm_gpio 64 0>; /* RESET */
+ 		synaptics,gpio-config;
+ 		synaptics,use-in-progress-event-blank;
+-		synaptics,charger-detection; /* mitigate charger noise on BOE */
+ 		/* pins used by touchscreen */
+ 		pinctrl-names = "default", "active";
+ 		pinctrl-0 = <&touch_reset_active &touch_int_default>;
+ 		pinctrl-1 = <&touch_reset_active &touch_int_active>;
+-		config_modifier-names = "aod", "fps";
++		config_modifier-names = "aod", "fps", "charger";
+ 		config_modifier-aod {
+ 			aod-suspended {
+ 				patch-data = "F12@20:1=2;S"; /* Set LPWG bit; Power->sleep */
+@@ -108,5 +107,11 @@
+ 				touch-clip-area = <450 1875 610 1919 1>;
+ 			};
+ 		};
++		config_modifier-charger {
++			enable-notification;
++			charger-active { /* mitigate charger noise on BOE */
++				patch-data = "F1@0=20&0";
++			};
++		};
+ 	};
+ };
+-- 
+2.11.0
+

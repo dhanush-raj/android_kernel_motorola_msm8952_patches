@@ -1,0 +1,39 @@
+From a3a5a81e87fb2aadbae91101015e826ca00d6d59 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Wed, 27 May 2015 16:32:35 -0500
+Subject: [PATCH 258/959] IKSWL-19007: power: smbcharger-mmi: Rerun AICL
+
+After USB Sends the Current Limit ensure that
+if we program that limit Rerun AICL is called.
+
+This will help with Lower Rate chargers so the
+stability can be achieved.
+
+Change-Id: I5c96997b32c3442e8158f3fd5fecd7609deef564
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/751990
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index d1b6f9c0cd6..3c83a74e630 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -3466,6 +3466,7 @@ static void smbchg_external_power_changed(struct power_supply *psy)
+ 		if (rc < 0)
+ 			dev_err(chip->dev,
+ 				"Couldn't set usb current rc = %d\n", rc);
++		smbchg_rerun_aicl(chip);
+ 	}
+ 	mutex_unlock(&chip->current_change_lock);
+ 
+-- 
+2.11.0
+

@@ -1,0 +1,45 @@
+From 048e8a09db28531c30c403488ff15e7e0529e01a Mon Sep 17 00:00:00 2001
+From: Alexander Filonenko <alexf@motorola.com>
+Date: Wed, 27 Apr 2016 14:56:34 -0500
+Subject: [PATCH 869/959] IKSWM-34457 input: synaptics_dsx_i2c: disable irq
+ before input removal
+
+Disable touch interrupt before de-allocation of input device.
+
+Change-Id: I4c745c291364da90241f4d7056120d2f8fcb5654
+Signed-off-by: Alexander Filonenko <alexf@motorola.com>
+Reviewed-on: http://gerrit.mot.com/849557
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Konstantin Makariev <kmakariev@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/touchscreen/synaptics_dsx_i2c.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.c b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+index 01031b6f703..da99a74e6a1 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.c
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+@@ -2867,6 +2867,7 @@ static void synaptics_dsx_sensor_state(struct synaptics_rmi4_data *rmi4_data,
+ 		if (!rmi4_data->in_bootloader)
+ 			rmi4_data->in_bootloader = true;
+ 	case STATE_INIT:
++		synaptics_rmi4_irq_enable(rmi4_data, false);
+ 		/* de-allocate input device earlier to allow */
+ 		/* EventHub become notified of input removal */
+ 		if (rmi4_data->input_registered) {
+@@ -2877,8 +2878,6 @@ static void synaptics_dsx_sensor_state(struct synaptics_rmi4_data *rmi4_data,
+ 			pr_debug("de-allocated input device\n");
+ 		}
+ 
+-		synaptics_rmi4_irq_enable(rmi4_data, false);
+-
+ 		if (gStat.enabled)
+ 			statistics_stop_timekeeping();
+ 			break;
+-- 
+2.11.0
+

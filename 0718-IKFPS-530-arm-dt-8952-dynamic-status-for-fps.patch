@@ -1,0 +1,39 @@
+From d86cd3275e1440342878f62381bd82a07778a69f Mon Sep 17 00:00:00 2001
+From: Xiaofei Ma <xiaofei@motorola.com>
+Date: Fri, 26 Feb 2016 17:10:43 -0600
+Subject: [PATCH 718/959] IKFPS-530: arm/dt: 8952: dynamic status for fps
+
+Use FPS HW descriptor to set status of
+SPI interface and FCI nodes.
+
+Change-Id: Ife2ca53dd4179e5d81821b8f88f4d8aaa84ea375
+Signed-off-by: Xiaofei Ma <xiaofei@motorola.com>
+Reviewed-on: http://gerrit.mot.com/826732
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Reviewed-by: Thomas Merrell <thomasmerrell@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-fps.dtsi | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-fps.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-fps.dtsi
+index d89df1cb5e9..f22d84345ce 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-fps.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-fps.dtsi
+@@ -116,8 +116,10 @@
+ 		qcom,infinite-mode = <0>;
+ 		qcom,use-pinctrl;
+ 		qcom,master-id = <84>;
++		status = "/chosen", "mmi,fps", "true";
+ 
+ 		fpc_fpc1020@0{
++			status = "/chosen", "mmi,fps", "true";
+ 			compatible = "fpc,fpc1020";
+ 			reg = <0>;
+ 			interrupts = <42 0x0>;
+-- 
+2.11.0
+

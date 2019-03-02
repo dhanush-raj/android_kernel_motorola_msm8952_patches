@@ -1,0 +1,27 @@
+From 5dfe11647bc8eb5b65f4e6e9e93b61384c4a88a5 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Fri, 25 Sep 2015 23:11:40 -0700
+Subject: [PATCH 217/959] IKSWM-4458: motoconfig: Enable filtering based on TCP
+ MSS value
+
+Enable netfilter based on MSS value to config MTU in TCP SYN packets.
+
+Change-Id: I25a917dcfb250f16a6f15c29d8a0e20487812bae
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index 5e71fce6498..447f9d8dddb 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -36,3 +36,5 @@ CONFIG_MMI_RAM_INFO=y
+ CONFIG_SOFTLOCKUP_WATCHDOG_TEST=y
+ CONFIG_LOCKUP_IPI_CALL_WDT=y
+ CONFIG_ANDROID_LMK_ADJ_RBTREE=y
++# networking related
++CONFIG_NETFILTER_XT_MATCH_TCPMSS=y
+-- 
+2.11.0
+

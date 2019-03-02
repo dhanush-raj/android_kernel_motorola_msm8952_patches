@@ -1,0 +1,52 @@
+From 1665b13955dda810bb8485b8f430e65c61164975 Mon Sep 17 00:00:00 2001
+From: Zac Crosby <zac@motorola.com>
+Date: Wed, 8 Oct 2014 12:55:33 -0500
+Subject: [PATCH 165/959] IKKRNBSP-3366: msm: mdss: Update ESD read length
+ check
+
+QCOM updated the return value of the read APIs, update the ESD read length
+check to reflect that.
+
+'commit d66b318aead1 ("IKKRNBSP-2739 msm: mdss: Update ESD
+read length check")'
+Signed-off-by: Zac Crosby <zac@motorola.com>
+Signed-off-by: Parasuraman <parasur@motorola.com>
+Change-Id: Ife740d9dec01fa3b13dce3ecb811c1752ea2b6a3
+Reviewed-on: http://gerrit.mot.com/784118
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_host.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_host.c b/drivers/video/msm/mdss/mdss_dsi_host.c
+index 9794e13d0be..3e9d2b5879b 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_host.c
++++ b/drivers/video/msm/mdss/mdss_dsi_host.c
+@@ -1149,14 +1149,16 @@ int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+ 	 * by the panel. Success value is greater than zero and failure
+ 	 * case returns zero.
+ 	 */
+-	if (ret > 0) {
++	if (ret == ctrl_pdata->status_cmds_rlen) {
+ 		if (!mdss_dsi_sync_wait_enable(ctrl_pdata) ||
+ 			mdss_dsi_sync_wait_trigger(ctrl_pdata))
+ 			ret = ctrl_pdata->check_read_status(ctrl_pdata);
+ 		else if (sctrl_pdata)
+ 			ret = ctrl_pdata->check_read_status(sctrl_pdata);
+ 	} else {
+-		pr_err("%s: Read status register returned error\n", __func__);
++		pr_err("%s: Read status register returned error, ret = %d\n",
++			__func__, ret);
++		ret = 0;
+ 	}
+ 
+ 	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 0);
+-- 
+2.11.0
+

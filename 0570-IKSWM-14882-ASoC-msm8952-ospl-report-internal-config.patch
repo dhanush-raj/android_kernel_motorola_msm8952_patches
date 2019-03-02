@@ -1,0 +1,72 @@
+From f34a6b6946628815e1a5bd84b8929ca07b1950bd Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Fri, 18 Dec 2015 15:33:49 -0600
+Subject: [PATCH 570/959] IKSWM-14882 ASoC: msm8952: ospl: report internal
+ config in use
+
+Add get_param handler to report internal configuraion id
+which is in use for current playback
+
+Change-Id: I236721d600d781e460a95a2969d96e46fe6c1a71
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/808659
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ include/sound/ospl2xx.h | 4 ++++
+ sound/soc/msm/ospl2xx.c | 7 ++++++-
+ 2 files changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/include/sound/ospl2xx.h b/include/sound/ospl2xx.h
+index 453bfbbda27..ea7aef82689 100644
+--- a/include/sound/ospl2xx.h
++++ b/include/sound/ospl2xx.h
+@@ -33,6 +33,10 @@
+ #define PARAM_ID_OPLAUM_RX_TEMPERATURE                 0x00A1AF07
+ /* Set temperature calibration values */
+ #define PARAM_ID_OPALUM_RX_TEMP_CAL_DATA               0x00A1AF08
++/* Get the array index of the parameter set currently in use.
++   Will return -1 when an external string is used */
++#define PARAM_ID_OPALUM_RX_CURRENT_PARAM_SET           0x00A1AF11
++
+ 
+ /* TX module parameter IDs */
+ /* Run production line test */
+diff --git a/sound/soc/msm/ospl2xx.c b/sound/soc/msm/ospl2xx.c
+index 65e3ed4e5b0..041c978e90c 100644
+--- a/sound/soc/msm/ospl2xx.c
++++ b/sound/soc/msm/ospl2xx.c
+@@ -443,6 +443,7 @@ static int32_t ospl2xx_afe_callback(struct apr_client_data *data)
+ 			case AFE_PARAM_ID_ENABLE:
+ 			case PARAM_ID_OPALUM_RX_EXC_MODEL:
+ 			case PARAM_ID_OPLAUM_RX_TEMPERATURE:
++			case PARAM_ID_OPALUM_RX_CURRENT_PARAM_SET:
+ 			case PARAM_ID_OPALUM_TX_F0_CALIBRATION_VALUE:
+ 			case PARAM_ID_OPALUM_TX_TEMP_MEASUREMENT_VALUE:
+ 				afe_cb_payload32_data[0] = payload32[4];
+@@ -500,6 +501,10 @@ static const struct soc_enum ospl2xx_rx_enable_enum[] = {
+ static int ospl2xx_rx_int_config_get(struct snd_kcontrol *kcontrol,
+ 			struct snd_ctl_elem_value *ucontrol)
+ {
++	ospl2xx_afe_set_callback(ospl2xx_afe_callback);
++	ospl2xx_afe_get_param(PARAM_ID_OPALUM_RX_CURRENT_PARAM_SET);
++
++	ucontrol->value.integer.value[0] = afe_cb_payload32_data[0];
+ 	return 0;
+ }
+ static int ospl2xx_rx_int_config_put(struct snd_kcontrol *kcontrol,
+@@ -785,7 +790,7 @@ static const struct snd_kcontrol_new ospl2xx_params_controls[] = {
+ 	/* GET,PUT */ SOC_ENUM_EXT("OSPL Rx",
+ 		ospl2xx_rx_enable_enum[0],
+ 		ospl2xx_rx_enable_get, ospl2xx_rx_enable_put),
+-	/* PUT */ SOC_ENUM_EXT("OSPL Int RxConfig",
++	/* GET,PUT */ SOC_ENUM_EXT("OSPL Int RxConfig",
+ 		ospl2xx_rx_int_config_enum[0],
+ 		ospl2xx_rx_int_config_get, ospl2xx_rx_int_config_put),
+ 	/* PUT */ SOC_ENUM_EXT("OSPL Ext RxConfig",
+-- 
+2.11.0
+

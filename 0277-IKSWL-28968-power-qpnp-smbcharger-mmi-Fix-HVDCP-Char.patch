@@ -1,0 +1,41 @@
+From 84bb47b2370d43f668ea88a64dc2365debd24f56 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Fri, 10 Jul 2015 13:48:52 -0500
+Subject: [PATCH 277/959] IKSWL-28968: power: qpnp-smbcharger-mmi: Fix HVDCP
+ Charge
+
+The expectation was that external_power_supply_changed
+would not get called multiple times after a charger is
+present and the USB driver has sent its Current Limit.
+However, it was and hence the Current Limit was
+increasing back up to Maximum after the Charge had been
+detected as in capabile of that rate.  This slowed the
+rate of Charge down for the 15 W HVDCP.
+
+Change-Id: I19100e4a9c1518d1efece4c11a09da9ba7004e83
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/765814
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index a06b1ad5d37..84541abd9b5 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -3560,6 +3560,7 @@ static void smbchg_external_power_changed(struct power_supply *psy)
+ 	if (smbchg_hvdcp_det_check(chip)) {
+ 		if ((chip->stepchg_state == STEP_TAPER) ||
+ 		    (chip->stepchg_state == STEP_FULL) ||
++		    (chip->usb_target_current_ma <= HVDCP_ICL_TAPER) ||
+ 		    (chip->demo_mode))
+ 			current_limit = HVDCP_ICL_TAPER;
+ 		else
+-- 
+2.11.0
+

@@ -1,0 +1,58 @@
+From cfc4d6d4ad8eeb7782a81a6fda08c33a2b7f5986 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Thu, 24 Sep 2015 01:36:12 -0700
+Subject: [PATCH 182/959] IKSWM-4458 arm/dt:8952: reserve memory for ramoops
+
+Reserve memory for pstore ramoops in device tree.
+
+Change-Id: I8a5d66bd016a23a4b01c366af9d5883a3e46db4f
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index ae5ed37d719..ac6360bff91 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -22,6 +22,16 @@
+ 		/delete-property/ i2c5;
+ 		/delete-property/ spi0;
+ 	};
++
++	memory {
++		ramoops_mem: ramoops_mem_region {
++			linux,reserve-contiguous-region;
++			linux,reserve-region;
++			/*linux,remove-completely;*/
++			reg = <0x0 0xae000000 0x0 0x80000>;
++			label = "ramoops_mem";
++		};
++	};
+ };
+ 
+ &tlmm_pinmux {
+@@ -221,6 +231,20 @@
+ 	/delete-node/ spi@78B5000;
+ 	/delete-node/ i2c@7af5000;
+ 
++	ramoops {
++		compatible = "ramoops";
++		status = "ok";
++
++		android,ramoops-buffer-start = <0xae000000>;
++		android,ramoops-buffer-size = <0x80000>;
++		android,ramoops-console-size = <0x40000>;
++		android,ramoops-record-size = <0x3F800>;
++		android,ramoops-annotate-size = <0x800>;
++		android,ramoops-dump-oops = <0x1>;
++
++		linux,contiguous-region = <&ramoops_mem>;
++	};
++
+ 	spi_4: spi@7af5000 { /* BLSP2 QUP1 */
+ 		compatible = "qcom,spi-qup-v2";
+ 		#address-cells = <1>;
+-- 
+2.11.0
+

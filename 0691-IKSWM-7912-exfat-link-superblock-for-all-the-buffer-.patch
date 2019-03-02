@@ -1,0 +1,36 @@
+From ed2805aa720bf72659fbf3d34ea45cb045593bd3 Mon Sep 17 00:00:00 2001
+From: Jaegeuk Kim <jaegeuk@motorola.com>
+Date: Mon, 19 Oct 2015 14:05:59 -0700
+Subject: [PATCH 691/959] IKSWM-7912 - exfat: link superblock for all the
+ buffer head
+
+Otherwise, we can get kernel panic when handling fs_error().
+
+Change-Id: Icd4d17bb58ef22e8dc2806ae16d1d932859d210d
+Signed-off-by: Jaegeuk Kim <jaegeuk@motorola.com>
+Reviewed-on: http://gerrit.mot.com/792715
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sheng-Zhe Zhao <a18689@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/exfat/exfat_super.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/fs/exfat/exfat_super.c b/fs/exfat/exfat_super.c
+index 69119c905a2..4bea104ba44 100644
+--- a/fs/exfat/exfat_super.c
++++ b/fs/exfat/exfat_super.c
+@@ -1488,6 +1488,7 @@ static int exfat_get_block(struct inode *inode, sector_t iblock,
+ 		map_bh(bh_result, sb, phys);
+ 	}
+ 
++	bh_result->b_private = sb;
+ 	bh_result->b_size = max_blocks << sb->s_blocksize_bits;
+ 	__unlock_super(sb);
+ 
+-- 
+2.11.0
+

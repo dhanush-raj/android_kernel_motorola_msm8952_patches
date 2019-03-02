@@ -1,0 +1,81 @@
+From 2a41506b060e8242ce83836d0efa3554280553d0 Mon Sep 17 00:00:00 2001
+From: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Date: Tue, 18 Feb 2014 13:01:51 -0600
+Subject: [PATCH 148/959] IKKRNBSP-3380: tty: diag: convert to use tty_port API
+
+Rework for innovative kernel change from v3.7.
+
+Propagation of IKKRNBSP-2148
+
+Change-Id: Ib0966f73ab2bb66eb4f2b783fef4a05adcb2074b
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/611215
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/677437
+Reviewed-on: http://gerrit.mot.com/782995
+SME-Granted: SME Approvals Granted
+---
+ drivers/tty/diag/tty_diag.c | 16 ++++++++++------
+ 1 file changed, 10 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/tty/diag/tty_diag.c b/drivers/tty/diag/tty_diag.c
+index 684cc24096f..44a1f6dd0b2 100644
+--- a/drivers/tty/diag/tty_diag.c
++++ b/drivers/tty/diag/tty_diag.c
+@@ -21,6 +21,7 @@ static struct usb_diag_ch legacy_ch;
+ static struct diag_request *d_req_ptr;
+ 
+ struct diag_tty_data {
++	struct tty_port port;
+ 	struct tty_struct *tty;
+ 	int open_count;
+ };
+@@ -214,8 +215,11 @@ struct usb_diag_ch *tty_diag_channel_open(const char *name, void *priv,
+ 	legacy_ch.notify = notify;
+ 	spin_unlock_irqrestore(&diag_tty_lock, flags);
+ 
+-	for (i = 0; i < DIAG_TTY_MINOR_COUNT; i++)
+-		tty_register_device(diag_tty_driver, i, NULL);
++	for (i = 0; i < DIAG_TTY_MINOR_COUNT; i++) {
++		tty_port_init(&diag_tty[i].port);
++		tty_port_register_device(&diag_tty[i].port, diag_tty_driver,
++				i, NULL);
++	}
+ 
+ 	return &legacy_ch;
+ }
+@@ -229,8 +233,8 @@ void tty_diag_channel_close(struct usb_diag_ch *diag_ch)
+ 	int i;
+ 
+ 	if (diag_ch->priv_usb) {
+-		tty_insert_flip_char(priv_usb->tty, 0x00, TTY_BREAK);
+-		tty_flip_buffer_push(priv_usb->tty);
++		tty_insert_flip_char(&priv_usb->port, 0x00, TTY_BREAK);
++		tty_flip_buffer_push(&priv_usb->port);
+ 	}
+ 	spin_lock_irqsave(&diag_tty_lock, flags);
+ 	diag_ch->priv = NULL;
+@@ -292,7 +296,7 @@ int tty_diag_channel_write(struct usb_diag_ch *diag_ch,
+ 		return -EIO;
+ 	}
+ 
+-	tty_allocated = tty_prepare_flip_string(tty_data->tty,
++	tty_allocated = tty_prepare_flip_string(&tty_data->port,
+ 						&tty_buf, d_req->length);
+ 
+ 	if (tty_allocated < d_req->length) {
+@@ -304,7 +308,7 @@ int tty_diag_channel_write(struct usb_diag_ch *diag_ch,
+ 	diag_ch->priv_usb = NULL;
+ 
+ 	memcpy(tty_buf, d_req->buf, d_req->length);
+-	tty_flip_buffer_push(tty_data->tty);
++	tty_flip_buffer_push(&tty_data->port);
+ 
+ 	spin_unlock_irqrestore(&diag_tty_lock, flags);
+ 
+-- 
+2.11.0
+

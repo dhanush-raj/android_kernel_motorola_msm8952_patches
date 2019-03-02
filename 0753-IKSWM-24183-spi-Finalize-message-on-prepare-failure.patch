@@ -1,0 +1,49 @@
+From 92ee21afb84f72d77678005a1eef1bfb88308cdc Mon Sep 17 00:00:00 2001
+From: Jason Hrycay <jason.hrycay@motorola.com>
+Date: Thu, 12 Mar 2015 08:17:54 -0500
+Subject: [PATCH 753/959] IKSWM-24183: spi: Finalize message on prepare failure
+
+PROPAGATED_from: IKQCOMSD1-2616
+
+Call spi_finalize_current_message whenever the prepare transfer hardware
+API returns a failure. If an error is returned in this case, anyone
+waiting on the completion of the current message is blocked until their
+timeout occurs, or in the case of the spi_sync path, indefinitely.
+
+Change-Id: I7532c63fbc78fea7e521eee715b7dd4ab0db9fca
+Signed-off-by: Jason Hrycay <jason.hrycay@motorola.com>
+Reviewed-on: http://gerrit.mot.com/724230
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/724517
+Reviewed-by: Sriram Divakar <sriramhd@motorola.com>
+Reviewed-by: Vladimir Karpovich <vkarpovich@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830231
+SME-Granted: SME Approvals Granted
+---
+ drivers/spi/spi.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/drivers/spi/spi.c b/drivers/spi/spi.c
+index 32b7bb111eb..35e9e67f3ba 100644
+--- a/drivers/spi/spi.c
++++ b/drivers/spi/spi.c
+@@ -577,6 +577,13 @@ static void spi_pump_messages(struct kthread_work *work)
+ 		if (ret) {
+ 			dev_err(&master->dev,
+ 				"failed to prepare transfer hardware\n");
++			/* If hardware failed to prepare, need to ensure we
++			 * finalize the message so anyone waiting on the message
++			 * completion gets it. transfer_one_message already
++			 * ensures this is done internally.
++			 */
++			master->cur_msg->status = ret;
++			spi_finalize_current_message(master);
+ 			return;
+ 		}
+ 	}
+-- 
+2.11.0
+

@@ -1,0 +1,261 @@
+From c9dc726aecd6250822a42e77e4184ccd0eb43cc9 Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Thu, 22 Oct 2015 13:28:16 -0500
+Subject: [PATCH 420/959] IKSWM-8884: input: misc: vl53l0: laser driver changes
+ for p1
+
+laser driver changes for p1 hw and after
+
+Change-Id: I895efc6692301be43b305eb6349363c0baeb5160
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/794307
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Oleg Klementiev <oleg@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/vl53L0/stmvl53l0.h            | 12 +++--
+ drivers/input/misc/vl53L0/stmvl53l0_module-i2c.c | 23 +++++++--
+ drivers/input/misc/vl53L0/stmvl53l0_module.c     | 62 +++++++++++++++++++++---
+ 3 files changed, 83 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/input/misc/vl53L0/stmvl53l0.h b/drivers/input/misc/vl53L0/stmvl53l0.h
+index 602df4eed16..fced4132814 100644
+--- a/drivers/input/misc/vl53L0/stmvl53l0.h
++++ b/drivers/input/misc/vl53L0/stmvl53l0.h
+@@ -44,8 +44,8 @@
+ #define vl53l0_errmsg(str, args...) \
+ 	printk(KERN_ERR "%s: " str, __func__, ##args)
+ 
+-#define VL53L0_VDD_MIN      2600000
+-#define VL53L0_VDD_MAX      3000000
++#define VL53L0_VDD_MIN      2800000
++#define VL53L0_VDD_MAX      2800000
+ /*driver working mode*/
+ #define	OFF_MODE  0
+ #define	CAM_MODE  1
+@@ -65,11 +65,13 @@
+ #define	OFFSET_PAR 0
+ #define	XTALKRATE_PAR 1
+ #define	XTALKENABLE_PAR 2
+-#define	SNRVAL_PRA 3
+-#define	SNRCTL_PRA 4
++#define	SIGMAVAL_PRA 3
++#define	SIGMACTL_PRA 4
+ #define	WRAPAROUNDCTL_PRA 5
+ #define	INTERMEASUREMENTPERIOD_PAR 6
+ #define	MEASUREMENTTIMINGBUDGET_PAR 7
++#define	SGLVAL_PRA 8
++#define	SGLCTL_PRA 9
+ 
+ 
+ #define	CCI_BUS  0
+@@ -149,6 +151,8 @@ struct stmvl53l0_data {
+ 	/*for SAR mode indicate low range interrupt*/
+ 	uint8_t lowint;
+ 	uint8_t bus_type;
++	uint32_t lowv;
++	uint32_t highv;
+ };
+ 
+ /*
+diff --git a/drivers/input/misc/vl53L0/stmvl53l0_module-i2c.c b/drivers/input/misc/vl53L0/stmvl53l0_module-i2c.c
+index fb47333210d..15dc3a51b13 100644
+--- a/drivers/input/misc/vl53L0/stmvl53l0_module-i2c.c
++++ b/drivers/input/misc/vl53L0/stmvl53l0_module-i2c.c
+@@ -54,7 +54,6 @@
+ #define LASER_SENSOR_PINCTRL_STATE_SLEEP "laser_suspend"
+ #define LASER_SENSOR_PINCTRL_STATE_DEFAULT "laser_default"
+ 
+-
+ /*
+  * Global data
+  */
+@@ -262,7 +261,7 @@ static const struct i2c_device_id stmvl53l0_id[] = {
+ MODULE_DEVICE_TABLE(i2c, stmvl53l0_id);
+ 
+ static const struct of_device_id st_stmvl53l0_dt_match[] = {
+-	{ .compatible = "st,stmvl53l0", },
++	{ .compatible = "st,stmvl53l0_i2c", },
+ 	{ },
+ };
+ 
+@@ -286,6 +285,18 @@ int stmvl53l0_power_up_i2c(void *i2c_object, unsigned int *preset_flag)
+ 
+ 	vl53l0_dbgmsg("Enter i2c powerup\n");
+ 
++	ret = regulator_set_voltage(data->vana, VL53L0_VDD_MIN, VL53L0_VDD_MAX);
++	if (ret < 0) {
++		vl53l0_errmsg("set_vol(%p) fail %d\n", data->vana, ret);
++		return ret;
++	}
++	ret = regulator_enable(data->vana);
++	msleep(20);
++	if (ret < 0) {
++		vl53l0_errmsg("reg enable(%p) failed.rc=%d\n", data->vana, ret);
++		return ret;
++	}
++
+ 	msm_camera_request_gpio_table(
+ 		data->gconf.cam_gpio_req_tbl,
+ 		data->gconf.cam_gpio_req_tbl_size, 1);
+@@ -305,7 +316,6 @@ int stmvl53l0_power_down_i2c(void *i2c_object)
+ 
+ 	struct i2c_data *data = (struct i2c_data *)i2c_object;
+ 
+-
+ 	vl53l0_dbgmsg("Enter\n");
+ 	if (data->power_up) {
+ 		pinctrl_select_state(data->pinctrl_info.pinctrl,
+@@ -317,6 +327,13 @@ int stmvl53l0_power_down_i2c(void *i2c_object)
+ 
+ 		gpio_set_value_cansleep(
+ 			data->gconf.cam_gpio_req_tbl[0].gpio, 0);
++
++		ret = regulator_disable(data->vana);
++		if (ret < 0)
++			vl53l0_errmsg("reg disable(%p) failed.rc=%d\n",
++			data->vana, ret);
++
++		data->power_up = 0;
+ 	}
+ 
+ 
+diff --git a/drivers/input/misc/vl53L0/stmvl53l0_module.c b/drivers/input/misc/vl53L0/stmvl53l0_module.c
+index f22734afb80..55a3a3b96f0 100644
+--- a/drivers/input/misc/vl53L0/stmvl53l0_module.c
++++ b/drivers/input/misc/vl53L0/stmvl53l0_module.c
+@@ -200,7 +200,8 @@ static void stmvl53l0_enter_sar(struct stmvl53l0_data *data, uint8_t from)
+ 	VL53L0_SetGpioConfig(data, 0, 0,
+ 		VL53L0_GPIOFUNCTIONALITY_THRESHOLD_CROSSED_LOW,
+ 		VL53L0_INTERRUPTPOLARITY_LOW);
+-	VL53L0_SetInterruptThresholds(data, 0, 30 << 16, 40 << 16);
++	VL53L0_SetInterruptThresholds(data,
++		0, data->lowv << 16, data->highv << 16);
+ 	VL53L0_SetDeviceMode(data,
+ 		VL53L0_DEVICEMODE_CONTINUOUS_TIMED_RANGING);
+ 	data->lowint = 1;
+@@ -408,7 +409,7 @@ memcpy(&(data->rangeData), &RMData,
+ 		VL53L0_StartMeasurement(data);
+ 	} else if (SAR_MODE == data->w_mode) {
+ 		vl53l0_dbgmsg("SAR_MODE\n");
+-		if (RMData.RangeMilliMeter < SAR_LOW) {
++		if (RMData.RangeMilliMeter < data->lowv) {
+ 			vl53l0_dbgmsg("SAR enter LOW\n");
+ 			stmvl53l0_ps_read_measurement(vl53l0_dev);
+ 			VL53L0_SetGpioConfig(data, 0, 0,
+@@ -418,7 +419,7 @@ memcpy(&(data->rangeData), &RMData,
+ 				data, data->delay_ms);
+ 
+ 			VL53L0_SetInterruptThresholds(
+-			data, 0, SAR_LOW << 16, SAR_HIGH << 16);
++			data, 0, data->lowv << 16, data->highv << 16);
+ 			VL53L0_SetDeviceMode(data,
+ 				VL53L0_DEVICEMODE_CONTINUOUS_TIMED_RANGING);
+ 			data->lowint = 0;
+@@ -426,7 +427,7 @@ memcpy(&(data->rangeData), &RMData,
+ 			kobject_uevent_env(&(data->miscdev.this_device->kobj),
+ 				KOBJ_CHANGE, envplow);
+ 			vl53l0_dbgmsg("SAR enter LOW sent uevent\n");
+-		} else if (RMData.RangeMilliMeter > SAR_HIGH) {
++		} else if (RMData.RangeMilliMeter > data->highv) {
+ 			vl53l0_dbgmsg("SAR enter HIGH\n");
+ 			stmvl53l0_ps_read_measurement(vl53l0_dev);
+ 			VL53L0_SetGpioConfig(data, 0, 0,
+@@ -436,7 +437,7 @@ memcpy(&(data->rangeData), &RMData,
+ 				data, data->delay_ms);
+ 
+ 			VL53L0_SetInterruptThresholds(
+-				data, 0, SAR_LOW << 16, SAR_HIGH << 16);
++				data, 0, data->lowv << 16, data->highv << 16);
+ 			VL53L0_SetDeviceMode(data,
+ 				VL53L0_DEVICEMODE_CONTINUOUS_TIMED_RANGING);
+ 			data->lowint = 1;
+@@ -446,12 +447,13 @@ memcpy(&(data->rangeData), &RMData,
+ 		}
+ 	} else if (SUPER_MODE == data->w_mode) {
+ 		vl53l0_dbgmsg("SUPER_MODE\n");
+-		if (RMData.RangeMilliMeter < SAR_LOW) {
++		if (RMData.RangeMilliMeter < data->lowv
++				&& RMData.RangeMilliMeter != 0) {
+ 			vl53l0_dbgmsg("SAR enter LOW\n");
+ 			stmvl53l0_ps_read_measurement(vl53l0_dev);
+ 			kobject_uevent_env(&(data->miscdev.this_device->kobj),
+ 				KOBJ_CHANGE, envplow);
+-		} else if (RMData.RangeMilliMeter > SAR_HIGH) {
++		} else if (RMData.RangeMilliMeter > data->highv) {
+ 			vl53l0_dbgmsg("SAR enter HIGH\n");
+ 			stmvl53l0_ps_read_measurement(vl53l0_dev);
+ 			kobject_uevent_env(&(data->miscdev.this_device->kobj),
+@@ -948,6 +950,48 @@ static int stmvl53l0_ioctl_handler(struct file *file,
+ 				VL53L0_SetXTalkCompensationEnable(
+ 				vl53l0_dev, (uint8_t)parameter.value);
+ 			break;
++		case (SIGMAVAL_PRA):
++			if (parameter.is_read)
++				parameter.status =
++				VL53L0_GetSigmaLimitValue(vl53l0_dev,
++				0, (FixPoint1616_t *)&parameter.value);
++			else
++				parameter.status =
++				VL53L0_SetSigmaLimitValue(
++				vl53l0_dev, 0, (FixPoint1616_t)parameter.value);
++			break;
++
++		case (SIGMACTL_PRA):
++			if (parameter.is_read)
++				parameter.status =
++				VL53L0_GetSigmaLimitCheckEnable(vl53l0_dev,
++				0, (uint8_t *)&parameter.value);
++			else
++				parameter.status =
++				VL53L0_SetSigmaLimitCheckEnable(
++				vl53l0_dev, 0, (uint8_t)parameter.value);
++			break;
++		case (SGLVAL_PRA):
++			if (parameter.is_read)
++				parameter.status =
++				VL53L0_GetSigmaLimitValue(vl53l0_dev,
++				0, (FixPoint1616_t *)&parameter.value);
++			else
++				parameter.status =
++				VL53L0_SetSigmaLimitValue(
++				vl53l0_dev, 0, (FixPoint1616_t)parameter.value);
++			break;
++
++		case (SGLCTL_PRA):
++			if (parameter.is_read)
++				parameter.status =
++				VL53L0_GetSignalLimitValue(vl53l0_dev,
++				0, (FixPoint1616_t *)&parameter.value);
++			else
++				parameter.status =
++				VL53L0_SetSignalLimitValue(
++				vl53l0_dev, 0, (FixPoint1616_t)parameter.value);
++			break;
+ 
+ 		case (WRAPAROUNDCTL_PRA):
+ 			if (parameter.is_read)
+@@ -1248,6 +1292,8 @@ int stmvl53l0_setup(struct stmvl53l0_data *data, uint8_t type)
+ 	int gpio;
+ 
+ 	vl53l0_dbgmsg("Enter\n");
++	data->lowv = 40;
++	data->highv = 45;
+ 	if (type == CCI_BUS) {
+ 		data->bus_type = CCI_BUS;
+ 		data->client_object = &(data->cci_client_object);
+@@ -1259,6 +1305,8 @@ int stmvl53l0_setup(struct stmvl53l0_data *data, uint8_t type)
+ 		data->client_object = &(data->i2c_client_object);
+ 		pmodule_func_tbl = &stmvl53l0_module_func_tbl_i2c;
+ 		gpio = data->i2c_client_object.gconf.cam_gpio_req_tbl[1].gpio;
++		data->lowv = data->i2c_client_object.lowv;
++		data->highv = data->i2c_client_object.highv;
+ 	}
+ 
+ 	/* init interrupt */
+-- 
+2.11.0
+

@@ -1,0 +1,38 @@
+From 1875a7fc209fe85193d97a39babbba716c33cada Mon Sep 17 00:00:00 2001
+From: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Date: Mon, 20 Jul 2015 17:21:31 -0500
+Subject: [PATCH 019/959] IKKRNBSP-3292 build: move Motorola configs to
+ ext_config/moto-$(ARCH).config
+
+Clear up confusion over what's -perf and what's not.
+
+Change-Id: Ia3650f291ea328ec7c72b44de2513c05fa13ad43
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.mot.com/768618
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ defconfig.mk | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/defconfig.mk b/defconfig.mk
+index d4a67851dd6..9c44467202e 100644
+--- a/defconfig.mk
++++ b/defconfig.mk
+@@ -1,8 +1,9 @@
+ DEFCONFIGSRC			:= kernel/arch/$(KERNEL_ARCH)/configs
+ LJAPDEFCONFIGSRC		:= ${DEFCONFIGSRC}/ext_config
+-PRODUCT_SPECIFIC_DEFCONFIGS	:= $(DEFCONFIGSRC)/$(KERNEL_DEFCONFIG)
++DEFCONFIG_BASENAME		:= $(subst -perf,,$(subst _defconfig,,$(KERNEL_DEFCONFIG)))
++PRODUCT_SPECIFIC_DEFCONFIGS	:= $(DEFCONFIGSRC)/$(KERNEL_DEFCONFIG) $(LJAPDEFCONFIGSRC)/moto-$(DEFCONFIG_BASENAME).config
+ TARGET_DEFCONFIG		:= $(KERNEL_OUT)/mapphone_defconfig
+-KERNEL_DEBUG_DEFCONFIG          := $(LJAPDEFCONFIGSRC)/debug-$(subst -perf,,$(subst _defconfig,,$(KERNEL_DEFCONFIG))).config
++KERNEL_DEBUG_DEFCONFIG          := $(LJAPDEFCONFIGSRC)/debug-$(DEFCONFIG_BASENAME).config
+ 
+ # add debug config file for non-user build
+ ifneq ($(TARGET_BUILD_VARIANT), user)
+-- 
+2.11.0
+

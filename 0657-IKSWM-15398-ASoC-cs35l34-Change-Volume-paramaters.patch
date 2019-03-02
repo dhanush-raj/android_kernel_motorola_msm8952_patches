@@ -1,0 +1,36 @@
+From ad6017c30389cd4f3a96feb437426de5a7408537 Mon Sep 17 00:00:00 2001
+From: Paul Handrigan <Paul.Handrigan@cirrus.com>
+Date: Fri, 22 Jan 2016 15:41:29 -0600
+Subject: [PATCH 657/959] IKSWM-15398: ASoC: cs35l34: Change Volume paramaters
+
+Change the volume parameters to ensure that the device can
+set -dB settings at a wide range.
+
+Change-Id: I3a4d69d806d6fe8b0429049ec7d766e6716628a3
+Signed-off-by: Paul Handrigan <Paul.Handrigan@cirrus.com>
+Reviewed-on: http://gerrit.mot.com/816722
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/codecs/cs35l34.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/sound/soc/codecs/cs35l34.c b/sound/soc/codecs/cs35l34.c
+index e5e60ef1747..2ff8ea624ff 100644
+--- a/sound/soc/codecs/cs35l34.c
++++ b/sound/soc/codecs/cs35l34.c
+@@ -307,7 +307,7 @@ static const SOC_ENUM_SINGLE_DECL(amp_gain, CS35L34_AMP_ANLG_GAIN_CTL, 0,
+ 
+ static const struct snd_kcontrol_new cs35l34_snd_controls[] = {
+ 	SOC_SINGLE_SX_TLV("Digital Volume", CS35L34_AMP_DIG_VOL,
+-		0, 0x34, 0x18, dig_vol_tlv),
++		0, 0x34, 0xE4, dig_vol_tlv),
+ 	SOC_ENUM("AMP Gain", amp_gain),
+ };
+ 
+-- 
+2.11.0
+

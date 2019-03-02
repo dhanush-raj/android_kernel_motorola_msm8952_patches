@@ -1,0 +1,21 @@
+From 72333e49a162b80974eb79ac9e6f7c1082bd2730 Mon Sep 17 00:00:00 2001
+From: Nikit Sharma <nikitsharma92@gmail.com>
+Date: Fri, 16 Mar 2018 04:46:35 +0530
+Subject: [PATCH 132/959] defconfig: Enable STML0XX sensorhub
+
+---
+ arch/arm/configs/msm8916_defconfig | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/msm8916_defconfig b/arch/arm/configs/msm8916_defconfig
+index cce0bc0abfe..420f8e4ca1a 100644
+--- a/arch/arm/configs/msm8916_defconfig
++++ b/arch/arm/configs/msm8916_defconfig
+@@ -622,3 +622,4 @@ CONFIG_CRYPTO_DEV_QCRYPTO=y
+ CONFIG_CRYPTO_DEV_QCE=y
+ CONFIG_CRYPTO_DEV_QCEDEV=y
+ CONFIG_CRYPTO_DEV_QCOM_ICE=y
++CONFIG_SENSORS_STML0XX=y
+-- 
+2.11.0
+

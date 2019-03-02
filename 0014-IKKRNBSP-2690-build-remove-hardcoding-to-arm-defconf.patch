@@ -1,0 +1,27 @@
+From bea6c02577fcef64aa20e903c8f4e37a3a208c5a Mon Sep 17 00:00:00 2001
+From: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Date: Thu, 9 Oct 2014 15:31:37 -0500
+Subject: [PATCH 014/959] IKKRNBSP-2690 build: remove hardcoding to arm
+ defconfigs
+
+Needed for 64-bit support.
+
+Change-Id: Ied1691058909ebb918dacd6de255b3810f76a154
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+---
+ defconfig.mk | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/defconfig.mk b/defconfig.mk
+index 7771f62d70e..6bfab1c054f 100644
+--- a/defconfig.mk
++++ b/defconfig.mk
+@@ -1,4 +1,4 @@
+-DEFCONFIGSRC			:= kernel/arch/arm/configs
++DEFCONFIGSRC			:= kernel/arch/$(KERNEL_ARCH)/configs
+ LJAPDEFCONFIGSRC		:= ${DEFCONFIGSRC}/ext_config
+ PRODUCT_SPECIFIC_DEFCONFIGS	:= $(DEFCONFIGSRC)/$(KERNEL_DEFCONFIG)
+ TARGET_DEFCONFIG		:= $(KERNEL_OUT)/mapphone_defconfig
+-- 
+2.11.0
+

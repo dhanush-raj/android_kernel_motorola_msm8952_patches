@@ -1,0 +1,85 @@
+From baed11c1f13038e8ed83f2fceea51404964bae25 Mon Sep 17 00:00:00 2001
+From: Tommy Tong <tong@motorola.com>
+Date: Mon, 6 Apr 2015 17:47:16 -0400
+Subject: [PATCH 123/959] IKFX-1760:drivers:misc:stml0xx: add chopchop virtual
+ sensor
+
+Add chopchop virtual sensor to implement the chop for flashlight gesture.
+This change passes the gesture trigger event to the virtual stml0xx_as
+device.
+Chopchop gesture is a wake IRQ.
+
+Change-Id: I8e85e9573bfdf0cbc8a008bb363453320be681fb
+Signed-off-by: Xin Tong <tong@motorola.com>
+Reviewed-on: http://gerrit.mot.com/732265
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Reviewed-by: Russell Knize <rknize@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_wake_irq.c | 9 +++++++++
+ include/linux/stml0xx.h                 | 5 ++++-
+ 2 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index fbad8b2c8e6..7b3636aed84 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -336,6 +336,15 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 		input_sync(ps_stml0xx->input_dev);
+ 		dev_dbg(&stml0xx_misc_data->spi->dev, "Report camkey toggle");
+ 	}
++	if (irq_status & M_CHOPCHOP) {
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_CHOPCHOP,
++						0,
++						0, 0, stm_ws->ts_ns);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending Chopchop: %d", STM16_TO_HOST(CHOP_VALUE,
++				0));
++	}
+ 	if (irq_status & M_SIM) {
+ 		stml0xx_as_data_buffer_write(
+ 			ps_stml0xx,
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 300be68cc21..6a036eccbe0 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -205,7 +205,7 @@
+ #define M_LIFT			0x004000
+ #define M_LOG_MSG		0x008000
+ 
+-/*#define M_UNUSED		0x010000*/
++#define M_CHOPCHOP		0x010000
+ /*#define M_UNUSED		0x020000*/
+ /*#define M_UNUSED		0x040000*/
+ /*#define M_UNUSED		0x080000*/
+@@ -295,6 +295,7 @@ enum STML0XX_data_types {
+ 	DT_ACCEL2,
+ 	DT_FLUSH,
+ 	DT_LIFT,
++	DT_CHOPCHOP,
+ };
+ 
+ enum {
+@@ -437,6 +438,7 @@ struct stm_response {
+ #define CAMERA                          0x4C
+ #define NFC                             0x4D
+ #define SIM                             0x4E
++#define CHOPCHOP                        0x4F
+ #define LIFT                            0x51
+ 
+ #define SH_LOG_LEVEL_REG                0x55
+@@ -576,6 +578,7 @@ struct stm_response {
+ #define GRAV_Y		2
+ #define GRAV_Z		4
+ #define CAMERA_VALUE	0
++#define CHOP_VALUE	0
+ #define SIM_DATA	0
+ #define LIFT_DISTANCE	0
+ #define LIFT_ROTATION	4
+-- 
+2.11.0
+

@@ -1,0 +1,38 @@
+From b539a288f0d6e22b55461126e71cbb491dbb915f Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Wed, 17 Jun 2015 09:05:14 -0500
+Subject: [PATCH 269/959] IKSWL-16678: power: qpnp-smbcharger-mmi: Run HB more
+ frequently during AICL wait
+
+When AICL is in progress or stuck, run the Heartbeat more often (every 10 sec)
+to check for AICL status and trigger recovery (APSD re-run). This will avoid a
+lengthy wait (of upto 4 minutes) if AICL is stuck.
+
+Change-Id: I0d550d3061235d664db96844b8fc1aaee7a2293f
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/757952
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 6edce969027..7a75cd4b519 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -7214,7 +7214,7 @@ static void smbchg_heartbeat_work(struct work_struct *work)
+ end_hb:
+ 	power_supply_changed(&chip->batt_psy);
+ 
+-	if (!chip->stepchg_state_holdoff)
++	if (!chip->stepchg_state_holdoff && !chip->aicl_wait_retries)
+ 		schedule_delayed_work(&chip->heartbeat_work,
+ 				      msecs_to_jiffies(HEARTBEAT_DELAY_MS));
+ 	else
+-- 
+2.11.0
+

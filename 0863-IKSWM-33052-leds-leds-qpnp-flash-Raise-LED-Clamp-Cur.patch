@@ -1,0 +1,35 @@
+From 65d053a80deeefc6f7e36a69cdd54467b818d736 Mon Sep 17 00:00:00 2001
+From: Andrew Lenart <w16741@motorola.com>
+Date: Wed, 20 Apr 2016 16:01:44 -0500
+Subject: [PATCH 863/959] IKSWM-33052: leds: leds-qpnp-flash: Raise LED Clamp
+ Current to 1A
+
+Change-Id: I544d636692db9c9b152e9206e3578cc1d6a1beb4
+Signed-off-by: Andrew Lenart <w16741@motorola.com>
+Reviewed-on: http://gerrit.mot.com/846862
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sumit Jamadar <xkbr38@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/leds/leds-qpnp-flash.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/leds/leds-qpnp-flash.c b/drivers/leds/leds-qpnp-flash.c
+index 1c2cd59ff33..de018c277bf 100644
+--- a/drivers/leds/leds-qpnp-flash.c
++++ b/drivers/leds/leds-qpnp-flash.c
+@@ -82,7 +82,7 @@
+ #define FLASH_LED_TRIGGER_DEFAULT				"none"
+ #define FLASH_LED_HEADROOM_DEFAULT_MV				500
+ #define FLASH_LED_STARTUP_DELAY_DEFAULT_US			128
+-#define FLASH_LED_CLAMP_CURRENT_DEFAULT_MA			200
++#define FLASH_LED_CLAMP_CURRENT_DEFAULT_MA			1000
+ #define	FLASH_LED_THERMAL_DERATE_THRESHOLD_DEFAULT_C		80
+ #define	FLASH_LED_RAMP_UP_STEP_DEFAULT_US			3
+ #define	FLASH_LED_RAMP_DN_STEP_DEFAULT_US			3
+-- 
+2.11.0
+

@@ -1,0 +1,41 @@
+From 50a0c3aa58396e61deb4a488ccae41e0ee760daf Mon Sep 17 00:00:00 2001
+From: Chris Fries <C.Fries@motorola.com>
+Date: Tue, 17 Dec 2013 14:52:05 -0600
+Subject: [PATCH 012/959] IKDVXPSE-887 build: Allow product to override debug
+ defconfig
+
+DVX GPE has a requirement that userdebug builds must have high
+performance.  Allow GPE product to override the use of debug
+options inherited from the common kernel.
+
+Change-Id: I3b7ed452c5424719da65640ced5656073599a918
+Reviewed-on: http://gerrit.pcs.mot.com/590151
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Dmitry Sokolov <dima@motorola.com>
+SLTApproved: Dmitry Sokolov <dima@motorola.com>
+Submit-Approved: Dmitry Sokolov <dima@motorola.com>
+(cherry picked from commit d5c1816090751a54db0710da73146ecd5fe16ffb)
+---
+ defconfig.mk | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/defconfig.mk b/defconfig.mk
+index 77cc0911018..7771f62d70e 100644
+--- a/defconfig.mk
++++ b/defconfig.mk
+@@ -6,10 +6,12 @@ KERNEL_DEBUG_DEFCONFIG          := $(LJAPDEFCONFIGSRC)/debug-$(subst _defconfig,
+ 
+ # add debug config file for non-user build
+ ifneq ($(TARGET_BUILD_VARIANT), user)
++ifneq ($(TARGET_NO_KERNEL_DEBUG), true)
+ ifneq ($(wildcard $(KERNEL_DEBUG_DEFCONFIG)),)
+ PRODUCT_SPECIFIC_DEFCONFIGS += $(KERNEL_DEBUG_DEFCONFIG)
+ endif
+ endif
++endif
+ 
+ # append all additional configs
+ ifneq ($(KERNEL_EXTRA_CONFIG),)
+-- 
+2.11.0
+

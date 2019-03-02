@@ -1,0 +1,111 @@
+From 05120871c429f49be5b38b7c2b41b1ece91a3d3a Mon Sep 17 00:00:00 2001
+From: Eric Dumazet <edumazet@google.com>
+Date: Wed, 27 Aug 2014 20:49:34 -0700
+Subject: [PATCH 764/959] net: attempt a single high order allocation
+
+In commit ed98df3361f0 ("net: use __GFP_NORETRY for high order
+allocations") we tried to address one issue caused by order-3
+allocations.
+
+We still observe high latencies and system overhead in situations where
+compaction is not successful.
+
+Instead of trying order-3, order-2, and order-1, do a single order-3
+best effort and immediately fallback to plain order-0.
+
+This mimics slub strategy to fallback to slab min order if the high
+order allocation used for performance failed.
+
+Order-3 allocations give a performance boost only if they can be done
+without recurring and expensive memory scan.
+
+Quoting David :
+
+The page allocator relies on synchronous (sync light) memory compaction
+after direct reclaim for allocations that don't retry and deferred
+compaction doesn't work with this strategy because the allocation order
+is always decreasing from the previous failed attempt.
+
+This means sync light compaction will always be encountered if memory
+cannot be defragmented or reclaimed several times during the
+skb_page_frag_refill() iteration.
+
+Signed-off-by: Eric Dumazet <edumazet@google.com>
+Acked-by: David Rientjes <rientjes@google.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+(cherry picked from commit d9b2938aabf757da2d40153489b251d4fc3fdd18)
+Change-Id: I6eed10e921e0c452ff1b44364edbc0763fc05643
+Reviewed-on: http://gerrit.mot.com/750529
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830465
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ net/core/sock.c | 30 ++++++++++++++++--------------
+ 1 file changed, 16 insertions(+), 14 deletions(-)
+
+diff --git a/net/core/sock.c b/net/core/sock.c
+index 81b45f2fbf5..fed17669a70 100644
+--- a/net/core/sock.c
++++ b/net/core/sock.c
+@@ -1807,6 +1807,9 @@ struct sk_buff *sock_alloc_send_pskb(struct sock *sk, unsigned long header_len,
+ 							   order);
+ 					if (page)
+ 						goto fill_page;
++					/* Do not retry other high order allocations */
++					order = 1;
++					max_page_order = 0;
+ 				}
+ 				order--;
+ 			}
+@@ -1854,10 +1857,8 @@ EXPORT_SYMBOL(sock_alloc_send_skb);
+  * no guarantee that allocations succeed. Therefore, @sz MUST be
+  * less or equal than PAGE_SIZE.
+  */
+-bool skb_page_frag_refill(unsigned int sz, struct page_frag *pfrag, gfp_t prio)
++bool skb_page_frag_refill(unsigned int sz, struct page_frag *pfrag, gfp_t gfp)
+ {
+-	int order;
+-
+ 	if (pfrag->page) {
+ 		if (atomic_read(&pfrag->page->_count) == 1) {
+ 			pfrag->offset = 0;
+@@ -1868,20 +1869,21 @@ bool skb_page_frag_refill(unsigned int sz, struct page_frag *pfrag, gfp_t prio)
+ 		put_page(pfrag->page);
+ 	}
+ 
+-	order = SKB_FRAG_PAGE_ORDER;
+-	do {
+-		gfp_t gfp = prio;
+-
+-		if (order)
+-			gfp |= __GFP_COMP | __GFP_NOWARN | __GFP_NORETRY;
+-		pfrag->page = alloc_pages(gfp, order);
++	pfrag->offset = 0;
++	if (SKB_FRAG_PAGE_ORDER) {
++		pfrag->page = alloc_pages(gfp | __GFP_COMP |
++					  __GFP_NOWARN | __GFP_NORETRY,
++					  SKB_FRAG_PAGE_ORDER);
+ 		if (likely(pfrag->page)) {
+-			pfrag->offset = 0;
+-			pfrag->size = PAGE_SIZE << order;
++			pfrag->size = PAGE_SIZE << SKB_FRAG_PAGE_ORDER;
+ 			return true;
+ 		}
+-	} while (--order >= 0);
+-
++	}
++	pfrag->page = alloc_page(gfp);
++	if (likely(pfrag->page)) {
++		pfrag->size = PAGE_SIZE;
++		return true;
++	}
+ 	return false;
+ }
+ EXPORT_SYMBOL(skb_page_frag_refill);
+-- 
+2.11.0
+

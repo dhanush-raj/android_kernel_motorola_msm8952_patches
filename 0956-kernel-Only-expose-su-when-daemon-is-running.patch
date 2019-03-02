@@ -1,0 +1,280 @@
+From a905ce6cfa9264e7f287fd224332aa82177157ff Mon Sep 17 00:00:00 2001
+From: Tom Marshall <tdm.code@gmail.com>
+Date: Wed, 25 Jan 2017 18:01:03 +0100
+Subject: [PATCH 956/959] kernel: Only expose su when daemon is running
+
+It has been claimed that the PG implementation of 'su' has security
+vulnerabilities even when disabled.  Unfortunately, the people that
+find these vulnerabilities often like to keep them private so they
+can profit from exploits while leaving users exposed to malicious
+hackers.
+
+In order to reduce the attack surface for vulnerabilites, it is
+therefore necessary to make 'su' completely inaccessible when it
+is not in use (except by the root and system users).
+
+Change-Id: I79716c72f74d0b7af34ec3a8054896c6559a181d
+
+kernel: Fix potential refcount leak in su check
+
+Change-Id: I7e1ecb78bfc951bf645a1462988dcd93c4247a9b
+
+fs: readdir: Fix su hide patch for non-iterate filesystems
+
+* 3.10 doesn't normally use iterate for filesystems,
+  but it was backported in hopes of removing vfs_readdir()
+* Because the romnt variable was only set for filesystems
+  using iterate, the su hide patches were broken for many
+  filesytems like ext4, which still use vfs_readdir()
+  instead of iterate_dir() like their mainline counterparts
+* Remove the iterate check around setting romnt to fix this
+
+Change-Id: I26426683df0fd199a80f053294f352e31754bec5
+---
+ fs/exec.c              |  5 +++++
+ fs/namei.c             | 10 ++++++++++
+ fs/readdir.c           | 15 +++++++++++++++
+ include/linux/dcache.h |  7 +++++++
+ include/linux/fs.h     |  1 +
+ include/linux/sched.h  |  8 ++++++++
+ include/linux/uidgid.h |  3 +++
+ kernel/exit.c          |  4 ++++
+ kernel/fork.c          |  2 ++
+ kernel/sched/core.c    | 32 ++++++++++++++++++++++++++++++++
+ 10 files changed, 87 insertions(+)
+
+diff --git a/fs/exec.c b/fs/exec.c
+index 35b735d99f2..8e1b8f02dc5 100644
+--- a/fs/exec.c
++++ b/fs/exec.c
+@@ -1575,6 +1575,11 @@ static int do_execve_common(const char *filename,
+ 	if (retval < 0)
+ 		goto out;
+ 
++	if (d_is_su(file->f_dentry) && capable(CAP_SYS_ADMIN)) {
++		current->flags |= PF_SU;
++		su_exec();
++	}
++
+ 	/* execve succeeded */
+ 	current->fs->in_exec = 0;
+ 	current->in_execve = 0;
+diff --git a/fs/namei.c b/fs/namei.c
+index 6e61ab9e8ca..9e73170b4cc 100644
+--- a/fs/namei.c
++++ b/fs/namei.c
+@@ -2001,6 +2001,16 @@ static int path_lookupat(int dfd, const char *name,
+ 		}
+ 	}
+ 
++	if (!err) {
++		struct super_block *sb = nd->inode->i_sb;
++		if (sb->s_flags & MS_RDONLY) {
++			if (d_is_su(nd->path.dentry) && !su_visible()) {
++				path_put(&nd->path);
++				err = -ENOENT;
++			}
++		}
++	}
++
+ 	if (base)
+ 		fput(base);
+ 
+diff --git a/fs/readdir.c b/fs/readdir.c
+index d46eca8567a..b22bbbfabee 100644
+--- a/fs/readdir.c
++++ b/fs/readdir.c
+@@ -37,6 +37,7 @@ int iterate_dir(struct file *file, struct dir_context *ctx)
+ 
+ 	res = -ENOENT;
+ 	if (!IS_DEADDIR(inode)) {
++		ctx->romnt = (inode->i_sb->s_flags & MS_RDONLY);
+ 		if (file->f_op->iterate) {
+ 			ctx->pos = file->f_pos;
+ 			res = file->f_op->iterate(file, ctx);
+@@ -53,6 +54,14 @@ out:
+ }
+ EXPORT_SYMBOL(iterate_dir);
+ 
++static bool hide_name(const char *name, int namlen)
++{
++	if (namlen == 2 && !memcmp(name, "su", 2))
++		if (!su_visible())
++			return true;
++	return false;
++}
++
+ /*
+  * Traditional linux readdir() handling..
+  *
+@@ -91,6 +100,8 @@ static int fillonedir(void * __buf, const char * name, int namlen, loff_t offset
+ 		buf->result = -EOVERFLOW;
+ 		return -EOVERFLOW;
+ 	}
++	if (hide_name(name, namlen) && buf->ctx.romnt)
++		return 0;
+ 	buf->result++;
+ 	dirent = buf->dirent;
+ 	if (!access_ok(VERIFY_WRITE, dirent,
+@@ -168,6 +179,8 @@ static int filldir(void * __buf, const char * name, int namlen, loff_t offset,
+ 		buf->error = -EOVERFLOW;
+ 		return -EOVERFLOW;
+ 	}
++	if (hide_name(name, namlen) && buf->ctx.romnt)
++		return 0;
+ 	dirent = buf->previous;
+ 	if (dirent) {
+ 		if (__put_user(offset, &dirent->d_off))
+@@ -246,6 +259,8 @@ static int filldir64(void * __buf, const char * name, int namlen, loff_t offset,
+ 	buf->error = -EINVAL;	/* only used if we fail.. */
+ 	if (reclen > buf->count)
+ 		return -EINVAL;
++	if (hide_name(name, namlen) && buf->ctx.romnt)
++		return 0;
+ 	dirent = buf->previous;
+ 	if (dirent) {
+ 		if (__put_user(offset, &dirent->d_off))
+diff --git a/include/linux/dcache.h b/include/linux/dcache.h
+index 7bd16b926d5..a660e2b1a28 100644
+--- a/include/linux/dcache.h
++++ b/include/linux/dcache.h
+@@ -411,6 +411,13 @@ static inline bool d_mountpoint(struct dentry *dentry)
+ 	return dentry->d_flags & DCACHE_MOUNTED;
+ }
+ 
++static inline bool d_is_su(const struct dentry *dentry)
++{
++	return dentry &&
++	       dentry->d_name.len == 2 &&
++	       !memcmp(dentry->d_name.name, "su", 2);
++}
++
+ extern int sysctl_vfs_cache_pressure;
+ 
+ #endif	/* __LINUX_DCACHE_H */
+diff --git a/include/linux/fs.h b/include/linux/fs.h
+index cc48e8be92c..f14d780d814 100644
+--- a/include/linux/fs.h
++++ b/include/linux/fs.h
+@@ -1511,6 +1511,7 @@ typedef int (*filldir_t)(void *, const char *, int, loff_t, u64, unsigned);
+ struct dir_context {
+ 	const filldir_t actor;
+ 	loff_t pos;
++	bool romnt;
+ };
+ 
+ static inline bool dir_emit(struct dir_context *ctx,
+diff --git a/include/linux/sched.h b/include/linux/sched.h
+index 6e4bac065bd..ec58a9dd902 100644
+--- a/include/linux/sched.h
++++ b/include/linux/sched.h
+@@ -56,6 +56,12 @@ struct sched_param {
+ 
+ #include <asm/processor.h>
+ 
++int  su_instances(void);
++bool su_running(void);
++bool su_visible(void);
++void su_exec(void);
++void su_exit(void);
++
+ #define SCHED_ATTR_SIZE_VER0	48	/* sizeof first published struct */
+ 
+ /*
+@@ -1862,6 +1868,8 @@ static inline void sched_set_io_is_busy(int val) {};
+ #define PF_FREEZER_SKIP	0x40000000	/* Freezer should not count it as freezable */
+ #define PF_WAKE_UP_IDLE 0x80000000	/* try to wake up on an idle CPU */
+ 
++#define PF_SU		0x00000002      /* task is su */
++
+ /*
+  * Only the _current_ task can read/write to tsk->flags, but other
+  * tasks can access tsk->flags in readonly mode for example
+diff --git a/include/linux/uidgid.h b/include/linux/uidgid.h
+index 8e522cbcef2..cb4c867a523 100644
+--- a/include/linux/uidgid.h
++++ b/include/linux/uidgid.h
+@@ -64,6 +64,9 @@ static inline gid_t __kgid_val(kgid_t gid)
+ #define GLOBAL_ROOT_UID KUIDT_INIT(0)
+ #define GLOBAL_ROOT_GID KGIDT_INIT(0)
+ 
++#define GLOBAL_SYSTEM_UID KUIDT_INIT(1000)
++#define GLOBAL_SYSTEM_GID KGIDT_INIT(1000)
++
+ #define INVALID_UID KUIDT_INIT(-1)
+ #define INVALID_GID KGIDT_INIT(-1)
+ 
+diff --git a/kernel/exit.c b/kernel/exit.c
+index 0098a214518..a8fd5572cac 100644
+--- a/kernel/exit.c
++++ b/kernel/exit.c
+@@ -778,6 +778,10 @@ void do_exit(long code)
+ 
+ 	sched_exit(tsk);
+ 
++	if (tsk->flags & PF_SU) {
++		su_exit();
++	}
++
+ 	/*
+ 	 * tsk->flags are checked in the futex code to protect against
+ 	 * an exiting task cleaning up the robust pi futexes.
+diff --git a/kernel/fork.c b/kernel/fork.c
+index 73b283bbf65..066632ce4de 100644
+--- a/kernel/fork.c
++++ b/kernel/fork.c
+@@ -326,6 +326,8 @@ static struct task_struct *dup_task_struct(struct task_struct *orig)
+ 	if (err)
+ 		goto free_ti;
+ 
++	tsk->flags &= ~PF_SU;
++
+ 	tsk->stack = ti;
+ #ifdef CONFIG_SECCOMP
+ 	/*
+diff --git a/kernel/sched/core.c b/kernel/sched/core.c
+index dd85ef023ed..abe2d259bb5 100644
+--- a/kernel/sched/core.c
++++ b/kernel/sched/core.c
+@@ -115,6 +115,38 @@ do {							\
+ 	local_irq_restore(dflags);			\
+ } while (0)
+ 
++static atomic_t __su_instances;
++
++int su_instances(void)
++{
++	return atomic_read(&__su_instances);
++}
++
++bool su_running(void)
++{
++	return su_instances() > 0;
++}
++
++bool su_visible(void)
++{
++	kuid_t uid = current_uid();
++	if (su_running())
++		return true;
++	if (uid_eq(uid, GLOBAL_ROOT_UID) || uid_eq(uid, GLOBAL_SYSTEM_UID))
++		return true;
++	return false;
++}
++
++void su_exec(void)
++{
++	atomic_inc(&__su_instances);
++}
++
++void su_exit(void)
++{
++	atomic_dec(&__su_instances);
++}
++
+ const char *task_event_names[] = {"PUT_PREV_TASK", "PICK_NEXT_TASK",
+ 				  "TASK_WAKE", "TASK_MIGRATE", "TASK_UPDATE",
+ 				"IRQ_UPDATE"};
+-- 
+2.11.0
+

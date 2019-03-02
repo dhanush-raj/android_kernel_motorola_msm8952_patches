@@ -1,0 +1,45 @@
+From cb0883bef027d85c4245d0f5b02d2cd1b2c36879 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Mon, 28 Sep 2015 09:44:20 -0500
+Subject: [PATCH 309/959] power: qpnp-smbcharger-mmi: Prevent Divide by 0
+
+If the FG driver is not loaded then 0 values
+could be used for the AGE calculation. This
+would end up as a divide by 0 so prevent that
+by initializing the values to non-zero.
+
+Change-Id: I6068699613f6f7a522bfc2c4e81b6ceb66558325
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index eac4e16db2c..056eb63d5f4 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -1103,6 +1103,10 @@ static int get_prop_charge_full(struct smbchg_chip *chip)
+ 		pr_smb(PR_STATUS, "Couldn't get charge full rc = %d\n", rc);
+ 		uah = DEFAULT_CHARGE_FULL;
+ 	}
++
++	if (uah == 0)
++		uah = DEFAULT_CHARGE_FULL;
++
+ 	return uah;
+ }
+ 
+@@ -1117,6 +1121,10 @@ static int get_prop_charge_full_design(struct smbchg_chip *chip)
+ 		pr_smb(PR_STATUS, "Couldn't get full design rc = %d\n", rc);
+ 		uah = DEFAULT_CHARGE_FULL_DESIGN;
+ 	}
++
++	if (uah == 0)
++		uah = DEFAULT_CHARGE_FULL_DESIGN;
++
+ 	return uah;
+ }
+ 
+-- 
+2.11.0
+

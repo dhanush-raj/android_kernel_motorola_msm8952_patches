@@ -1,0 +1,40 @@
+From becc3be8262d398417e9af629b1f95a1a58cf02a Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Thu, 21 Aug 2014 12:19:11 -0500
+Subject: [PATCH 066/959] IKLOCSEN-1632 drivers: misc: stml0xx: Set LED control
+ defaults
+
+Set a default LED on time so that setting just the brightness
+will result in the LED being on. This is required for factory test.
+
+Change-Id: I9b3cd000347789f567091c47197a20942d9900e1
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/665037
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+SLTApproved: Mary Hor-Lao <maryhorlao@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_led.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_led.c b/drivers/misc/stml0xx/stml0xx_led.c
+index df465c0658c..0f2e08069ea 100644
+--- a/drivers/misc/stml0xx/stml0xx_led.c
++++ b/drivers/misc/stml0xx/stml0xx_led.c
+@@ -70,7 +70,11 @@ static ssize_t notification_store_control(struct device *dev,
+ 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+ 	struct stml0xx_data *ps_stml0xx =
+ 		container_of(led_cdev, struct stml0xx_data, led_cdev);
+-	unsigned rgb = 0, ms_on = 0, ms_off = 0, rup = 0, rdown = 0;
++	unsigned rgb = 0;
++	unsigned ms_on = 1000;
++	unsigned ms_off = 0;
++	unsigned rup = 0;
++	unsigned rdown = 0;
+ 
+ 	if (len == 0)
+ 		return 0;
+-- 
+2.11.0
+

@@ -1,0 +1,47 @@
+From 88b8122e31621db7e97e29ef44fde147665301c6 Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Fri, 14 Oct 2016 10:21:18 +0800
+Subject: [PATCH 934/959] IKSWN-5610: cpufreq: Avoid hardcoding device tree
+ paths for CPU
+
+Hardcoded devicetree paths don't work well with multi cluster cpus.
+Instead get the device node associated with each logical CPU.
+
+Change-Id: I755b8c2ebabef04e71b9f566eb6607ad7255e583
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/802251
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravi Chebolu <arc095@motorola.com>
+Reviewed-on: https://gerrit.mot.com/908905
+---
+ drivers/cpufreq/cpufreq_stats.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/drivers/cpufreq/cpufreq_stats.c b/drivers/cpufreq/cpufreq_stats.c
+index d4587eeb476..90cdb7aa4c0 100644
+--- a/drivers/cpufreq/cpufreq_stats.c
++++ b/drivers/cpufreq/cpufreq_stats.c
+@@ -440,7 +440,6 @@ static void cpufreq_powerstats_create(unsigned int cpu,
+ 	unsigned int alloc_size, i = 0, j = 0, ret = 0;
+ 	struct cpufreq_power_stats *powerstats;
+ 	struct device_node *cpu_node;
+-	char device_path[16];
+ 
+ 	powerstats = kzalloc(sizeof(struct cpufreq_power_stats),
+ 			GFP_KERNEL);
+@@ -468,8 +467,7 @@ static void cpufreq_powerstats_create(unsigned int cpu,
+ 	}
+ 	powerstats->state_num = j;
+ 
+-	snprintf(device_path, sizeof(device_path), "/cpus/cpu@%d", cpu);
+-	cpu_node = of_find_node_by_path(device_path);
++	cpu_node = of_get_cpu_node(cpu, NULL);
+ 	if (cpu_node) {
+ 		ret = of_property_read_u32_array(cpu_node, "current",
+ 				powerstats->curr, count);
+-- 
+2.11.0
+

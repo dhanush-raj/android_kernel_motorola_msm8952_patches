@@ -1,0 +1,62 @@
+From 90be8c2a9ad6c11dde5821c701b854a6d06d0e8d Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Fri, 16 Oct 2015 12:27:03 -0500
+Subject: [PATCH 375/959] IKLOCSEN-2367 drivers/misc: stml0xx: Add gyro data
+
+Check the gyro data ready flag from the sensor hub and
+pass the data to the Sensor HAL if the flag is set.
+
+Change-Id: I2d45ede52df72f39338999265b41af0f8387bdd8
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/792131
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Yi-Wei Zhao <gbjc64@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_irq.c | 14 ++++++++++++++
+ include/linux/stml0xx.h            |  1 +
+ 2 files changed, 15 insertions(+)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_irq.c b/drivers/misc/stml0xx/stml0xx_irq.c
+index d99aaa5133a..77fbe4ab6b6 100644
+--- a/drivers/misc/stml0xx/stml0xx_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_irq.c
+@@ -155,6 +155,20 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 			STM16_TO_HOST(ACCEL_RD_Y, &buf[IRQ_IDX_ACCEL2]),
+ 			STM16_TO_HOST(ACCEL_RD_Z, &buf[IRQ_IDX_ACCEL2]));
+ 	}
++	if (irq_status & M_GYRO) {
++		stml0xx_as_data_buffer_write(ps_stml0xx,
++			DT_GYRO,
++			&buf[IRQ_IDX_GYRO],
++			6,
++			0,
++			stm_ws->ts_ns);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Sending gyro(x,y,z)values:x=%d,y=%d,z=%d",
++			STM16_TO_HOST(ACCEL_RD_X, &buf[IRQ_IDX_ACCEL2]),
++			STM16_TO_HOST(ACCEL_RD_Y, &buf[IRQ_IDX_ACCEL2]),
++			STM16_TO_HOST(ACCEL_RD_Z, &buf[IRQ_IDX_ACCEL2]));
++	}
+ 	if (irq_status & M_ALS) {
+ 		stml0xx_as_data_buffer_write(
+ 			ps_stml0xx,
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 2d0d6171c8a..ac509eb51f9 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -105,6 +105,7 @@ enum vmm_ids {
+ #define IRQ_IDX_STATUS_HI         2
+ #define IRQ_IDX_ACCEL1            3
+ #define IRQ_IDX_ACCEL2           36
++#define IRQ_IDX_GYRO             36
+ #define IRQ_IDX_ALS              42
+ #define IRQ_IDX_DISP_ROTATE      44
+ #define IRQ_IDX_DISP_BRIGHTNESS  45
+-- 
+2.11.0
+

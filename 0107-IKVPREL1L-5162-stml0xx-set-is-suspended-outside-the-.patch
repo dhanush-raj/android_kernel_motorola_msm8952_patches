@@ -1,0 +1,51 @@
+From d92667d82103870f622d4066cad4167afba01622 Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Fri, 12 Dec 2014 13:17:42 -0600
+Subject: [PATCH 107/959] IKVPREL1L-5162 stml0xx: set is suspended outside the
+ mutex
+
+Set is suspended outside of the mutex so that irq
+handlers can be notified to finish the current work
+and stop.
+
+Change-Id: Ib10c540910b8716c4699c92bb001229283e87da4
+Signed-off-by: Dan Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/697505
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index db16b6fa628..f501664f404 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -1105,6 +1105,7 @@ static int stml0xx_resume(struct device *dev)
+ 
+ 	mutex_lock(&ps_stml0xx->lock);
+ 	ps_stml0xx->is_suspended = false;
++	enable_irq(ps_stml0xx->irq);
+ 
+ 	if (ps_stml0xx->pending_wake_work) {
+ 		stm_ws = kmalloc(
+@@ -1136,9 +1137,11 @@ static int stml0xx_suspend(struct device *dev)
+ 	struct stml0xx_data *ps_stml0xx = spi_get_drvdata(to_spi_device(dev));
+ 	dev_dbg(&stml0xx_misc_data->spi->dev, "%s", __func__);
+ 
+-	mutex_lock(&ps_stml0xx->lock);
++	disable_irq(ps_stml0xx->irq);
+ 	ps_stml0xx->is_suspended = true;
+ 
++	/* wait for irq handlers to finish */
++	mutex_lock(&ps_stml0xx->lock);
+ 	mutex_unlock(&ps_stml0xx->lock);
+ 
+ 	return 0;
+-- 
+2.11.0
+

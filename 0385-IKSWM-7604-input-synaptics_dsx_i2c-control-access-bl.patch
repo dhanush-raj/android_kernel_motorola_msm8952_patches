@@ -1,0 +1,819 @@
+From 1b404bdb03dbf62e478215cb6d0f0915abd4a0ab Mon Sep 17 00:00:00 2001
+From: Konstantin Makariev <kmakariev@motorola.com>
+Date: Thu, 3 Sep 2015 17:03:24 -0500
+Subject: [PATCH 385/959] IKSWM-7604 input: synaptics_dsx_i2c: control access
+ block code
+
+This commit adds a new feature called "control access block" to Synaptics
+DSX driver. Feature is enabled with config option
+TOUCHSCREEN_SYNAPTICS_DSX_CTRL_ACCESS_BLK.
+
+PROPAGATED_from: IKSWL-36893
+
+Change-Id: Ib84295419764db54d571b25ca17537cc174d3404
+Signed-off-by: Konstantin Makariev <kmakariev@motorola.com>
+---
+ drivers/input/touchscreen/Kconfig                  |  15 +
+ drivers/input/touchscreen/Makefile                 |   1 +
+ .../synaptics_dsx_control_access_block.c           | 443 +++++++++++++++++++++
+ .../synaptics_dsx_control_access_block.h           | 111 ++++++
+ drivers/input/touchscreen/synaptics_dsx_i2c.c      | 134 +++++++
+ drivers/input/touchscreen/synaptics_dsx_i2c.h      |   1 +
+ 6 files changed, 705 insertions(+)
+ create mode 100644 drivers/input/touchscreen/synaptics_dsx_control_access_block.c
+ create mode 100644 drivers/input/touchscreen/synaptics_dsx_control_access_block.h
+
+diff --git a/drivers/input/touchscreen/Kconfig b/drivers/input/touchscreen/Kconfig
+index 5a918ea6ed4..4f0d5a6cbd6 100644
+--- a/drivers/input/touchscreen/Kconfig
++++ b/drivers/input/touchscreen/Kconfig
+@@ -1106,4 +1106,19 @@ config TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_MMI
+ 	  This enables support for firmware update for Synaptics DSX
+ 	  touchscreens via the MMI design.
+ 
++config TOUCHSCREEN_SYNAPTICS_DSX_CTRL_ACCESS_BLK
++	tristate "Synaptics I2C touchscreen control access block"
++	depends on TOUCHSCREEN_SYNAPTICS_DSX_I2C
++	help
++	  This enables export of Synaptics DSX I2C touchscreen control access
++          block.
++
++	  Say Y here if you intend to export Synaptics DSX I2C touchscreen
++	  control access block.
++
++	  If unsure, say N.
++
++	  To compile this driver as a module, choose M here: the
++	  module will be called synaptics_dsx_control_access_block
++
+ endif
+diff --git a/drivers/input/touchscreen/Makefile b/drivers/input/touchscreen/Makefile
+index 4bb2f503e27..578b057bb77 100644
+--- a/drivers/input/touchscreen/Makefile
++++ b/drivers/input/touchscreen/Makefile
+@@ -87,3 +87,4 @@ obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_I2C) += synaptics_dsx_i2c.o
+ obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_RMI_DEV_MMI) += synaptics_dsx_rmi_dev.o
+ obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_TEST_REPORTING) += synaptics_dsx_test_reporting.o
+ obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_MMI) += synaptics_dsx_fw_update.o
++obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CTRL_ACCESS_BLK) += synaptics_dsx_control_access_block.o
+diff --git a/drivers/input/touchscreen/synaptics_dsx_control_access_block.c b/drivers/input/touchscreen/synaptics_dsx_control_access_block.c
+new file mode 100644
+index 00000000000..79b0a7aa716
+--- /dev/null
++++ b/drivers/input/touchscreen/synaptics_dsx_control_access_block.c
+@@ -0,0 +1,443 @@
++/*
++ * Synaptics DSX touchscreen driver extension
++ *
++ * Copyright (C) 2015 Motorola Mobility, Inc.
++ *
++ * Copyright (C) 2015 Konstantin Makariev <kmakariev@motorola.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++#define pr_fmt(fmt) "synaptics-CAB: %s: " fmt, __func__
++
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include "synaptics_dsx_i2c.h"
++#include "synaptics_dsx_control_access_block.h"
++
++#define cab_debug pr_debug
++
++static struct touch_control_access_block *control_access_block;
++
++struct touch_control_access_block *control_access_block_get(void) {
++	return control_access_block;
++}
++EXPORT_SYMBOL_GPL(control_access_block_get);
++
++#define GROUP_NAME(grp) (grp == SYN_DSX_STATUS ? "STATUS" : \
++			(grp == SYN_DSX_DATA ? "DATA" : \
++			(grp == SYN_DSX_MODE ? "MODE" : \
++			(grp == SYN_DSX_WAKE ? "WAKE" : \
++			(grp == SYN_DSX_SLEEP ? "SLEEP" : \
++			(grp == SYN_DSX_RESET ? "RESET" : "CONFIG"))))))
++
++#define DIR_NAME(grp) (grp & MODE_WO ? "WO" : "RO")
++
++#define SPRINTF_PAGE(fmt, args...) {\
++		blen += scnprintf(buf + blen, PAGE_SIZE - blen, fmt, ##args);\
++	}
++
++static ssize_t control_access_block_show(struct device *dev,
++		struct device_attribute *attr, char *buf)
++{
++	int i, j, k, m;
++	ssize_t blen = 0;
++	struct touch_control_access_block *cab = control_access_block_get();
++
++	if (cab->do_sync)
++		SPRINTF_PAGE("has been changed, ");
++	SPRINTF_PAGE("has %d groups\n", cab->grp_num);
++
++	for (i = 0; i < cab->grp_num; i++) {
++		struct grp_info *ginfo = cab->grp_ptr[i];
++		/* skip empty slots */
++		if (!ginfo)
++			continue;
++		SPRINTF_PAGE("group [%s] access %s has %d data blocks\n",
++			GROUP_NAME(ginfo->group),
++			DIR_NAME(ginfo->group),
++			ginfo->data_blk_cnt);
++			for (m = 0; m < ginfo->data_blk_cnt; m++) {
++				SPRINTF_PAGE("\tdata block %d:\n", m);
++				if (ginfo->group & MODE_WO) {
++					struct op_write *wo = ginfo->wo_data[m];
++					SPRINTF_PAGE("\t\tpage:%d, addr:0x%X, blk_sz:%d, blk_cnt:%d, mask:0x%x\n",
++						wo->paddr >> 8, wo->paddr & 0xff,
++						wo->blk_sz, wo->blk_cnt, wo->mask);
++					SPRINTF_PAGE("\t\tdata: ");
++					for (j = 0; j < wo->blk_cnt; j++) {
++						unsigned char *data = &wo->data[j];
++						SPRINTF_PAGE("[%d] ", j);
++						for (k = 0; k < wo->blk_sz; k++)
++							SPRINTF_PAGE("0x%X ", *(data + k));
++						SPRINTF_PAGE("\n");
++					}
++				} else {
++					struct op_read *ro = ginfo->ro_data[m];
++					SPRINTF_PAGE("\t\tpage:%d, addr:0x%X, blk_sz:%d, blk_cnt:%d\n",
++						ro->paddr >> 8, ro->paddr & 0xff,
++						ro->blk_sz, ro->blk_cnt);
++				}
++			}
++	}
++
++	cab->do_sync = false;
++	cab_debug("clear do_sync flag\n");
++
++	return blen;
++}
++
++static struct op_write *alloc_op_write(unsigned short paddr,
++	unsigned char blk_sz, unsigned char blk_cnt,
++	unsigned char mask, unsigned char *data)
++{
++	int i;
++	struct op_write *wo;
++	wo = kzalloc(sizeof(struct op_write) + blk_sz, GFP_KERNEL);
++	if (!wo)
++		return NULL;
++	wo->paddr = paddr;
++	wo->blk_sz = blk_sz;
++	wo->blk_cnt = blk_cnt;
++	wo->mask = mask;
++	for (i = 0; i < blk_sz; i++)
++		wo->data[i] = *data++;
++	cab_debug("added WO block: addr={%X}, sz=%u, cnt=%u\n", paddr, blk_sz, blk_cnt);
++	return wo;
++}
++
++static struct op_read *alloc_op_read(unsigned short paddr,
++	unsigned char blk_sz, unsigned char blk_cnt)
++{
++	struct op_read *ro;
++	ro = kzalloc(sizeof(struct op_read), GFP_KERNEL);
++	if (!ro)
++		return NULL;
++	ro->paddr = paddr;
++	ro->blk_sz = blk_sz;
++	ro->blk_cnt = blk_cnt;
++	cab_debug("added RO block: addr={%X}, sz=%u, cnt=%u\n", paddr, blk_sz, blk_cnt);
++	return ro;
++}
++
++/* create a new group and add one or more entities */
++static struct grp_info *alloc_grp_info(unsigned char group,
++	unsigned char data_blk_cnt, ...)
++{
++	int i;
++	va_list ap;
++	struct grp_info *gi;
++	gi = kzalloc(sizeof(struct grp_info), GFP_KERNEL);
++	if (!gi)
++		return NULL;
++	gi->group = group;
++	gi->data_blk_cnt = data_blk_cnt;
++	va_start(ap, data_blk_cnt);
++	if (group & MODE_WO) {
++		struct op_write *data;
++		gi->wo_data = (struct op_write **)kzalloc(
++					sizeof(struct op_write *)*data_blk_cnt,
++					GFP_KERNEL);
++		if (!gi->wo_data)
++			goto alloc_failure;
++		for (i = 0; i < data_blk_cnt; i++) {
++			data = va_arg(ap, struct op_write *);
++			gi->wo_data[i] = data;
++		}
++	} else {
++		struct op_read *data;
++		gi->ro_data = (struct op_read **)kzalloc(
++					sizeof(struct op_read *)*data_blk_cnt,
++					GFP_KERNEL);
++		if (!gi->ro_data)
++			goto alloc_failure;
++		for (i = 0; i < data_blk_cnt; i++) {
++			data = va_arg(ap, struct op_read *);
++			gi->ro_data[i] = data;
++		}
++	}
++	goto success;
++alloc_failure:
++	gi->data_blk_cnt = 0;
++success:
++	cab_debug("created group [%s] access %s has %d data block(s)\n",
++		GROUP_NAME(gi->group), DIR_NAME(gi->group), gi->data_blk_cnt);
++	va_end(ap);
++	return gi;
++}
++
++/* add one or more entities to existing group */
++static int modify_grp_info(struct grp_info *gi,
++	unsigned char data_blk_cnt, ...)
++{
++	int i, retval = 0;
++	int new_max = gi->data_blk_cnt + data_blk_cnt;
++	va_list ap;
++
++	va_start(ap, data_blk_cnt);
++	if (gi->group & MODE_WO) {
++		struct op_write **realloc, *append;
++		realloc = (struct op_write **)kzalloc(sizeof(struct op_write *)*
++					(gi->data_blk_cnt + data_blk_cnt),
++					GFP_KERNEL);
++		if (!realloc) {
++			retval = -ENOMEM;
++			goto alloc_failure;
++		}
++		for (i = 0; i < new_max; i++) {
++			if (i < gi->data_blk_cnt) {
++				realloc[i] = gi->wo_data[i];
++			}else {
++				append = va_arg(ap, struct op_write *);
++				realloc[i] = append;
++			}
++		}
++		kfree(gi->wo_data);
++		gi->wo_data = realloc;
++	} else {
++		struct op_read **realloc, *append;
++		realloc = (struct op_read **)kzalloc(sizeof(struct op_read *)*
++					(gi->data_blk_cnt + data_blk_cnt),
++					GFP_KERNEL);
++		if (!realloc) {
++			retval = -ENOMEM;
++			goto alloc_failure;
++		}
++		for (i = 0; i < new_max; i++) {
++			if (i < gi->data_blk_cnt) {
++				realloc[i] = gi->ro_data[i];
++			}else {
++				append = va_arg(ap, struct op_read *);
++				realloc[i] = append;
++			}
++		}
++		kfree(gi->ro_data);
++		gi->ro_data = realloc;
++	}
++	gi->data_blk_cnt += data_blk_cnt;
++	cab_debug("modified group:[%s] access:%s has %d data blocks\n",
++		GROUP_NAME(gi->group), DIR_NAME(gi->group), gi->data_blk_cnt);
++alloc_failure:
++	va_end(ap);
++	return retval;
++}
++
++void control_access_block_zap(unsigned char gid)
++{
++	struct touch_control_access_block *cab = control_access_block_get();
++	struct grp_info **grp_ptr = NULL;
++	int i, idx = 0;
++
++	for (i = 0; i < cab->grp_num; i++) {
++		if (cab->grp_ptr[i] && cab->grp_ptr[i]->group == gid) {
++			idx = i;
++			grp_ptr = &cab->grp_ptr[idx];
++			break;
++		}
++	}
++
++	if (!grp_ptr)
++		return;
++
++	/* clean up data and make slot available */
++	if ((*grp_ptr)->group & MODE_WO) {
++		struct op_write *data;
++		for (i = 0; i < (*grp_ptr)->data_blk_cnt; i++) {
++			data = (*grp_ptr)->wo_data[i];
++			kfree(data);
++		}
++		kfree((*grp_ptr)->wo_data);
++	} else {
++		struct op_read *data;
++		for (i = 0; i < (*grp_ptr)->data_blk_cnt; i++) {
++			data = (*grp_ptr)->ro_data[i];
++			kfree(data);
++		}
++		kfree((*grp_ptr)->ro_data);
++	}
++
++	kfree(*grp_ptr);
++	*grp_ptr = NULL;
++
++	cab_debug("group [%s] idx %d removed %d record(s)\n", GROUP_NAME(gid), idx, i);
++}
++
++static struct grp_info **find_group(unsigned char gid)
++{
++	struct touch_control_access_block *cab = control_access_block_get();
++	struct grp_info **grp_ptr = NULL;
++	int i;
++
++	for (i = 0; i < cab->grp_num; i++) {
++		if (cab->grp_ptr[i] && cab->grp_ptr[i]->group &&
++			cab->grp_ptr[i]->group != gid)
++			continue;
++		/* match or empty slot */
++		grp_ptr = &cab->grp_ptr[i];
++		break;
++	}
++	cab_debug("idx %d %s\n", i, *grp_ptr ? "existing" : "new");
++	return grp_ptr;
++}
++
++static int add_tail(struct grp_info **grp, unsigned char gid, void *io_data)
++{
++	int retval = 0;
++
++	if (!*grp) {
++		struct grp_info *new;
++
++		new = alloc_grp_info(gid, 1, (void *)io_data);
++		if (!new) {
++			retval = -ENOMEM;
++			goto alloc_failure;
++		}
++		*grp = new;
++		cab_debug("created new %s group\n", DIR_NAME((*grp)->group));
++	} else {
++		modify_grp_info(*grp, 1, (void *)io_data);
++		cab_debug("added %s block\n", DIR_NAME((*grp)->group));
++	}
++alloc_failure:
++	return retval;
++}
++
++int control_access_block_update_ro(
++	unsigned char gid,
++	unsigned short paddr,
++	unsigned char sz,
++	unsigned char cnt)
++{
++	struct op_read *ro = alloc_op_read(paddr, sz, cnt);
++	struct grp_info **grp = find_group(gid);
++	return !ro ? -1  : add_tail(grp, gid, (void *)ro);
++}
++
++int control_access_block_update_wo(
++	unsigned char gid,
++	unsigned short paddr,
++	unsigned char sz,
++	unsigned char mask,
++	unsigned char *data)
++{
++	struct op_write *wo = alloc_op_write(paddr, sz, 1, mask, data);
++	struct grp_info **grp = find_group(gid);
++	return !wo ? -1 : add_tail(grp, gid, (void *)wo);
++}
++
++static struct device_attribute attrs[] = {
++	__ATTR(control_access_block, S_IRUSR | S_IRGRP,
++			control_access_block_show, NULL),
++};
++
++static int synaptics_control_access_block_init(
++		struct synaptics_rmi4_data *rmi4_data)
++{
++	int retval, attr_count;
++
++	control_access_block = kzalloc(sizeof(*control_access_block), GFP_KERNEL);
++	if (!control_access_block) {
++		dev_err(&rmi4_data->i2c_client->dev,
++				"%s: Failed to alloc controll access block\n",
++				__func__);
++		goto exit;
++	}
++	control_access_block->grp_num = GROUP_MAX;
++
++	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
++		retval = sysfs_create_file(&rmi4_data->i2c_client->dev.kobj,
++				&attrs[attr_count].attr);
++		if (retval < 0) {
++			dev_err(&rmi4_data->i2c_client->dev,
++					"%s: Failed to create sysfs attributes\n",
++					__func__);
++			retval = -ENODEV;
++			goto exit_remove_attrs;
++		}
++	}
++
++	return 0;
++
++exit_remove_attrs:
++	for (attr_count--; attr_count >= 0; attr_count--) {
++		sysfs_remove_file(&rmi4_data->i2c_client->dev.kobj,
++				&attrs[attr_count].attr);
++	}
++exit:
++	return 0;
++}
++
++static struct completion remove_complete;
++
++static void synaptics_control_access_block_remove(
++		struct synaptics_rmi4_data *rmi4_data)
++{
++	int i, m, attr_count;
++
++	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
++		sysfs_remove_file(&rmi4_data->i2c_client->dev.kobj,
++				&attrs[attr_count].attr);
++	}
++
++	for (i = 0; i < control_access_block->grp_num; i++) {
++		struct grp_info *ginfo = control_access_block->grp_ptr[i];
++		void **ptr_to_free;
++
++		if (ginfo->group & MODE_WO)
++			ptr_to_free = (void **)ginfo->wo_data;
++		else
++			ptr_to_free = (void **)ginfo->ro_data;
++
++		for (m = 0; m < ginfo->data_blk_cnt; m++) {
++			if (ginfo->group & MODE_WO)
++				kfree(ginfo->wo_data[m]);
++			else
++				kfree(ginfo->ro_data[m]);
++		}
++		kfree(ptr_to_free);
++		kfree(ginfo);
++	}
++
++	kfree(control_access_block->grp_ptr);
++	kfree(control_access_block);
++	control_access_block = NULL;
++
++	complete(&remove_complete);
++
++	return;
++}
++
++static int __init synaptics_control_access_block_module_init(void)
++{
++	synaptics_rmi4_new_function(RMI_CTRL_ACCESS_BLK, true,
++			synaptics_control_access_block_init,
++			synaptics_control_access_block_remove,
++			NULL, IC_MODE_ANY);
++	return 0;
++}
++
++static void __exit synaptics_control_access_block_module_exit(void)
++{
++	init_completion(&remove_complete);
++	synaptics_rmi4_new_function(RMI_CTRL_ACCESS_BLK, false,
++			synaptics_control_access_block_init,
++			synaptics_control_access_block_remove,
++			NULL, IC_MODE_ANY);
++	wait_for_completion(&remove_complete);
++	return;
++}
++
++module_init(synaptics_control_access_block_module_init);
++module_exit(synaptics_control_access_block_module_exit);
++
++MODULE_AUTHOR("Motorola Mobility, Inc.");
++MODULE_DESCRIPTION("Synaptics DSX Touch Access Block Module");
++MODULE_LICENSE("GPL v2");
++MODULE_VERSION(SYNAPTICS_DSX_DRIVER_VERSION);
+diff --git a/drivers/input/touchscreen/synaptics_dsx_control_access_block.h b/drivers/input/touchscreen/synaptics_dsx_control_access_block.h
+new file mode 100644
+index 00000000000..a5cc8cafeeb
+--- /dev/null
++++ b/drivers/input/touchscreen/synaptics_dsx_control_access_block.h
+@@ -0,0 +1,111 @@
++/*
++ * Synaptics DSX touchscreen driver extension
++ *
++ * Copyright (C) 2015 Motorola Mobility, Inc.
++ *
++ * Copyright (C) 2015 Konstantin Makariev <kmakariev@motorola.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++#ifndef _SYNAPTICS_DSX_CONTROL_ACCESS_BLOCK_H_
++#define _SYNAPTICS_DSX_CONTROL_ACCESS_BLOCK_H_
++
++#define MODE_WO	(1 << 7)
++#define	GROUP_MAX 7
++
++enum access_groups {
++	SYN_DSX_STATUS = 1,	/* RO:mandatory, read status to clear IRQ */
++	SYN_DSX_MODE,	/* RO:mandatory, read touch IC mode */
++	SYN_DSX_DATA,	/* RO:mandatory, read touch data */
++	SYN_DSX_WAKE = SYN_DSX_DATA + 1 + MODE_WO,
++			/* WO:mandatory, command(s) to wake up touch IC */
++	SYN_DSX_SLEEP,	/* WO:mandatory, command(s) to put touch IC to sleep */
++	SYN_DSX_RESET,	/* WO:optional,  command to reset touch IC */
++	SYN_DSX_CONFIG,	/* WO:optional,  command(s) to apply custom config */
++	SYN_DSX_VAL_MAX = 0xff
++};
++
++struct op_read {
++	struct {
++		unsigned short paddr;	/* (page << 8) + address */
++		unsigned char  blk_sz;	/* read block size */
++		unsigned char  blk_cnt;	/* read block count */
++	};
++};
++
++struct op_write {
++	struct {
++		unsigned short paddr;	/* (page << 8) + address */
++		unsigned char  blk_sz;	/* write block size */
++		unsigned char  blk_cnt;	/* write block count */
++	};
++	unsigned char mask;	/* mask to clear bit(s) before apply data */
++				/* only effective when blk_cnt and blk_sz */
++				/* both are 1s, otherwise mask is ignored */
++	unsigned char data[0];	/* blk_cnt of data chunks of blk_sz each */
++};
++
++struct grp_info {
++	unsigned char group;		/* access group; defines type of data */
++	unsigned char data_blk_cnt;	/* number of data blocks in the group */
++	union {
++		struct op_read **ro_data;
++		struct op_write **wo_data;
++	};
++};
++
++struct touch_control_access_block {
++	unsigned char do_sync;	/* flag to indicate data block was updated */
++	unsigned char grp_num;	/* number of groups in data block */
++	struct grp_info *grp_ptr[GROUP_MAX];
++};
++
++#if defined(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CTRL_ACCESS_BLK)
++struct touch_control_access_block *control_access_block_get(void);
++int control_access_block_update_ro(unsigned char gid, unsigned short paddr,
++	unsigned char sz, unsigned char cnt);
++int control_access_block_update_wo(unsigned char gid, unsigned short paddr,
++	unsigned char sz, unsigned char mask, unsigned char *data);
++void control_access_block_zap(unsigned char gid);
++#else
++static inline struct touch_control_access_block *control_access_block_get(void) {
++	return NULL;
++}
++static int inline control_access_block_update_ro(
++	unsigned char gid, unsigned short paddr,
++	unsigned char sz, unsigned char cnt) {
++	return -1;
++}
++static int inline control_access_block_update_wo(
++	unsigned char gid, unsigned short paddr,
++	unsigned char sz, unsigned char mask, unsigned char *data) {
++	return -1;
++}
++static void inline control_access_block_zap(unsigned char gid) {
++}
++#endif
++
++#define control_access_block_update_status(paddr, size) \
++	control_access_block_update_ro(SYN_DSX_STATUS, paddr, size, 1)
++#define control_access_block_update_mode(paddr, size) \
++	control_access_block_update_ro(SYN_DSX_MODE, paddr, size, 1)
++#define control_access_block_update_data(paddr, size) \
++	control_access_block_update_ro(SYN_DSX_DATA, paddr, size, 1)
++#define control_access_block_update_data_mt(paddr, size, mt) \
++	control_access_block_update_ro(SYN_DSX_DATA, paddr, size, mt)
++#define control_access_block_update_reset(paddr, size, data) \
++	control_access_block_update_wo(SYN_DSX_RESET, paddr, size, 0, data)
++#define control_access_block_update_wake(paddr, size, data) \
++	control_access_block_update_wo(SYN_DSX_WAKE, paddr, size, 0x7, data)
++#define control_access_block_update_sleep(paddr, size, data) \
++	control_access_block_update_wo(SYN_DSX_SLEEP, paddr, size, 0x7, data)
++
++#endif
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.c b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+index fb3100308d9..2f9b3babd71 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.c
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+@@ -39,6 +39,7 @@
+ #undef USB_CHARGER_DETECTION
+ 
+ #include "synaptics_dsx_i2c.h"
++#include "synaptics_dsx_control_access_block.h"
+ #ifdef CONFIG_TOUCHSCREEN_TOUCHX_BASE
+ #include "touchx.h"
+ #endif
+@@ -120,6 +121,10 @@ static struct synaptics_dsx_patch *
+ static int synaptics_rmi4_set_page(
+ 		struct synaptics_rmi4_data *rmi4_data,
+ 		unsigned int address);
++static int control_access_block_update_static(
++		struct synaptics_rmi4_data *rmi4_data);
++static int control_access_block_update_dynamic(
++		struct synaptics_rmi4_data *rmi4_data);
+ 
+ /* F12 packet register description */
+ static struct {
+@@ -5543,6 +5548,12 @@ static int synaptics_rmi4_reset_device(struct synaptics_rmi4_data *rmi4_data,
+ 				__func__);
+ 			return retval;
+ 		}
++
++		if (control_access_block_get()) {
++			control_access_block_update_static(rmi4_data);
++			control_access_block_update_dynamic(rmi4_data);
++		}
++
+ 		/* kick off detection work after touch ic changes its mode */
+ 		if (exp_fn_ctrl.det_workqueue)
+ 			queue_delayed_work(exp_fn_ctrl.det_workqueue,
+@@ -5552,6 +5563,115 @@ static int synaptics_rmi4_reset_device(struct synaptics_rmi4_data *rmi4_data,
+ 	return 0;
+ }
+ 
++static int control_access_block_update_static(
++	struct synaptics_rmi4_data *rmi4_data)
++{
++	unsigned char one_data = 1;
++	unsigned char zero_data = 0;
++	unsigned char touch_data_size = 0;
++	struct synaptics_rmi4_fn *fhandler;
++	struct synaptics_rmi4_device_info *rmi;
++	struct touch_control_access_block *cab = control_access_block_get();
++
++	if (!cab)
++		return -ENODEV;
++
++	rmi = &(rmi4_data->rmi4_mod_info);
++
++	list_for_each_entry(fhandler, &rmi->support_fn_list, link) {
++		if (fhandler->fn_number == SYNAPTICS_RMI4_F11) {
++			touch_data_size = fhandler->size_of_data_register_block;
++		} else if (fhandler->fn_number == SYNAPTICS_RMI4_F12) {
++			touch_data_size = fhandler->size_of_data_register_block;
++		}
++	}
++
++	control_access_block_zap(SYN_DSX_WAKE);
++	control_access_block_update_wake(rmi4_data->f01_ctrl_base_addr,
++					1, &zero_data);
++
++	control_access_block_zap(SYN_DSX_SLEEP);
++	control_access_block_update_sleep(rmi4_data->f01_ctrl_base_addr,
++					1, &one_data);
++
++	control_access_block_zap(SYN_DSX_RESET);
++	control_access_block_update_reset(rmi4_data->f01_cmd_base_addr,
++					1, &one_data);
++
++	control_access_block_zap(SYN_DSX_STATUS);
++	control_access_block_update_status(rmi4_data->f01_data_base_addr + 1,
++					rmi4_data->num_of_intr_regs);
++
++	control_access_block_zap(SYN_DSX_MODE);
++	control_access_block_update_mode(rmi4_data->f01_data_base_addr, 1);
++
++	if (touch_data_size) {
++		control_access_block_zap(SYN_DSX_DATA);
++		control_access_block_update_data(rmi4_data->f01_data_base_addr +
++			rmi4_data->num_of_intr_regs + 1, touch_data_size);
++	}
++
++	cab->do_sync = true;
++	pr_debug("updated control access block\n");
++	return 0;
++}
++
++static int control_access_block_update_dynamic(
++	struct synaptics_rmi4_data *rmi4_data)
++{
++	int i;
++	struct touch_control_access_block *cab = control_access_block_get();
++	struct synaptics_dsx_patch *patch =
++			rmi4_data->current_mode->patch_data[SUSPEND_IDX];
++
++	if (!rmi4_data->patching_enabled || !cab || !patch || !patch->cfg_num) {
++		pr_debug("nothing to add to control access block\n");
++		return 0;
++	}
++
++	control_access_block_zap(SYN_DSX_CONFIG);
++
++	for (i = 0; i < ARRAY_SIZE(synaptics_cfg_regs); i++) {
++		int f_number = synaptics_cfg_regs[i].f_number;
++		struct synaptics_dsx_func_patch *fp;
++		struct synaptics_rmi4_func_packet_regs *regs =
++						find_function(f_number);
++
++		list_for_each_entry(fp, &patch->cfg_head, link) {
++			struct synaptics_rmi4_subpkt *subpkt;
++			struct synaptics_rmi4_packet_reg *reg;
++
++			if (fp->func != f_number)
++				continue;
++			reg = find_packet_reg(regs, fp->regstr);
++			if (!reg || reg->offset < 0)
++				continue;
++			if (fp->subpkt >= reg->nr_subpkts)
++				continue;
++			subpkt = reg->subpkt + fp->subpkt;
++
++			/* no need to check for misalignment here, since */
++			/* synaptics_copy_multiple_subpkts() takes care of it */
++			if (!subpkt->present || !subpkt->data)
++				continue;
++
++			/* exclude power control from patch set */
++			if (fp->func == SYNAPTICS_RMI4_F01 &&
++				fp->regstr == 0 && fp->subpkt == 0)
++				continue;
++
++			control_access_block_update_wo(SYN_DSX_CONFIG,
++				synaptics_cfg_regs[i].base_addr + reg->offset +
++				subpkt->offset,
++				fp->size, fp->bitmask, fp->data);
++		}
++	}
++
++	cab->do_sync = true;
++	pr_debug("filled in control access block\n");
++	return 0;
++}
++
+ /**
+ * synaptics_rmi4_detection_work()
+ *
+@@ -5647,6 +5767,17 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
+ 			if (!scan_failures)
+ 				statistics_init(rmi4_data);
+ 		}
++
++		if (exp_fhandler->fn_type == RMI_CTRL_ACCESS_BLK) {
++			error = control_access_block_update_static(rmi4_data);
++			/* FIXME: what if feature is disabled? */
++			/* invalidate insertion */
++			if (error) {
++				exp_fhandler->inserted = false;
++				pr_err("postpone CAB init\n");
++			} else
++				control_access_block_update_dynamic(rmi4_data);
++		}
+ 	}
+ 
+ release_mutex:
+@@ -6574,6 +6705,9 @@ static int folio_notifier_callback(struct notifier_block *self,
+ 			synaptics_dsx_restore_default_mode(rmi4_data);
+ 		}
+ 
++		if (control_access_block_get())
++			control_access_block_update_dynamic(rmi4_data);
++
+ 		dev_info(&rmi4_data->i2c_client->dev, "folio: %s\n",
+ 			folio_state ? "CLOSED" : "OPENED");
+ 
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.h b/drivers/input/touchscreen/synaptics_dsx_i2c.h
+index dd0fed355f7..2c3eb43d368 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.h
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.h
+@@ -313,6 +313,7 @@ enum exp_fn {
+ 	RMI_F34,
+ 	RMI_F54,
+ 	RMI_FW_UPDATER,
++	RMI_CTRL_ACCESS_BLK,
+ 	RMI_LAST,
+ };
+ 
+-- 
+2.11.0
+

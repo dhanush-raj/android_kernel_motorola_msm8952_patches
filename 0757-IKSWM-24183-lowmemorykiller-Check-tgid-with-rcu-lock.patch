@@ -1,0 +1,47 @@
+From 7c2163d8db944765e4c8aff9b84bea5fd90e6762 Mon Sep 17 00:00:00 2001
+From: Jason Hrycay <jason.hrycay@motorola.com>
+Date: Wed, 15 Apr 2015 12:08:54 -0500
+Subject: [PATCH 757/959] IKSWM-24183: lowmemorykiller: Check tgid with rcu
+ lock held
+
+When checking if the current task shares the same task group ID of the
+task which is signalled for MEMDIE, ensure we do so within the rcu lock
+to avoid potential race condition of the memory pointed to by tsk
+getting free'd and/or reusued and we end up with a false evaluation of
+current.tgid matching, thus killing a task that maybe should not be
+killed.
+
+Change-Id: Ia1e6005a57d914eb011bc6c466c4c0d86def955d
+Signed-off-by: Jason Hrycay <jason.hrycay@motorola.com>
+Reviewed-on: http://gerrit.mot.com/735795
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Hong-Mei Li <a21834@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830300
+---
+ drivers/staging/android/lowmemorykiller.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/staging/android/lowmemorykiller.c b/drivers/staging/android/lowmemorykiller.c
+index 21b8b574aec..f2a80f5e0d4 100644
+--- a/drivers/staging/android/lowmemorykiller.c
++++ b/drivers/staging/android/lowmemorykiller.c
+@@ -507,9 +507,11 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 
+ 		if (time_before_eq(jiffies, lowmem_deathpending_timeout)) {
+ 			if (test_task_flag(tsk, TIF_MEMDIE)) {
++				int same_tgid = same_thread_group(current, tsk);
++
+ 				rcu_read_unlock();
+ 				/* give the system time to free up the memory */
+-				if (!same_thread_group(current, tsk))
++				if (!same_tgid)
+ 					msleep_interruptible(20);
+ 				else
+ 					set_tsk_thread_flag(current,
+-- 
+2.11.0
+

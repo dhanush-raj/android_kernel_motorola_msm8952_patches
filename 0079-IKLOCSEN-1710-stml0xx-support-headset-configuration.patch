@@ -1,0 +1,116 @@
+From ef3494dc36822d12ee2157cd5851a64a39c4439d Mon Sep 17 00:00:00 2001
+From: Manasa Guntaka <mguntaka@motorola.com>
+Date: Thu, 25 Sep 2014 15:18:07 -0500
+Subject: [PATCH 079/959] IKLOCSEN-1710 stml0xx: support headset configuration
+
+Allow headset settings to be loaded from the device tree and
+configured during stm10xx reset.
+
+Change-Id: I2fa1dda5768a2b525768e75931eb42b3c7d4e4a5
+Signed-off-by: Manasa Guntaka <mguntaka@motorola.com>
+Change-Id: I41e67b3b6e9c00983a4ea6287469344bc1b48743
+Reviewed-on: http://gerrit.mot.com/673754
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jagatkumar Shah <jagat@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c  | 25 +++++++++++++++++++++++++
+ drivers/misc/stml0xx/stml0xx_reset.c | 23 +++++++++++++++++++++++
+ include/linux/stml0xx.h              |  8 ++++++++
+ 3 files changed, 56 insertions(+)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index b2cd90bf4f8..c790e590b90 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -379,6 +379,31 @@ static struct stml0xx_platform_data *stml0xx_of_init(struct spi_device *spi)
+ 	of_property_read_u32(np, "ct406_pulse_count",
+ 			     &pdata->ct406_pulse_count);
+ 
++	pdata->headset_insertion_debounce = 0x01F4;
++	pdata->headset_removal_debounce = 0x001E;
++	pdata->headset_button_down_debounce = 0x0032;
++	pdata->headset_button_up_debounce = 0x0032;
++	pdata->headset_button_0_1_threshold = 0x0096;
++	pdata->headset_button_1_2_threshold = 0x012C;
++	pdata->headset_button_2_3_threshold = 0x01C2;
++	pdata->headset_button_3_upper_threshold = 0x02EE;
++	of_property_read_u32(np, "headset_insertion_debounce",
++			     &pdata->headset_insertion_debounce);
++	of_property_read_u32(np, "headset_removal_debounce",
++			     &pdata->headset_removal_debounce);
++	of_property_read_u32(np, "headset_button_down_debounce",
++			     &pdata->headset_button_down_debounce);
++	of_property_read_u32(np, "headset_button_up_debounce",
++			     &pdata->headset_button_up_debounce);
++	of_property_read_u32(np, "headset_button_0_1_threshold",
++			     &pdata->headset_button_0_1_threshold);
++	of_property_read_u32(np, "headset_button_1_2_threshold",
++			     &pdata->headset_button_1_2_threshold);
++	of_property_read_u32(np, "headset_button_2_3_threshold",
++			     &pdata->headset_button_2_3_threshold);
++	of_property_read_u32(np, "headset_button_3_upper_threshold",
++			     &pdata->headset_button_3_upper_threshold);
++
+ 	return pdata;
+ }
+ #else
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index da9cb2b62a1..acfdc25de68 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -160,6 +160,29 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 		ret_err = err;
+ 	}
+ 
++	buf[0] = (pdata->headset_insertion_debounce >> 8) & 0xff;
++	buf[1] = pdata->headset_insertion_debounce & 0xff;
++	buf[2] = (pdata->headset_removal_debounce >> 8) & 0xff;
++	buf[3] = pdata->headset_removal_debounce & 0xff;
++	buf[4] = (pdata->headset_button_down_debounce >> 8) & 0xff;
++	buf[5] = pdata->headset_button_down_debounce & 0xff;
++	buf[6] = (pdata->headset_button_up_debounce >> 8) & 0xff;
++	buf[7] = pdata->headset_button_up_debounce & 0xff;
++	buf[8] = (pdata->headset_button_0_1_threshold >> 8) & 0xff;
++	buf[9] = pdata->headset_button_0_1_threshold & 0xff;
++	buf[10] = (pdata->headset_button_1_2_threshold >> 8) & 0xff;
++	buf[11] = pdata->headset_button_1_2_threshold & 0xff;
++	buf[12] = (pdata->headset_button_2_3_threshold >> 8) & 0xff;
++	buf[13] = pdata->headset_button_2_3_threshold & 0xff;
++	buf[14] = (pdata->headset_button_3_upper_threshold >> 8) & 0xff;
++	buf[15] = pdata->headset_button_3_upper_threshold & 0xff;
++	err = stml0xx_spi_send_write_reg_reset(HEADSET_SETTINGS, buf,
++			16, RESET_NOT_ALLOWED);
++	if (err < 0) {
++		dev_err(&ps_stml0xx->spi->dev,
++			"unable to write headset settings %d", err);
++		ret_err = err;
++	}
+ 	err = stml0xx_led_set_reset(&ps_stml0xx->led_cdev,
+ 			RESET_NOT_ALLOWED);
+ 	if (err < 0)
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 85600d9a4d4..569940edd42 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -525,6 +525,14 @@ struct stml0xx_platform_data {
+ 	int ct406_undetect_threshold;
+ 	int ct406_recalibrate_threshold;
+ 	int ct406_pulse_count;
++	int headset_insertion_debounce;
++	int headset_removal_debounce;
++	int headset_button_down_debounce;
++	int headset_button_up_debounce;
++	int headset_button_0_1_threshold;
++	int headset_button_1_2_threshold;
++	int headset_button_2_3_threshold;
++	int headset_button_3_upper_threshold;
+ };
+ 
+ struct stml0xx_data {
+-- 
+2.11.0
+

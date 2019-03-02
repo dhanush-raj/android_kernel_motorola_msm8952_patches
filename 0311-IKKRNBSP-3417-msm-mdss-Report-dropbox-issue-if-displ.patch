@@ -1,0 +1,72 @@
+From c07451005a1b86b2c426d3d1b268fb06e0140eaf Mon Sep 17 00:00:00 2001
+From: Zac Crosby <zac@motorola.com>
+Date: Mon, 25 Aug 2014 16:40:57 -0500
+Subject: [PATCH 311/959] IKKRNBSP-3417 msm: mdss: Report dropbox issue if
+ display does not turn on
+
+If the display does not turn on properly on panel_on(), report dropbox
+error.
+
+Port of ee34871 from 8996.
+
+Change-Id: I774f2eabe41d12b3c381d3a24aede3695f22485d
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/786207
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index c53a6411ed9..f398dae25f1 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -27,6 +27,7 @@
+ 
+ #include "mdss_dsi.h"
+ #include "mdss_dba_utils.h"
++#include "mdss_dropbox.h"
+ 
+ #define MDSS_PANEL_DEFAULT_VER 0xffffffffffffffff
+ #define MDSS_PANEL_UNKNOWN_NAME "unknown"
+@@ -790,6 +791,8 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
+ 	struct dsi_panel_cmds *on_cmds;
+ 	int ret = 0;
+ 	u8 pwr_mode = 0;
++	char *dropbox_issue = NULL;
++	static int dropbox_count;
+ 	static int panel_recovery_retry;
+ 
+ 	if (pdata == NULL) {
+@@ -831,6 +834,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
+ 	if (pinfo->disp_on_check_val != pwr_mode) {
+ 		pr_err("%s: Display failure: read = 0x%x, expected = 0x%x\n",
+ 			__func__, pwr_mode, pinfo->disp_on_check_val);
++		dropbox_issue = MDSS_DROPBOX_MSG_PWR_MODE_BLACK;
+ 
+ 		if (pdata->panel_info.panel_dead)
+ 			pr_err("%s: Panel recovery FAILED!!\n", __func__);
+@@ -844,7 +848,14 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
+ 		}
+ 	} else
+ 		panel_recovery_retry = 0;
++
+ end:
++	if (dropbox_issue != NULL) {
++		dropbox_count++;
++		mdss_dropbox_report_event(dropbox_issue, dropbox_count);
++	} else
++		dropbox_count = 0;
++
+ 	if (!ctrl->ndx)
+ 		pr_info("%s[%d]-. Pwr_mode(0x0A) = 0x%x\n", __func__,
+ 			ctrl->ndx, pwr_mode);
+-- 
+2.11.0
+

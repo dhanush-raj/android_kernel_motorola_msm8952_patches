@@ -1,0 +1,38 @@
+From 2681a05497d31cba438e74c858141e454c71a262 Mon Sep 17 00:00:00 2001
+From: Manasa Guntaka <mguntaka@motorola.com>
+Date: Tue, 30 Sep 2014 11:44:20 -0500
+Subject: [PATCH 102/959] IKLOCSEN-1710 stml0xx kernel drivers support for
+ headset settings
+
+Supporting headset settings parameters in kernel
+
+Change-Id: I2fa1dda5768a2b525768e75931eb42b3c7d4e4a5
+
+Signed-off-by: Manasa Guntaka <mguntaka@motorola.com>
+Change-Id: I49530c484495b2a96427c49ae922f48772472239
+Reviewed-on: http://gerrit.mot.com/674905
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Vladimir Karpovich <vkarpovich@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ include/linux/stml0xx.h | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 4059c18aad1..8203c0c7625 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -384,6 +384,8 @@ struct stm_response {
+ 
+ #define HEADSET_DATA                    0x2F
+ 
++#define HEADSET_SETTINGS                0x2E
++
+ #define PROX_SETTINGS                   0x33
+ 
+ #define LUX_TABLE_VALUES                0x34
+-- 
+2.11.0
+

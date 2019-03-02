@@ -1,0 +1,32 @@
+From 79a7de7a5692de9abf219ad7bf2d6bf02d049d34 Mon Sep 17 00:00:00 2001
+From: Ashay Jaiswal <ashayj@codeaurora.org>
+Date: Sun, 12 Apr 2015 04:00:39 +0530
+Subject: [PATCH 291/959] power: qpnp-smbcharger-mmi: fix compilation errors
+ for AArch32
+
+64-bit division fails compilation on AArch32 if arithmetic
+division operator is directly used for division.
+Use div64_s64/do_div APIs for 64-bit division operations.
+
+Change-Id: Id75a89f2f605a86bf0d39e4b87472726aa90b859
+Signed-off-by: Ashay Jaiswal <ashayj@codeaurora.org>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 5529f94100e..f99a59a818f 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -2803,7 +2803,7 @@ static int smbchg_calc_max_flash_current(struct smbchg_chip *chip)
+ 	}
+ 	/* Calculate the input voltage of the flash module. */
+ 	vin_flash_uv = max((chip->vled_max_uv + 500000LL),
+-				(vph_flash_uv * 1200 / 1000));
++				div64_s64((vph_flash_uv * 1200), 1000));
+ 	/* Calculate the available power for the flash module. */
+ 	avail_flash_power_fw = BUCK_EFFICIENCY * vph_flash_uv * ibat_flash_ua;
+ 	/*
+-- 
+2.11.0
+

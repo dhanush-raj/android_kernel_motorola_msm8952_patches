@@ -1,0 +1,56 @@
+From f902355b2ea9231a4528e1537482792814a5a903 Mon Sep 17 00:00:00 2001
+From: satya kottisa <fvgm76@motorola.com>
+Date: Wed, 28 Oct 2015 14:13:17 -0500
+Subject: [PATCH 455/959] IKMMINTG-6040: arm/dt: 8952: Add lc898212xd af
+ actuator
+
+Add support for lc898212xd actuator for
+the OV16860 imager.
+
+Change-Id: I779bae0ef8c3c1ea90b4025b27bbecadbe81b913
+Signed-off-by: satya kottisa <fvgm76@motorola.com>
+Reviewed-on: http://gerrit.mot.com/796671
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sachin Doshi <sachindoshi@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi b/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
+index 14b38f9b980..3308e3ba112 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
+@@ -23,6 +23,18 @@
+ };
+ 
+ &cci {
++	actuator0: qcom,actuator@0 {
++		cell-index = <0>;
++		reg = <0x0>;
++		compatible = "qcom,actuator";
++		qcom,cci-master = <0>;
++		cam_vaf-supply = <&pm8950_l17>;
++		qcom,cam-vreg-name = "cam_vaf";
++		qcom,cam-vreg-min-voltage = <2850000>;
++		qcom,cam-vreg-max-voltage = <2850000>;
++		qcom,cam-vreg-op-mode = <80000>;
++	};
++
+ 	qcom,camera@0 {
+ 		cell-index = <0>;
+ 		compatible = "qcom,camera";
+@@ -30,6 +42,7 @@
+ 		qcom,csid-sd-index = <0>;
+ 		qcom,mount-angle = <90>;
+ 		qcom,led-flash-src = <&led_flash0>;
++		qcom,actuator-src = <&actuator0>;
+ 		cam_vdig-supply = <&pm8950_l23>;
+ 		cam_vio-supply = <&pm8950_l10>;
+ 		qcom,cam-vreg-name = "cam_vdig", "cam_vio";
+-- 
+2.11.0
+

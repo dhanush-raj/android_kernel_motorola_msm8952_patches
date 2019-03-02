@@ -1,0 +1,48 @@
+From f1e35984a6ec8992080763854a869aad83b985b6 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Sat, 3 Oct 2015 19:54:22 -0700
+Subject: [PATCH 586/959] IKSWM-5880:sched/rt: really force updates rq clock in
+ pick_next_task_rt
+
+ In the original patch of "sched: Fix inaccurate accounting for real-time
+ task", it will skip the update_rq_clock() if skip_clock_update is zero/-1.
+
+ Fix this bug to make the original patch really force updates rq clock,
+ then the realtime task's exec_start will be accurate.
+
+Change-Id: I235917648f1631f9f037fa12e8322488dcfa08a2
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/788261
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Reviewed-by: Yi-Wei Zhao <gbjc64@motorola.com>
+Reviewed-by: Russell Knize <rknize@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ kernel/sched/rt.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/kernel/sched/rt.c b/kernel/sched/rt.c
+index 5f5bc6be668..70b170db0ea 100644
+--- a/kernel/sched/rt.c
++++ b/kernel/sched/rt.c
+@@ -1462,10 +1462,10 @@ static struct task_struct *_pick_next_task_rt(struct rq *rq)
+ 	 * put_prev_task. A stale value can cause us to over-charge execution
+ 	 * time to real-time task, that could trigger throttling unnecessarily
+ 	 */
+-	if (rq->skip_clock_update > 0) {
++	if (rq->skip_clock_update > 0)
+ 		rq->skip_clock_update = 0;
+-		update_rq_clock(rq);
+-	}
++
++	update_rq_clock(rq);
+ 	p = rt_task_of(rt_se);
+ 	p->se.exec_start = rq_clock_task(rq);
+ 
+-- 
+2.11.0
+

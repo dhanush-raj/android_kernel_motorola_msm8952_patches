@@ -1,0 +1,211 @@
+From 0f4fcb89d895b75d41489826d20f30f34ef11694 Mon Sep 17 00:00:00 2001
+From: "Russ W. Knize" <Russ.Knize@motorola.com>
+Date: Thu, 2 Oct 2014 11:53:25 -0500
+Subject: [PATCH 347/959] IKSWL-1135: esdfs: update wrapfs base to v3.10.53-73
+
+Propagated from IKDREL3KK-9162.
+
+This commit updates the wrapfs core of esdfs to v3.10.53-73, but
+excludes extended attribute support.
+
+Change-Id: I45af00a17c5c76cff70284b08b2ebc172f05788b
+Signed-off-by: Russ Knize <Russ.Knize@motorola.com>
+Reviewed-on: http://gerrit.mot.com/675786
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jaegeuk Kim <jaegeuk@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+SLTApproved: Connie Zhao <czhao1@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/esdfs/esdfs.h |  1 +
+ fs/esdfs/file.c  | 83 +++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ fs/esdfs/mmap.c  | 53 ++++++++++++++++++++++++++++++++----
+ 3 files changed, 130 insertions(+), 7 deletions(-)
+
+diff --git a/fs/esdfs/esdfs.h b/fs/esdfs/esdfs.h
+index 3726c703df8..ee2119c7d1f 100644
+--- a/fs/esdfs/esdfs.h
++++ b/fs/esdfs/esdfs.h
+@@ -16,6 +16,7 @@
+ #include <linux/dcache.h>
+ #include <linux/file.h>
+ #include <linux/fs.h>
++#include <linux/aio.h>
+ #include <linux/mm.h>
+ #include <linux/mount.h>
+ #include <linux/namei.h>
+diff --git a/fs/esdfs/file.c b/fs/esdfs/file.c
+index 9e808b8f807..eb916bc3ea1 100644
+--- a/fs/esdfs/file.c
++++ b/fs/esdfs/file.c
+@@ -264,6 +264,85 @@ static int esdfs_fasync(int fd, struct file *file, int flag)
+ 	return err;
+ }
+ 
++static ssize_t esdfs_aio_read(struct kiocb *iocb, const struct iovec *iov,
++			       unsigned long nr_segs, loff_t pos)
++{
++	int err = -EINVAL;
++	struct file *file, *lower_file;
++
++	file = iocb->ki_filp;
++	lower_file = esdfs_lower_file(file);
++	if (!lower_file->f_op->aio_read)
++		goto out;
++	/*
++	 * It appears safe to rewrite this iocb, because in
++	 * do_io_submit@fs/aio.c, iocb is a just copy from user.
++	 */
++	get_file(lower_file); /* prevent lower_file from being released */
++	iocb->ki_filp = lower_file;
++	err = lower_file->f_op->aio_read(iocb, iov, nr_segs, pos);
++	iocb->ki_filp = file;
++	fput(lower_file);
++	/* update upper inode atime as needed */
++	if (err >= 0 || err == -EIOCBQUEUED)
++		fsstack_copy_attr_atime(file->f_path.dentry->d_inode,
++					file_inode(lower_file));
++out:
++	return err;
++}
++
++static ssize_t esdfs_aio_write(struct kiocb *iocb, const struct iovec *iov,
++				unsigned long nr_segs, loff_t pos)
++{
++	int err = -EINVAL;
++	struct file *file, *lower_file;
++
++	file = iocb->ki_filp;
++	lower_file = esdfs_lower_file(file);
++	if (!lower_file->f_op->aio_write)
++		goto out;
++	/*
++	 * It appears safe to rewrite this iocb, because in
++	 * do_io_submit@fs/aio.c, iocb is a just copy from user.
++	 */
++	get_file(lower_file); /* prevent lower_file from being released */
++	iocb->ki_filp = lower_file;
++	err = lower_file->f_op->aio_write(iocb, iov, nr_segs, pos);
++	iocb->ki_filp = file;
++	fput(lower_file);
++	/* update upper inode times/sizes as needed */
++	if (err >= 0 || err == -EIOCBQUEUED) {
++		fsstack_copy_inode_size(file->f_path.dentry->d_inode,
++					file_inode(lower_file));
++		fsstack_copy_attr_times(file->f_path.dentry->d_inode,
++					file_inode(lower_file));
++	}
++out:
++	return err;
++}
++
++/*
++ * Wrapfs cannot use generic_file_llseek as ->llseek, because it would
++ * only set the offset of the upper file.  So we have to implement our
++ * own method to set both the upper and lower file offsets
++ * consistently.
++ */
++static loff_t esdfs_file_llseek(struct file *file, loff_t offset, int whence)
++{
++	int err;
++	struct file *lower_file;
++
++	err = generic_file_llseek(file, offset, whence);
++	if (err < 0)
++		goto out;
++
++	lower_file = esdfs_lower_file(file);
++	err = generic_file_llseek(lower_file, offset, whence);
++
++out:
++	return err;
++}
++
+ const struct file_operations esdfs_main_fops = {
+ 	.llseek		= generic_file_llseek,
+ 	.read		= esdfs_read,
+@@ -278,11 +357,13 @@ const struct file_operations esdfs_main_fops = {
+ 	.release	= esdfs_file_release,
+ 	.fsync		= esdfs_fsync,
+ 	.fasync		= esdfs_fasync,
++	.aio_read	= esdfs_aio_read,
++	.aio_write	= esdfs_aio_write,
+ };
+ 
+ /* trimmed directory options */
+ const struct file_operations esdfs_dir_fops = {
+-	.llseek		= generic_file_llseek,
++	.llseek		= esdfs_file_llseek,
+ 	.read		= generic_read_dir,
+ 	.readdir	= esdfs_readdir,
+ 	.unlocked_ioctl	= esdfs_unlocked_ioctl,
+diff --git a/fs/esdfs/mmap.c b/fs/esdfs/mmap.c
+index 671370c13ba..9adbb7be740 100644
+--- a/fs/esdfs/mmap.c
++++ b/fs/esdfs/mmap.c
+@@ -40,15 +40,56 @@ static int esdfs_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+ 	return err;
+ }
+ 
+-/*
+- * XXX: the default address_space_ops for esdfs is empty.  We cannot set
+- * our inode->i_mapping->a_ops to NULL because too many code paths expect
+- * the a_ops vector to be non-NULL.
+- */
++static int esdfs_page_mkwrite(struct vm_area_struct *vma,
++			       struct vm_fault *vmf)
++{
++	int err = 0;
++	struct file *file, *lower_file;
++	const struct vm_operations_struct *lower_vm_ops;
++	struct vm_area_struct lower_vma;
++
++	memcpy(&lower_vma, vma, sizeof(struct vm_area_struct));
++	file = lower_vma.vm_file;
++	lower_vm_ops = ESDFS_F(file)->lower_vm_ops;
++	BUG_ON(!lower_vm_ops);
++	if (!lower_vm_ops->page_mkwrite)
++		goto out;
++
++	lower_file = esdfs_lower_file(file);
++	/*
++	 * XXX: vm_ops->page_mkwrite may be called in parallel.
++	 * Because we have to resort to temporarily changing the
++	 * vma->vm_file to point to the lower file, a concurrent
++	 * invocation of esdfs_page_mkwrite could see a different
++	 * value.  In this workaround, we keep a different copy of the
++	 * vma structure in our stack, so we never expose a different
++	 * value of the vma->vm_file called to us, even temporarily.
++	 * A better fix would be to change the calling semantics of
++	 * ->page_mkwrite to take an explicit file pointer.
++	 */
++	lower_vma.vm_file = lower_file;
++	err = lower_vm_ops->page_mkwrite(&lower_vma, vmf);
++out:
++	return err;
++}
++
++static ssize_t esdfs_direct_IO(int rw, struct kiocb *iocb,
++				const struct iovec *iov, loff_t offset,
++				unsigned long nr_segs)
++{
++	/*
++	 * This function should never be called directly.  We need it
++	 * to exist, to get past a check in open_check_o_direct(),
++	 * which is called from do_last().
++	 */
++	return -EINVAL;
++}
++
+ const struct address_space_operations esdfs_aops = {
+-	/* empty on purpose */
++	.direct_IO = esdfs_direct_IO,
+ };
+ 
+ const struct vm_operations_struct esdfs_vm_ops = {
+ 	.fault		= esdfs_fault,
++	.page_mkwrite	= esdfs_page_mkwrite,
+ };
+-- 
+2.11.0
+

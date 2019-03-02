@@ -1,0 +1,89 @@
+From 5aa1329ee3022e57e4ad731a520194974e24266c Mon Sep 17 00:00:00 2001
+From: Chandan Uddaraju <chandanu@codeaurora.org>
+Date: Tue, 14 Jul 2015 15:56:57 -0700
+Subject: [PATCH 808/959] IKKRNBSP-3740 clk: msm: mdss: add locking mechanism
+ for critical section
+
+The PLL resources are accessed by multiple tasks. Add mutex
+to protect the critical section is avoid any configuration
+issues with the shared resources.
+
+Signed-off-by: Chandan Uddaraju <chandanu@codeaurora.org>
+Conflicts:
+	drivers/clk/qcom/mdss/mdss-pll.h
+Change-Id: Ia75c957ac7b122648cdc6203be98bccfc2a1f608
+(cherry picked from commit 450ea242a65d79bf94aec1a4a596fca09cced8c2)
+Reviewed-on: http://gerrit.mot.com/831035
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Patrick Auchter <auchter@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/clk/qcom/mdss/mdss-pll-util.c | 3 +++
+ drivers/clk/qcom/mdss/mdss-pll.c      | 2 ++
+ drivers/clk/qcom/mdss/mdss-pll.h      | 5 +++++
+ 3 files changed, 10 insertions(+)
+
+diff --git a/drivers/clk/qcom/mdss/mdss-pll-util.c b/drivers/clk/qcom/mdss/mdss-pll-util.c
+index 0ed6afe2995..02746a7407a 100644
+--- a/drivers/clk/qcom/mdss/mdss-pll-util.c
++++ b/drivers/clk/qcom/mdss/mdss-pll-util.c
+@@ -40,6 +40,7 @@ int mdss_pll_util_resource_init(struct platform_device *pdev,
+ 		goto clk_err;
+ 	}
+ 
++	mutex_init(&pll_res->res_lock);
+ 	return rc;
+ 
+ clk_err:
+@@ -90,6 +91,8 @@ void mdss_pll_util_resource_deinit(struct platform_device *pdev,
+ 	msm_dss_put_clk(mp->clk_config, mp->num_clk);
+ 
+ 	msm_dss_config_vreg(&pdev->dev, mp->vreg_config, mp->num_vreg, 0);
++
++	mutex_destroy(&pll_res->res_lock);
+ }
+ 
+ void mdss_pll_util_resource_release(struct platform_device *pdev,
+diff --git a/drivers/clk/qcom/mdss/mdss-pll.c b/drivers/clk/qcom/mdss/mdss-pll.c
+index 44158055b0c..15c0d00f147 100644
+--- a/drivers/clk/qcom/mdss/mdss-pll.c
++++ b/drivers/clk/qcom/mdss/mdss-pll.c
+@@ -45,6 +45,7 @@ int mdss_pll_resource_enable(struct mdss_pll_resources *pll_res, bool enable)
+ 		return rc;
+ 	}
+ 
++	mutex_lock(&pll_res->res_lock);
+ 	if (enable) {
+ 		if (pll_res->resource_ref_cnt == 0)
+ 			changed++;
+@@ -67,6 +68,7 @@ int mdss_pll_resource_enable(struct mdss_pll_resources *pll_res, bool enable)
+ 			pll_res->resource_enable = enable;
+ 	}
+ 
++	mutex_unlock(&pll_res->res_lock);
+ 	return rc;
+ }
+ 
+diff --git a/drivers/clk/qcom/mdss/mdss-pll.h b/drivers/clk/qcom/mdss/mdss-pll.h
+index ceffd2b39e8..513d3d959f8 100644
+--- a/drivers/clk/qcom/mdss/mdss-pll.h
++++ b/drivers/clk/qcom/mdss/mdss-pll.h
+@@ -175,6 +175,11 @@ struct mdss_pll_resources {
+ 	 */
+ 	uint32_t index;
+ 
++	/*
++	 * Mutex to handle pll resource access
++	 */
++	struct mutex res_lock;
++
+ 	struct dfps_info *dfps;
+ };
+ 
+-- 
+2.11.0
+

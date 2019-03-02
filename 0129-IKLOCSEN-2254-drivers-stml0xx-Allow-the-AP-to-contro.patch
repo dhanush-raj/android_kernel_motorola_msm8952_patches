@@ -1,0 +1,150 @@
+From 84636cc89fa63aa6c5e9de448a6bc13d1ae33a78 Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Thu, 21 May 2015 13:44:06 -0500
+Subject: [PATCH 129/959] IKLOCSEN-2254 drivers: stml0xx: Allow the AP to
+ control the ALS rate
+
+Pass the requested ambient light sensor rate from the Sensor HAL to
+the Sensor Hub. This will be used to restrict the maximum reporting
+rate of light sensor readings which reduces the number of AP
+wake-ups and saves current.
+
+Change-Id: I7b46b7e1e74ac7c8356a9b4ce4b54d8e0a142747
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/750008
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Philip Lee <pglee@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: James Rumpler <w12004@motorola.com>
+Reviewed-by: Vladimir Karpovich <vkarpovich@motorola.com>
+Submit-Approved: Yu Liu <e7664c@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c  |  9 +++++----
+ drivers/misc/stml0xx/stml0xx_ioctl.c | 17 +++++++++++++++++
+ drivers/misc/stml0xx/stml0xx_reset.c |  7 +++++++
+ include/linux/stml0xx.h              |  6 ++----
+ include/uapi/linux/stml0xx.h         |  3 ++-
+ 5 files changed, 33 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 67ca54b9a03..be611a472d1 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -64,6 +64,7 @@ unsigned short stml0xx_g_acc2_delay;
+ unsigned short stml0xx_g_mag_delay;
+ unsigned short stml0xx_g_gyro_delay;
+ unsigned short stml0xx_g_baro_delay;
++unsigned short stml0xx_g_als_delay;
+ unsigned long stml0xx_g_nonwake_sensor_state;
+ unsigned long stml0xx_g_wake_sensor_state;
+ unsigned short stml0xx_g_algo_state;
+@@ -84,16 +85,16 @@ unsigned char *stml0xx_boot_readbuff;
+ 
+ /* per algo config, request, and event registers */
+ const struct stml0xx_algo_info_t stml0xx_algo_info[STML0XX_NUM_ALGOS] = {
+-	{M_ALGO_MODALITY, ALGO_CFG_MODALITY, ALGO_REQ_MODALITY,
++	{M_ALGO_MODALITY, 0, ALGO_REQ_MODALITY,
+ 	 ALGO_EVT_MODALITY, STML0XX_EVT_SZ_TRANSITION},
+-	{M_ALGO_ORIENTATION, ALGO_CFG_ORIENTATION, ALGO_REQ_ORIENTATION,
++	{M_ALGO_ORIENTATION, 0, ALGO_REQ_ORIENTATION,
+ 	 ALGO_EVT_ORIENTATION, STML0XX_EVT_SZ_TRANSITION},
+-	{M_ALGO_STOWED, ALGO_CFG_STOWED, ALGO_REQ_STOWED,
++	{M_ALGO_STOWED, 0, ALGO_REQ_STOWED,
+ 	 ALGO_EVT_STOWED, STML0XX_EVT_SZ_TRANSITION},
+ 	{M_ALGO_ACCUM_MODALITY, ALGO_CFG_ACCUM_MODALITY,
+ 	 ALGO_REQ_ACCUM_MODALITY, ALGO_EVT_ACCUM_MODALITY,
+ 	 STML0XX_EVT_SZ_ACCUM_STATE},
+-	{M_ALGO_ACCUM_MVMT, ALGO_CFG_ACCUM_MVMT, ALGO_REQ_ACCUM_MVMT,
++	{M_ALGO_ACCUM_MVMT, 0, ALGO_REQ_ACCUM_MVMT,
+ 	 ALGO_EVT_ACCUM_MVMT, STML0XX_EVT_SZ_ACCUM_MVMT}
+ };
+ 
+diff --git a/drivers/misc/stml0xx/stml0xx_ioctl.c b/drivers/misc/stml0xx/stml0xx_ioctl.c
+index 5e3a5c124d9..05f72251bc2 100644
+--- a/drivers/misc/stml0xx/stml0xx_ioctl.c
++++ b/drivers/misc/stml0xx/stml0xx_ioctl.c
+@@ -368,6 +368,23 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		if (copy_to_user(argp, buf, STML0XX_MAG_CAL_SIZE))
+ 			err = -EFAULT;
+ 		break;
++	case STML0XX_IOCTL_SET_ALS_DELAY:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"STML0XX_IOCTL_SET_ALS_DELAY");
++		if (copy_from_user(&delay, argp, sizeof(delay))) {
++			dev_dbg(&stml0xx_misc_data->spi->dev,
++				"Copy als delay returned error");
++			err = -EFAULT;
++			break;
++		}
++		stml0xx_g_als_delay = delay;
++		if (stml0xx_g_booted) {
++			buf[0] = delay >> 8;
++			buf[1] = delay & 0xFF;
++			err = stml0xx_spi_send_write_reg(ALS_UPDATE_RATE,
++							buf, 2);
++		}
++		break;
+ 	case STML0XX_IOCTL_SET_MAG_CAL:
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"STML0XX_IOCTL_SET_MAG_CAL");
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index a9b919401ab..49f181410d9 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -121,6 +121,13 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 
+ 	stml0xx_spi_retry_delay = 10;
+ 
++	buf[0] = stml0xx_g_als_delay >> 8;
++	buf[1] = stml0xx_g_als_delay & 0xFF;
++	err = stml0xx_spi_send_write_reg_reset(ALS_UPDATE_RATE, buf,
++			2, RESET_NOT_ALLOWED);
++	if (err < 0)
++		ret_err = err;
++
+ 	buf[0] = stml0xx_g_nonwake_sensor_state & 0xFF;
+ 	buf[1] = (stml0xx_g_nonwake_sensor_state >> 8) & 0xFF;
+ 	buf[2] = stml0xx_g_nonwake_sensor_state >> 16;
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 3eb315385bb..376381e6936 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -163,10 +163,7 @@ enum sh_spi_msg {
+ 
+ #define STOWED                          0x6D
+ 
+-#define ALGO_CFG_MODALITY               0x6E
+-#define ALGO_CFG_ORIENTATION            0x6F
+-#define ALGO_CFG_STOWED                 0x70
+-#define ALGO_CFG_ACCUM_MVMT             0x71
++#define ALS_UPDATE_RATE                 0x6F
+ 
+ #define ALGO_REQ_MODALITY               0x72
+ #define ALGO_REQ_ORIENTATION            0x73
+@@ -535,6 +532,7 @@ extern unsigned short stml0xx_g_acc2_delay;
+ extern unsigned short stml0xx_g_mag_delay;
+ extern unsigned short stml0xx_g_gyro_delay;
+ extern unsigned short stml0xx_g_baro_delay;
++extern unsigned short stml0xx_g_als_delay;
+ extern unsigned long stml0xx_g_nonwake_sensor_state;
+ extern unsigned short stml0xx_g_algo_state;
+ extern unsigned char stml0xx_g_motion_dur;
+diff --git a/include/uapi/linux/stml0xx.h b/include/uapi/linux/stml0xx.h
+index f713452dae7..b5e0bc94002 100644
+--- a/include/uapi/linux/stml0xx.h
++++ b/include/uapi/linux/stml0xx.h
+@@ -96,7 +96,8 @@
+ 		_IOR(STML0XX_IOCTL_BASE, 30, char[STML0XX_MAG_CAL_SIZE])
+ #define STML0XX_IOCTL_SET_MAG_CAL \
+ 		_IOW(STML0XX_IOCTL_BASE, 31, char[STML0XX_MAG_CAL_SIZE])
+-/* 32 unused */
++#define STML0XX_IOCTL_SET_ALS_DELAY \
++		_IOW(STML0XX_IOCTL_BASE, 32,  unsigned short)
+ #define STML0XX_IOCTL_SET_MOTION_DUR	\
+ 		_IOW(STML0XX_IOCTL_BASE, 33, unsigned int)
+ /* 34 unused */
+-- 
+2.11.0
+

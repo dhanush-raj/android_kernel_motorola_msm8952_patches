@@ -1,0 +1,75 @@
+From 4c2e41d7efef1c26f9a3e647b34fbf984bbb2704 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Mon, 14 Mar 2016 14:30:21 -0500
+Subject: [PATCH 795/959] IKSWM-24585: power: qpnp-fg: Make Empty SOC IRQ Quick
+
+Tripping the Empty SOC IRQ should start a Graceful
+Shutdown by sending 0%.
+
+Change-Id: Ie8a9bb213cc0d59359e17f75e8aa8c44a21dbafd
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/833310
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-fg.c | 17 ++++++++---------
+ 1 file changed, 8 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/power/qpnp-fg.c b/drivers/power/qpnp-fg.c
+index 233612edca5..f1594595c92 100644
+--- a/drivers/power/qpnp-fg.c
++++ b/drivers/power/qpnp-fg.c
+@@ -4349,7 +4349,7 @@ static bool is_battery_missing(struct fg_chip *chip)
+ 	return (fg_batt_sts & BATT_MISSING_STS) ? true : false;
+ }
+ 
+-#define FG_EMPTY_DEBOUNCE_MS	1500
++#define FG_EMPTY_DEBOUNCE_MS	10
+ static irqreturn_t fg_vbatt_low_handler(int irq, void *_chip)
+ {
+ 	struct fg_chip *chip = _chip;
+@@ -4537,14 +4537,16 @@ static irqreturn_t fg_empty_soc_irq_handler(int irq, void *_chip)
+ 		goto done;
+ 	}
+ 
+-	if (fg_debug_mask & FG_IRQS)
+-		pr_info("triggered 0x%x\n", soc_rt_sts);
+-	if (fg_is_batt_empty(chip)) {
++	pr_info("triggered 0x%x\n", soc_rt_sts);
++
++	if (soc_rt_sts & SOC_EMPTY) {
++		chip->soc_empty = true;
+ 		fg_stay_awake(&chip->empty_check_wakeup_source);
+ 		schedule_delayed_work(&chip->check_empty_work,
+ 			msecs_to_jiffies(FG_EMPTY_DEBOUNCE_MS));
+ 	} else {
+ 		chip->soc_empty = false;
++                fg_relax(&chip->empty_check_wakeup_source);
+ 	}
+ 
+ done:
+@@ -5425,16 +5427,13 @@ static void check_empty_work(struct work_struct *work)
+ 			enable_irq_wake(chip->batt_irq[VBATT_LOW].irq);
+ 			chip->vbat_low_irq_enabled = true;
+ 		}
+-	} else if (fg_is_batt_empty(chip)) {
+-		if (fg_debug_mask & FG_STATUS)
+-			pr_info("EMPTY SOC high\n");
+-		chip->soc_empty = true;
++	} else if (chip->soc_empty) {
++		pr_info("EMPTY SOC high\n");
+ 		if (chip->power_supply_registered)
+ 			power_supply_changed(&chip->bms_psy);
+ 	}
+ 
+ out:
+-	fg_relax(&chip->empty_check_wakeup_source);
+ }
+ 
+ static void batt_profile_init(struct work_struct *work)
+-- 
+2.11.0
+

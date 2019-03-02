@@ -1,0 +1,65 @@
+From 3839ec6ca303d71878963810825368a2d5223112 Mon Sep 17 00:00:00 2001
+From: Alexander Filonenko <alexf@motorola.com>
+Date: Thu, 28 Apr 2016 17:02:31 -0500
+Subject: [PATCH 874/959] IKKRNBSP-3893 input: synaptics_dsx_i2c: enter sleep
+ before flashing
+
+Disable processing of touch in Synaptics touch IC prior to flashing
+of firmware/configuration. This step prevents flashing failure
+in case touch panel is touched at the beginning of flashing procedure.
+
+Change-Id: I4e8c71b8844756b04b8a610b4e08f6e2659b6d1a
+Signed-off-by: Alexander Filonenko <alexf@motorola.com>
+Reviewed-on: http://gerrit.mot.com/851161
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/touchscreen/synaptics_dsx_i2c.c | 29 +++++++++++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.c b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+index da99a74e6a1..b43cdd372c2 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.c
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+@@ -2868,6 +2868,35 @@ static void synaptics_dsx_sensor_state(struct synaptics_rmi4_data *rmi4_data,
+ 			rmi4_data->in_bootloader = true;
+ 	case STATE_INIT:
+ 		synaptics_rmi4_irq_enable(rmi4_data, false);
++
++		if (!rmi4_data->in_bootloader) {
++			int retval;
++			unsigned char mode = 1;
++			unsigned char intr_status[MAX_INTR_REGISTERS];
++
++			/* deactivate touch by putting touch IC into */
++			/* sleep mode to prevent interference of touch */
++			/* processing with flashing */
++			pr_debug("enter sleep mode\n");
++			retval = synaptics_rmi4_i2c_write(rmi4_data,
++					rmi4_data->f01_ctrl_base_addr,
++					&mode,
++					sizeof(mode));
++
++			if (retval < 0)
++				pr_notice("failed to enter sleep mode\n");
++
++			/* clear unhandled interrupt if any */
++			pr_debug("clear interrupt\n");
++			retval = synaptics_rmi4_i2c_read(rmi4_data,
++					rmi4_data->f01_data_base_addr + 1,
++					&intr_status[0],
++					rmi4_data->num_of_intr_regs);
++
++			if (retval < 0)
++				pr_notice("failed to clear interrupt\n");
++		}
++
+ 		/* de-allocate input device earlier to allow */
+ 		/* EventHub become notified of input removal */
+ 		if (rmi4_data->input_registered) {
+-- 
+2.11.0
+

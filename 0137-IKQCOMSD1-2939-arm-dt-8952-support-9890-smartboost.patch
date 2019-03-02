@@ -1,0 +1,65 @@
+From e8b5474ddef46c7de5d2fdde6670ed2860211093 Mon Sep 17 00:00:00 2001
+From: Xiaofei Ma <xiaofei@motorola.com>
+Date: Fri, 4 Sep 2015 11:48:54 -0500
+Subject: [PATCH 137/959] IKQCOMSD1-2939: arm/dt: 8952: support 9890 smartboost
+
+TFA9890 is added on i2c_2.
+
+Change-Id: I37beaeb9dc0ecb6112c073e1264379a7c1f66d98
+Signed-off-by: Xiaofei Ma <xiaofei@motorola.com>
+Reviewed-on: http://gerrit.mot.com/781569
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Reviewed-by: Jonathan Eklund <jeklund@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 27 +++++++++++++++++++++++++
+ 1 file changed, 27 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index b15515c1508..5ab5eb0ca18 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -61,6 +61,19 @@
+ 		};
+ 	};
+ 
++	tfa9890_reset {
++		qcom,pins = <&gp 94>;
++		qcom,num-grp-pins = <1>;
++		qcom,pin-func = <0>;
++		label = "tfa9890-reset";
++
++		tfa9890_reset_default: default {
++			drive-strength = <2>;
++			bias-disable; /* no pull */
++			output-low;
++		};
++	};
++
+ 	spi4_active {
+ 		/* BLSP5 MOSI, MISO, CLK */
+ 		qcom,pins = <&gp 16>, <&gp 17>, <&gp 19>;
+@@ -398,3 +411,17 @@
+ 		};
+ 	};
+ };
++
++&i2c_2 { /* BLSP1 QUP2 */
++	tfa9890@34 {
++		compatible = "nxp,tfa9890";
++		reg = <0x34>;
++		gpios = <&msm_gpio 94 0>;     /* RESET */
++		tfa_vdd-supply = <&pm8950_l6>;
++		nxp,tfa_max-vol-steps = <15>;
++		nxp,tfa-dev = "left";
++		nxp,tfa_pcm-start-delay = <100>;
++		pinctrl-names = "default";
++		pinctrl-0 = <&tfa9890_reset_default>;
++	};
++};
+-- 
+2.11.0
+

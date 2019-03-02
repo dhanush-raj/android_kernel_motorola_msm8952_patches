@@ -1,0 +1,66 @@
+From 6ab58921370a2c5b6b20f93f7256ba582edd0c1d Mon Sep 17 00:00:00 2001
+From: Shengzhe Zhao <a18689@motorola.com>
+Date: Mon, 13 Jun 2016 13:25:54 -0700
+Subject: [PATCH 905/959] IKSWM-44643 esdfs: fix ext4_releasepage panic
+
+fix following panic:
+ext4_releasepage+0x30/0xdc
+try_to_release_page+0x38/0x58
+shrink_page_list+0x624/0x928
+shrink_inactive_list+0x40c/0x658
+shrink_lruvec+0x340/0x4d0
+shrink_zone+0x50/0x12c
+kswapd_shrink_zone.constprop.58+0xbc/0x184
+balance_pgdat+0x25c/0x3e0
+kswapd+0x408/0x49c
+kthread+0xe0/0xec
+
+or
+
+dm_any_congested+0x30/0x60
+shrink_page_list+0x210/0x9d0
+shrink_inactive_list+0x39c/0x5f0
+shrink_zone+0x3b8/0x688
+kswapd+0x6ec/0x9b4
+kthread+0xcc/0xe0
+ret_from_fork+0x14/0x34
+
+add missed iput that cause unrelased inode then left lower page
+in memory with incorrect super block or backing dev info that could
+cause kernel panic.
+
+Change-Id: Id4787a9418f17fa3317bed18b0939cb53172331c
+Signed-off-by: Shengzhe Zhao <a18689@motorola.com>
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: Jiang-Li Yuan <jlyuan@motorola.com>
+Reviewed-by: Hong-Mei Li <a21834@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Lian-Wei Wang <lian-wei.wang@motorola.com>
+Reviewed-by: Yi-Wei Zhao <gbjc64@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/866642
+---
+ fs/esdfs/super.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/fs/esdfs/super.c b/fs/esdfs/super.c
+index 84ce8b5b731..fb7d9fa9d51 100644
+--- a/fs/esdfs/super.c
++++ b/fs/esdfs/super.c
+@@ -66,8 +66,10 @@ void esdfs_truncate_share(struct super_block *sb, struct inode *lower_inode, lof
+ 		}
+ 		spin_unlock(&esdfs_list_lock);
+ 		inode = ilookup(sbi->s_sb, lower_inode->i_ino);
+-		if (inode)
++		if (inode) {
+ 			truncate_setsize(inode, newsize);
++			iput(inode);
++		}
+ 		spin_lock(&esdfs_list_lock);
+ 		p = p->next;
+ 	}
+-- 
+2.11.0
+

@@ -1,0 +1,81 @@
+From 987d88b9f85be0cb8b3226109d388c01c768b7de Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Fri, 22 Jan 2016 13:48:38 -0800
+Subject: [PATCH 638/959] IKSWM-17762: mmc_ffu: Add FFU support for eMMC CMDQ
+ mode
+
+  (1) stop CMDQ mode before doing fw update.
+  (2) force a power cycple after fw update is done.
+
+Change-Id: If7289f7da767d8a707b31fd9e64d8109230bd890
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/815592
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sheng-Zhe Zhao <a18689@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/mmc/core/mmc_ffu.c | 29 +++++++++++++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/drivers/mmc/core/mmc_ffu.c b/drivers/mmc/core/mmc_ffu.c
+index 6ffa448a044..eae1edcbd36 100644
+--- a/drivers/mmc/core/mmc_ffu.c
++++ b/drivers/mmc/core/mmc_ffu.c
+@@ -27,6 +27,7 @@
+ #include <linux/slab.h>
+ #include <linux/swap.h>
+ #include <linux/firmware.h>
++#include <linux/reboot.h>
+ 
+ /**
+  * struct mmc_ffu_pages - pages allocated by 'alloc_pages()'.
+@@ -397,6 +398,25 @@ int mmc_ffu_invoke(struct mmc_card *card, const char *name)
+ 	}
+ 
+ 	mmc_claim_host(card->host);
++	mmc_rpm_hold(card->host, &card->dev);
++
++	if (mmc_card_cmdq(card)) {
++		/* halt cmdq engine */
++		err = mmc_cmdq_halt_on_empty_queue(card->host);
++		if (err) {
++			pr_err("fail to halt cmdq on host side err=%d\n", err);
++			goto exit;
++		}
++		/* disable cmdq mode */
++		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
++			EXT_CSD_CMDQ, 0,
++			card->ext_csd.generic_cmd6_time);
++		if (err) {
++			pr_err("fail to disable cmdq mode in card=%d\n", err);
++			goto exit;
++		}
++	}
++
+ 
+ 	/* trigger flushing*/
+ 	err = mmc_flush_cache(card);
+@@ -487,8 +507,17 @@ int mmc_ffu_invoke(struct mmc_card *card, const char *name)
+ 		}
+ 	}
+ 
++	if (mmc_card_cmdq(card)) {
++		/* Do a power cycle after FW is updated
++		   //TODO: find a more grace way to avoid power cycle.
++		*/
++		pr_info("eMMC firmware updated, reboot now\n");
++		kernel_restart(NULL);
++	}
++
+ exit:
+ 	mmc_release_host(card->host);
++	mmc_rpm_release(card->host, &card->dev);
+ 
+ 	release_firmware(fw);
+ 	return err;
+-- 
+2.11.0
+

@@ -1,0 +1,51 @@
+From 7f3fdb5902cbbbe992b2145a7bf6c535294bb6bb Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Fri, 5 Jun 2015 18:25:11 -0500
+Subject: [PATCH 261/959] IKSWL-19229: power: smbcharger-mmi: No DCIN Thermal
+
+Thermal Throttle should only be for USBIN.  This
+change prevents the throttling unless a USB device
+is attached.
+
+Change-Id: I28869c8b9f4e5146068141007cdbb13c79ee1785
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/755058
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Reviewed-by: Vidyadhar Gurram <rnh786@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 151e8201034..de831d9b90b 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -3794,6 +3794,11 @@ module_param(vf_adjust_trim_steps_per_adjust, int, 0644);
+ static void set_max_allowed_current_ma(struct smbchg_chip *chip,
+ 				       int current_ma)
+ {
++	if (!chip->usb_present) {
++		pr_smb(PR_STATUS, "NO allowed current, No USB\n");
++		return;
++	}
++
+ 	chip->target_fastchg_current_ma =
+ 		min(current_ma, chip->allowed_fastchg_current_ma);
+ 	pr_smb(PR_STATUS, "requested=%d: allowed=%d: result=%d\n",
+@@ -7062,6 +7067,9 @@ static void smbchg_heartbeat_work(struct work_struct *work)
+ 		if (chip->usb_present) {
+ 			smbchg_parallel_usb_check_ok(chip);
+ 			chip->update_allowed_fastchg_current_ma = false;
++		} else if (chip->dc_present) {
++			smbchg_set_fastchg_current(chip,
++					      chip->target_fastchg_current_ma);
+ 		}
+ 	}
+ 
+-- 
+2.11.0
+

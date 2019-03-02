@@ -1,0 +1,110 @@
+From f8c23cac97b86f42f4f38ff654f50520154f93a7 Mon Sep 17 00:00:00 2001
+From: Andrew Wheeler <awheeler@motorola.com>
+Date: Wed, 28 Oct 2015 09:44:32 -0500
+Subject: [PATCH 504/959] IKQCOMSD1-3024 checkpatch: Revert test for commit id
+ formatting style in commit log
+
+The kernel's new commit formatting style conflicts with git's standard
+commit revert comment style.  Both QCOM and MOT use reverts often,
+and we don't want to fixup our and their reverts.  So revert the checkpatch
+feature until git-revert follows the kernel's new standard, and QCOM
+starts using it.
+
+Reverting:
+
+    commit d311cd44545f ("checkpatch: add test for commit id formatting style in commit log")
+    commit bd474ca076af ("checkpatch: use the correct indentation for which()")
+    commit 66881735071e ("checkpatch: allow commit descriptions on separate line from commit id")
+    commit 1c2e92c6a213 ("checkpatch.pl: Add additional granularity to malformed commit errors")
+
+Change-Id: I66f712c95a668552fb2da850eb6446a3a1f387db
+Signed-off-by: Andrew Wheeler <awheeler@motorola.com>
+---
+ scripts/checkpatch.pl | 57 ---------------------------------------------------
+ 1 file changed, 57 deletions(-)
+
+diff --git a/scripts/checkpatch.pl b/scripts/checkpatch.pl
+index cb152567636..842f9a25a5a 100755
+--- a/scripts/checkpatch.pl
++++ b/scripts/checkpatch.pl
+@@ -629,34 +629,6 @@ sub seed_camelcase_includes {
+ 	}
+ }
+ 
+-sub git_commit_info {
+-	my ($commit, $id, $desc) = @_;
+-
+-	return ($id, $desc) if ((which("git") eq "") || !(-e ".git"));
+-
+-	my $output = `git log --no-color --format='%H %s' -1 $commit 2>&1`;
+-	$output =~ s/^\s*//gm;
+-	my @lines = split("\n", $output);
+-
+-	if ($lines[0] =~ /^error: short SHA1 $commit is ambiguous\./) {
+-# Maybe one day convert this block of bash into something that returns
+-# all matching commit ids, but it's very slow...
+-#
+-#		echo "checking commits $1..."
+-#		git rev-list --remotes | grep -i "^$1" |
+-#		while read line ; do
+-#		    git log --format='%H %s' -1 $line |
+-#		    echo "commit $(cut -c 1-12,41-)"
+-#		done
+-	} elsif ($lines[0] =~ /^fatal: ambiguous argument '$commit': unknown revision or path not in the working tree\./) {
+-	} else {
+-		$id = substr($lines[0], 0, 12);
+-		$desc = substr($lines[0], 41);
+-	}
+-
+-	return ($id, $desc);
+-}
+-
+ $chk_signoff = 0 if ($file);
+ 
+ my @rawlines = ();
+@@ -788,18 +760,6 @@ sub format_email {
+ 	return $formatted_email;
+ }
+ 
+-sub which {
+-	my ($bin) = @_;
+-
+-	foreach my $path (split(/:/, $ENV{PATH})) {
+-		if (-e "$path/$bin") {
+-			return "$path/$bin";
+-		}
+-	}
+-
+-	return "";
+-}
+-
+ sub which_conf {
+ 	my ($conf) = @_;
+ 
+@@ -2304,23 +2264,6 @@ sub process {
+ 			      "The 'stable' address should be 'stable\@vger.kernel.org'\n" . $herecurr);
+ 		}
+ 
+-# Check for improperly formed commit descriptions
+-		if ($in_commit_log &&
+-		    $line =~ /\bcommit\s+[0-9a-f]{5,}/i &&
+-		    !($line =~ /\b[Cc]ommit [0-9a-f]{12,40} \("/ ||
+-		      ($line =~ /\b[Cc]ommit [0-9a-f]{12,40}\s*$/ &&
+-		       defined $rawlines[$linenr] &&
+-		       $rawlines[$linenr] =~ /^\s*\("/))) {
+-			$line =~ /\b(c)ommit\s+([0-9a-f]{5,})/i;
+-			my $init_char = $1;
+-			my $orig_commit = lc($2);
+-			my $id = '01234567890ab';
+-			my $desc = 'commit description';
+-		        ($id, $desc) = git_commit_info($orig_commit, $id, $desc);
+-			ERROR("GIT_COMMIT_ID",
+-			      "Please use 12 or more chars for the git commit ID and enclose the descritpion in parenthesis like: '${init_char}ommit $id (\"$desc\")'\n" . $herecurr);
+-		}
+-
+ #check the patch for invalid author credentials
+ 		if ($chk_author && $line =~ /^From:.*(quicinc|qualcomm)\.com/) {
+ 			WARN("BAD_AUTHOR", "invalid author identity\n" . $line );
+-- 
+2.11.0
+

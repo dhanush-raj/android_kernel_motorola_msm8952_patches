@@ -1,0 +1,73 @@
+From 60ab2d16d41badea0f481afdf9e436d1c9e4b9d8 Mon Sep 17 00:00:00 2001
+From: Yuanyuan Zhong <zyy@motorola.com>
+Date: Thu, 5 May 2016 20:30:56 -0500
+Subject: [PATCH 881/959] IKSWM-36501 esdfs: keep a counter for mmaped file
+
+Now vma->vm_file is used to store lower file. The vma only
+increments the counter for lower file. Need to keep a counter
+for esdfs file as well to prevent it from being released
+while vma is still alive.
+
+Change-Id: Ie8502d03520678064b1769988506edde880f4675
+Signed-off-by: Yuanyuan Zhong <zyy@motorola.com>
+Reviewed-on: http://gerrit.mot.com/853210
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jiang-Li Yuan <jlyuan@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Reviewed-by: Russell Knize <rknize@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/esdfs/file.c |  1 -
+ fs/esdfs/mmap.c | 16 ++++++++++++++++
+ 2 files changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/fs/esdfs/file.c b/fs/esdfs/file.c
+index e937abaaed5..a81f19c315a 100644
+--- a/fs/esdfs/file.c
++++ b/fs/esdfs/file.c
+@@ -190,7 +190,6 @@ static int esdfs_mmap(struct file *file, struct vm_area_struct *vma)
+ 		ESDFS_F(file)->lower_vm_ops = saved_vm_ops;
+ 
+ 	vma->vm_private_data = file;
+-	fput(file);
+ 	get_file(lower_file);
+ 	vma->vm_file = lower_file;
+ out:
+diff --git a/fs/esdfs/mmap.c b/fs/esdfs/mmap.c
+index cf7dce9a62e..4e4cb17f5ad 100644
+--- a/fs/esdfs/mmap.c
++++ b/fs/esdfs/mmap.c
+@@ -33,6 +33,20 @@ static int esdfs_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+ 	return err;
+ }
+ 
++static void esdfs_vm_open(struct vm_area_struct *vma)
++{
++	struct file *file = (struct file *)vma->vm_private_data;
++
++	get_file(file);
++}
++
++static void esdfs_vm_close(struct vm_area_struct *vma)
++{
++	struct file *file = (struct file *)vma->vm_private_data;
++
++	fput(file);
++}
++
+ static int esdfs_page_mkwrite(struct vm_area_struct *vma,
+ 			       struct vm_fault *vmf)
+ {
+@@ -78,4 +92,6 @@ const struct address_space_operations esdfs_aops = {
+ const struct vm_operations_struct esdfs_vm_ops = {
+ 	.fault		= esdfs_fault,
+ 	.page_mkwrite	= esdfs_page_mkwrite,
++	.open		= esdfs_vm_open,
++	.close		= esdfs_vm_close,
+ };
+-- 
+2.11.0
+

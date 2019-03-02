@@ -1,0 +1,53 @@
+From 9abeeee45fef8f63101979adaf8c3b752e145d20 Mon Sep 17 00:00:00 2001
+From: Herbert Xu <herbert@gondor.apana.org.au>
+Date: Wed, 26 Oct 2016 09:48:09 +0800
+Subject: [PATCH 939/959] crypto: api - Only abort operations on fatal signal
+
+[ Upstream commit 3fc89adb9fa4beff31374a4bf50b3d099d88ae83 ]
+
+Currently a number of Crypto API operations may fail when a signal
+occurs.  This causes nasty problems as the caller of those operations
+are often not in a good position to restart the operation.
+
+In fact there is currently no need for those operations to be
+interrupted by user signals at all.  All we need is for them to
+be killable.
+
+This patch replaces the relevant calls of signal_pending with
+fatal_signal_pending, and wait_for_completion_interruptible with
+wait_for_completion_killable, respectively.
+
+Change-Id: I28644c4079c810dea18397d3d7d2c100adf18ae0
+Mot-CRs-fixed: IKSWN-5722
+Cc: stable@vger.kernel.org
+Signed-off-by: Herbert Xu <herbert@gondor.apana.org.au>
+Signed-off-by: Sasha Levin <sasha.levin@oracle.com>
+Reviewed-on: https://gerrit.mot.com/913191
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ling Jin <lingjin@motorola.com>
+Reviewed-by: Binsheng Que <quebs2@motorola.com>
+Reviewed-by: Joel Voss <jvoss@motorola.com>
+Reviewed-by: Hujun Liao <liaohj@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ crypto/algapi.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/crypto/algapi.c b/crypto/algapi.c
+index 00d8d939733..daf2f653b13 100644
+--- a/crypto/algapi.c
++++ b/crypto/algapi.c
+@@ -325,7 +325,7 @@ static void crypto_wait_for_test(struct crypto_larval *larval)
+ 		crypto_alg_tested(larval->alg.cra_driver_name, 0);
+ 	}
+ 
+-	err = wait_for_completion_interruptible(&larval->completion);
++	err = wait_for_completion_killable(&larval->completion);
+ 	WARN_ON(err);
+ 
+ out:
+-- 
+2.11.0
+

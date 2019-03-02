@@ -1,0 +1,41 @@
+From 3e71302fbcdba02b4c658b4e6573d6f27e91ac62 Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Sun, 22 Mar 2015 09:02:40 -0500
+Subject: [PATCH 706/959] IKSWM-20734: usb: phy: Enable Floated Charger
+ Detection
+
+Enable Floated Charger Detection by default. A Floated Charger
+by definition is one that does not connect the data pins.
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+
+Change-Id: I0a55b7400c9b57f9e886186cd4ee3d10a8a51656
+Reviewed-on: http://gerrit.mot.com/727443
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+(cherry picked from commit 2709178d1e6fdc70c7c7a547df04e52d5ec0e246)
+Reviewed-on: http://gerrit.mot.com/824961
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+---
+ drivers/usb/phy/phy-msm-usb.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/usb/phy/phy-msm-usb.c b/drivers/usb/phy/phy-msm-usb.c
+index ca76b7c341a..b64141be24b 100644
+--- a/drivers/usb/phy/phy-msm-usb.c
++++ b/drivers/usb/phy/phy-msm-usb.c
+@@ -101,7 +101,7 @@ module_param(lpm_disconnect_thresh , uint, S_IRUGO | S_IWUSR);
+ MODULE_PARM_DESC(lpm_disconnect_thresh,
+ 	"Delay before entering LPM on USB disconnect");
+ 
+-static bool floated_charger_enable;
++static bool floated_charger_enable = true;
+ module_param(floated_charger_enable , bool, S_IRUGO | S_IWUSR);
+ MODULE_PARM_DESC(floated_charger_enable,
+ 	"Whether to enable floated charger");
+-- 
+2.11.0
+

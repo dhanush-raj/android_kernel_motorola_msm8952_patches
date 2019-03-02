@@ -1,0 +1,30 @@
+From 23cc308365bd1311128b346d2826ee2dc40bdf13 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Mon, 28 Sep 2015 09:31:11 -0500
+Subject: [PATCH 307/959] arm/dt: batterydata: Add FX30 Battery
+
+Add the QPNP Battery data for FX30
+battery.
+
+Change-Id: Ib5a36a93a832e3f0af42223e91c270235a7a4bd3
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+---
+ arch/arm/boot/dts/qcom/batterydata-fx30-lg.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/batterydata-fx30-lg.dtsi b/arch/arm/boot/dts/qcom/batterydata-fx30-lg.dtsi
+index 8f814596b97..700719db16b 100644
+--- a/arch/arm/boot/dts/qcom/batterydata-fx30-lg.dtsi
++++ b/arch/arm/boot/dts/qcom/batterydata-fx30-lg.dtsi
+@@ -14,7 +14,7 @@ qcom,fx30-lg {
+ 	/* #1928848_Moto_FX30_3000mAh_averaged_MasterSlave_Apr30th2015*/
+ 	qcom,max-voltage-uv = <4400000>;
+ 	qcom,nom-batt-capacity-mah = <3000>;
+-	qcom,batt-id-kohm = <100>;
++	qcom,batt-id-kohm = <250>;
+ 	qcom,battery-beta = <3900>;
+ 	qcom,battery-type = "FX30-LG-3000mah-v2";
+ 	qcom,chg-rslow-comp-c1 = <3039290>;
+-- 
+2.11.0
+

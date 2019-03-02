@@ -1,0 +1,107 @@
+From 24842c16391968c19ca334e9e7c2c38d5d2ce7ca Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Mon, 10 Nov 2014 11:28:46 -0600
+Subject: [PATCH 092/959] IKLOCSEN-1586:drivers:misc:stml0xx: make logging
+ generic
+
+Remove the "ERROR" string from our log messages since
+we are using this interface for all logging messages
+from the sensorhub.
+
+Change-Id: Ie49262972d54f858478642cf04989890ed0a0e65
+Signed-off-by: Dan Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/687854
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c     |  4 ++--
+ drivers/misc/stml0xx/stml0xx_wake_irq.c | 19 ++++++++++---------
+ include/linux/stml0xx.h                 |  4 ++--
+ 3 files changed, 14 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 87319bf2c07..420d416f94f 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -75,8 +75,8 @@ unsigned char stml0xx_g_mag_cal[STML0XX_MAG_CAL_SIZE];
+ unsigned short stml0xx_g_control_reg_restore;
+ bool stml0xx_g_booted;
+ 
+-/* Store error message */
+-unsigned char stat_string[ESR_SIZE + 1];
++/* Store log message */
++unsigned char stat_string[LOG_MSG_SIZE + 1];
+ 
+ struct stml0xx_algo_requst_t stml0xx_g_algo_requst[STML0XX_NUM_ALGOS];
+ 
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index 3ca48efe2ee..0502f4d5622 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -121,28 +121,29 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 	}
+ 	irq3_status = buf[0];
+ 
+-	/* First, check for error messages */
++	/* First, check for log messages */
+ 	if (irq_status & M_LOG_MSG) {
+-		err = stml0xx_spi_send_read_reg(ERROR_STATUS, buf, ESR_SIZE);
++		err = stml0xx_spi_send_read_reg(LOG_MSG_STATUS, buf,
++			LOG_MSG_SIZE);
+ 		if (err >= 0) {
+-			memcpy(stat_string, buf, ESR_SIZE);
+-			stat_string[ESR_SIZE] = 0;
++			memcpy(stat_string, buf, LOG_MSG_SIZE);
++			stat_string[LOG_MSG_SIZE] = 0;
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+-				"STML0XX Error: %s", stat_string);
++				"sensorhub : %s", stat_string);
+ 		} else
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+-				"Failed to read error message %d", err);
++				"Failed to read log message %d", err);
+ 	}
+ 
+ 	/* Second, check for a reset request */
+ 	if (irq_status & M_HUB_RESET) {
+ 		unsigned char status;
+ 
+-		if (strnstr(stat_string, "modality", ESR_SIZE))
++		if (strnstr(stat_string, "modality", LOG_MSG_SIZE))
+ 			status = 0x01;
+-		else if (strnstr(stat_string, "Algo", ESR_SIZE))
++		else if (strnstr(stat_string, "Algo", LOG_MSG_SIZE))
+ 			status = 0x02;
+-		else if (strnstr(stat_string, "Watchdog", ESR_SIZE))
++		else if (strnstr(stat_string, "Watchdog", LOG_MSG_SIZE))
+ 			status = 0x03;
+ 		else
+ 			status = 0x04;
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 38c3e6526d5..9add80bba21 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -336,7 +336,7 @@ struct stm_response {
+ /* STML0XX memory map */
+ #define ID                              0x00
+ #define REV_ID                          0x01
+-#define ERROR_STATUS                    0x02
++#define LOG_MSG_STATUS                  0x02
+ #define LOWPOWER_REG                    0x03
+ #define INIT_COMPLETE_REG               0x04
+ 
+@@ -458,7 +458,7 @@ struct stm_response {
+ 
+ #define STML0XX_MAX_REG_LEN         255
+ 
+-#define ESR_SIZE			24
++#define LOG_MSG_SIZE			24
+ 
+ #define STML0XX_RESET_DELAY		50
+ 
+-- 
+2.11.0
+

@@ -1,0 +1,47 @@
+From 1fc8e8cf8217857d9a8a270de8262fa50639cf0e Mon Sep 17 00:00:00 2001
+From: satya kottisa <fvgm76@motorola.com>
+Date: Thu, 24 Sep 2015 20:02:41 -0500
+Subject: [PATCH 176/959] IKMMINTG-6039: arm/dt: 8952: Add PMIC flash node
+
+Add device tree entry for PMIC dual LED
+on 8952.
+
+Change-Id: Ice002e68bd81297751d09e7dff3c298188f06723
+Signed-off-by: satya kottisa <fvgm76@motorola.com>
+Reviewed-on: http://gerrit.mot.com/786226
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Nagappan Rathinam <dgxp63@motorola.com>
+Reviewed-by: Sachin Doshi <sachindoshi@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi b/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
+index 74894d89fdb..bb03507ae7f 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
+@@ -11,6 +11,17 @@
+  * GNU General Public License for more details.
+  */
+ 
++&soc {
++	led_flash0: qcom,camera-flash {
++		cell-index = <0>;
++		compatible = "qcom,camera-flash";
++		qcom,flash-type = <1>;
++		qcom,flash-source = <&pmi8950_flash0 &pmi8950_flash1>;
++		qcom,torch-source = <&pmi8950_torch0 &pmi8950_torch1>;
++		qcom,switch-source = <&pmi8950_switch>;
++	};
++};
++
+ &cci {
+ 	qcom,camera@1 {
+ 		cell-index = <1>;
+-- 
+2.11.0
+

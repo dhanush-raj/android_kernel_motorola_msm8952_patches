@@ -1,0 +1,36 @@
+From 039d690981174544a9f89aa7dd211fa2aea5eeda Mon Sep 17 00:00:00 2001
+From: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Date: Thu, 9 Oct 2014 14:39:31 -0500
+Subject: [PATCH 321/959] IKKRNBSP-3424 ASoC: pil-q6v5-mss: fix size_t warning
+
+Corrects portability issue with 32- and 64-bit portability.
+Port of IKKRNBSP-2690
+
+Change-Id: I522b6b0751b1a197ecd851780f6953f48dba48b3
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/787271
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/soc/qcom/pil-q6v5-mss.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/soc/qcom/pil-q6v5-mss.c b/drivers/soc/qcom/pil-q6v5-mss.c
+index 5bd2ca63e2a..8f37b3594cb 100644
+--- a/drivers/soc/qcom/pil-q6v5-mss.c
++++ b/drivers/soc/qcom/pil-q6v5-mss.c
+@@ -67,7 +67,7 @@ static void log_modem_sfr(void)
+ 		return;
+ 	}
+ 
+-	strlcpy(pil_ssr_reason, smem_reason, min(size, sizeof(pil_ssr_reason)));
++	strlcpy(pil_ssr_reason, smem_reason, min((size_t)size, sizeof(pil_ssr_reason)));
+ 	pr_err("modem subsystem failure reason: %s.\n", pil_ssr_reason);
+ 
+ 	smem_reason[0] = '\0';
+-- 
+2.11.0
+

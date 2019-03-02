@@ -1,0 +1,53 @@
+From eab3a3003d1a85bab69d73e2f1857e592d4fef09 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Thu, 4 Jun 2015 19:42:57 -0500
+Subject: [PATCH 877/959] IKSWM-36060: power: smbcharger-mmi: Fix DTS Param
+
+The FG Estimate Difference value pulled from the
+Device tree had a wrong name in the driver. This
+caused a default value to be used to compare and
+led to Profile reloads when they were not needed.
+
+Upmerge from 8994
+
+Change-Id: I505963394170d066d111028008379fb41ac91fc0
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/852411
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-fg.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/power/qpnp-fg.c b/drivers/power/qpnp-fg.c
+index f1594595c92..6c1d4cc25f9 100644
+--- a/drivers/power/qpnp-fg.c
++++ b/drivers/power/qpnp-fg.c
+@@ -5319,9 +5319,10 @@ wait:
+ 	if (fg_est_dump)
+ 		dump_sram(&chip->dump_sram);
+ 	if ((fg_debug_mask & FG_STATUS) && !vbat_in_range)
+-		pr_info("Vbat out of range: v_current_pred: %d, v:%d\n",
++		pr_info("Vbat out of range: v_current_pred: %d, v:%d thres:%d\n",
+ 				fg_data[FG_DATA_CPRED_VOLTAGE].value,
+-				fg_data[FG_DATA_VOLTAGE].value);
++			fg_data[FG_DATA_VOLTAGE].value,
++			settings[FG_MEM_VBAT_EST_DIFF].value * 1000);
+ 	if ((fg_debug_mask & FG_STATUS) && fg_is_batt_empty(chip))
+ 		pr_info("battery empty\n");
+ 	if ((fg_debug_mask & FG_STATUS) && !profiles_same)
+@@ -5748,7 +5749,7 @@ static int fg_of_init(struct fg_chip *chip)
+ 				* FULL_SOC_RAW, FULL_CAPACITY);
+ 	OF_READ_SETTING(FG_MEM_RESUME_SOC, "resume-soc-raw", rc, 1);
+ 	OF_READ_SETTING(FG_MEM_IRQ_VOLT_EMPTY, "irq-volt-empty-mv", rc, 1);
+-	OF_READ_SETTING(FG_MEM_VBAT_EST_DIFF, "vbat-estimate-diff-mv", rc, 1);
++	OF_READ_SETTING(FG_MEM_VBAT_EST_DIFF, "fg-vbat-estimate-diff-mv", rc, 1);
+ 	OF_READ_SETTING(FG_MEM_DELTA_SOC, "fg-delta-soc", rc, 1);
+ 	OF_READ_SETTING(FG_MEM_SOC_MAX, "fg-soc-max", rc, 1);
+ 	OF_READ_SETTING(FG_MEM_SOC_MIN, "fg-soc-min", rc, 1);
+-- 
+2.11.0
+

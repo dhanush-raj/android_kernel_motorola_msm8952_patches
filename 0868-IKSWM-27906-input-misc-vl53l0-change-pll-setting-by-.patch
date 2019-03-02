@@ -1,0 +1,96 @@
+From 04ab2b1d5f89668178daf021eeda1ec4bc7b59fa Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Wed, 30 Mar 2016 14:26:57 -0500
+Subject: [PATCH 868/959] IKSWM-27906:input: misc: vl53l0:change pll setting by
+ userspace
+
+as there are conflict need of pll setting in camera
+and SAR tcmd so move the setting to user space
+
+but still keep a default value.
+
+Change-Id: Ifb48593c7c9675f73a71c84c0adc8377130f097b
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/838885
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/vl53L0/stmvl53l0.h        |  2 ++
+ drivers/input/misc/vl53L0/stmvl53l0_module.c | 17 +++++++++++------
+ 2 files changed, 13 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/input/misc/vl53L0/stmvl53l0.h b/drivers/input/misc/vl53L0/stmvl53l0.h
+index 5d8d47b702d..03015d0e602 100644
+--- a/drivers/input/misc/vl53L0/stmvl53l0.h
++++ b/drivers/input/misc/vl53L0/stmvl53l0.h
+@@ -175,6 +175,8 @@ struct stmvl53l0_data {
+ 	uint8_t isApertureSpads;
+ 	uint8_t VhvSettings;
+ 	uint8_t PhaseCal;
++	uint8_t pll_p;
++	uint8_t pll_f;
+ };
+ 
+ /*
+diff --git a/drivers/input/misc/vl53L0/stmvl53l0_module.c b/drivers/input/misc/vl53L0/stmvl53l0_module.c
+index 67c3861181d..45878639160 100644
+--- a/drivers/input/misc/vl53L0/stmvl53l0_module.c
++++ b/drivers/input/misc/vl53L0/stmvl53l0_module.c
+@@ -904,12 +904,11 @@ static void stmvl53l0_enter_cam(struct stmvl53l0_data *data, uint8_t from)
+ 	/* turn on tof sensor */
+ 	if (data->enable_ps_sensor == 0)
+ 		stmvl53l0_start(data);
+-
+ 	papi_func_tbl->SetVcselPulsePeriod(data,
+-			VL53L0_VCSEL_PERIOD_PRE_RANGE, 18);
+-
++		VL53L0_VCSEL_PERIOD_PRE_RANGE, data->pll_p);
+ 	papi_func_tbl->SetVcselPulsePeriod(data,
+-	VL53L0_VCSEL_PERIOD_FINAL_RANGE, 14);
++		VL53L0_VCSEL_PERIOD_FINAL_RANGE, data->pll_f);
++
+ 	vl53l0_errmsg("Call of setlimt \n");
+ 	papi_func_tbl->SetLimitCheckEnable(data,
+ 		VL53L0_CHECKENABLE_SIGNAL_RATE_FINAL_RANGE,
+@@ -2046,20 +2045,24 @@ static int stmvl53l0_ioctl_handler(struct file *file,
+ 				parameter.status =
+ 					papi_func_tbl->GetVcselPulsePeriod(vl53l0_dev,
+ 					VL53L0_VCSEL_PERIOD_PRE_RANGE, (uint8_t *)&parameter.value);
+-			else
++			else {
+ 				parameter.status =
+ 					papi_func_tbl->SetVcselPulsePeriod(vl53l0_dev,
+ 					VL53L0_VCSEL_PERIOD_PRE_RANGE, (uint8_t)parameter.value);
++				vl53l0_dev->pll_p = (uint8_t)parameter.value;
++			}
+ 			break;
+ 		case (PLLFINAL_PRA):
+ 			if (parameter.is_read)
+ 				parameter.status =
+ 					papi_func_tbl->GetVcselPulsePeriod(vl53l0_dev,
+ 					VL53L0_VCSEL_PERIOD_FINAL_RANGE, (uint8_t *)&parameter.value);
+-			else
++			else {
+ 				parameter.status =
+ 					papi_func_tbl->SetVcselPulsePeriod(vl53l0_dev,
+ 					VL53L0_VCSEL_PERIOD_FINAL_RANGE, (uint8_t)parameter.value);
++				vl53l0_dev->pll_f = (uint8_t)parameter.value;
++			}
+ 			break;
+ 		}
+ 
+@@ -2577,6 +2580,8 @@ int stmvl53l0_setup(struct stmvl53l0_data *data, uint8_t type)
+ 	data->c_suspend = 0;
+ 	data->delay_ms = 2000;	/* delay time to 2s */
+ 	data->enableDebug = 0;
++	data->pll_p = 18;
++	data->pll_f = 14;
+ /*	data->client_object.power_up = 0; */
+ 
+ 	vl53l0_dbgmsg("support ver. %s enabled\n", DRIVER_VERSION);
+-- 
+2.11.0
+

@@ -1,0 +1,60 @@
+From f187463100550e885cc2b9e3779c1789604cd7cf Mon Sep 17 00:00:00 2001
+From: yexh1 <yexh1@motorola.com>
+Date: Wed, 23 Dec 2015 09:38:10 +0800
+Subject: [PATCH 573/959] IKSWM-13673: arm/dts: msm8952: Add host_det vadc
+
+Add a vadc for measuring voltage on the id/host_det pin and
+corresponding parameters to switch the pin to analog IN when
+needed.
+-Using PMI8950's ADC
+
+Change-Id: Ied213a5d30deead1ec9ff3c01bdc782c82ce2b6c
+Signed-off-by: yexh1 <yexh1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/808371
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index ba7a4471d92..a0d90baab79 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -965,6 +965,30 @@
+ 	reg = <0x84f00000 0x1400000>;
+ };
+ 
++&pmi8950_mpps {
++	mpp@a000 {
++		/* Host detect */
++		status = "ok";
++		qcom,mode = <4>; /* AIN input */
++		qcom,ain-route = <0>; /* AMUX 5 */
++		qcom,master-en = <1>;
++		qcom,src-sel = <0>; /* Function constant */
++	};
++};
++
++&pmi8950_vadc {
++	chan@20 {
++		label = "host_det";
++		reg = <0x20>;
++		qcom,decimation = <0>;
++		qcom,pre-div-channel-scaling = <1>;
++		qcom,calibration-type = "absolute";
++		qcom,scale-function = <0>;
++		qcom,hw-settle-time = <0>;
++		qcom,fast-avg-setup = <0>;
++	};
++};
++
+ &pm8950_vadc {
+ 	chan@11 {
+ 		label = "chg_therm";
+-- 
+2.11.0
+

@@ -1,0 +1,38 @@
+From 21787f3f8f0c1e83aeb680daa596e3db1a0df6bf Mon Sep 17 00:00:00 2001
+From: Yi-wei Zhao <gbjc64@motorola.com>
+Date: Fri, 11 Dec 2015 17:14:35 -0800
+Subject: [PATCH 548/959] IKSWM-13768 msm8952:debug_config: Enable
+ SLUB_DEBUG_ON
+
+To debug slub memory corruption issue.
+
+It is enabled on userdebug build only, and should be reverted
+after getting enough logs.
+
+Change-Id: Ic65a097e6743a783313b10a27e2a7ccc44a27e5b
+Signed-off-by: Yi-wei Zhao <gbjc64@motorola.com>
+Reviewed-on: http://gerrit.mot.com/806881
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/configs/msm8916_defconfig | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/msm8916_defconfig b/arch/arm/configs/msm8916_defconfig
+index 24b97273a6c..075d07f4f01 100644
+--- a/arch/arm/configs/msm8916_defconfig
++++ b/arch/arm/configs/msm8916_defconfig
+@@ -591,6 +591,7 @@ CONFIG_FAULT_INJECTION=y
+ CONFIG_FAIL_PAGE_ALLOC=y
+ CONFIG_FAULT_INJECTION_DEBUG_FS=y
+ CONFIG_FAULT_INJECTION_STACKTRACE_FILTER=y
++CONFIG_SLUB_DEBUG_ON=y
+ CONFIG_SLUB_DEBUG_PANIC_ON=y
+ CONFIG_MSM_RTB=y
+ CONFIG_MSM_RTB_SEPARATE_CPUS=y
+-- 
+2.11.0
+

@@ -1,0 +1,55 @@
+From 46d06004a52ba1e9773940fb25edcf21eaf2e297 Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Mon, 4 May 2015 14:17:53 -0500
+Subject: [PATCH 248/959] IKSWL-9680: power: qpnp-smbcharger-mmi: Skip setting
+ OTG properties
+
+OTG is determined externally by the USB driver. Hence skip setting
+the OTG property from the charger driver.
+
+Change-Id: I8cc93a531b3a1288703865e399533094831093b5
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/744231
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index e905c2b026a..e41bfc7d76b 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -276,6 +276,7 @@ struct smbchg_chip {
+ 	struct delayed_work		usb_insertion_work;
+ 	int				apsd_rerun_cnt;
+ 	int				charger_rate;
++	bool				usbid_disabled;
+ };
+ 
+ static struct smbchg_chip *the_chip;
+@@ -4652,6 +4653,9 @@ static irqreturn_t usbid_change_handler(int irq, void *_chip)
+ 	struct smbchg_chip *chip = _chip;
+ 	bool otg_present;
+ 
++	if (chip->usbid_disabled)
++		return IRQ_HANDLED;
++
+ 	pr_smb(PR_INTERRUPT, "triggered\n");
+ 
+ 	/*
+@@ -5503,6 +5507,8 @@ static int smb_parse_dt(struct smbchg_chip *chip)
+ 						"qcom,chg-inhibit-fg");
+ 	chip->low_volt_dcin = of_property_read_bool(node,
+ 					"qcom,low-volt-dcin");
++	chip->usbid_disabled = of_property_read_bool(node,
++						"qcom,usbid-disabled");
+ 
+ 	/* parse the battery missing detection pin source */
+ 	rc = of_property_read_string(chip->spmi->dev.of_node,
+-- 
+2.11.0
+

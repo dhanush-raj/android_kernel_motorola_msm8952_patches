@@ -1,0 +1,64 @@
+From ce4f0879ea2285c8fbb7ebbde2402c1f3ba79b79 Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Wed, 9 Dec 2015 20:37:54 -0600
+Subject: [PATCH 558/959] IKSWM-13619 input: misc: vl53l0: do multiple checking
+ of moduleid
+
+last time we remove the delay in the power up, so sometime, it can not
+able to talk to right after powerup. Causing some failure. So I added a
+retry on checking module id
+
+Change-Id: I62b539f64f767e9b17957d9dc653ae32972d2ae9
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/806224
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/vl53L0/stmvl53l0_module.c | 20 +++++++++++++-------
+ 1 file changed, 13 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/input/misc/vl53L0/stmvl53l0_module.c b/drivers/input/misc/vl53L0/stmvl53l0_module.c
+index 09df197f7ec..7502b1766e4 100644
+--- a/drivers/input/misc/vl53L0/stmvl53l0_module.c
++++ b/drivers/input/misc/vl53L0/stmvl53l0_module.c
+@@ -1260,7 +1260,7 @@ int stmvl53l0_checkmoduleid(struct stmvl53l0_data *data,
+ */
+ static int stmvl53l0_init_client(struct stmvl53l0_data *data)
+ {
+-	uint8_t id = 0, type = 0;
++	uint8_t id = 0, type = 0, i = 0;
+ 	uint8_t revision = 0, module_id = 0;
+ 	VL53L0_Error Status = VL53L0_ERROR_NONE;
+ 	VL53L0_DeviceInfo_t DeviceInfo;
+@@ -1269,13 +1269,19 @@ static int stmvl53l0_init_client(struct stmvl53l0_data *data)
+ 
+ 	vl53l0_dbgmsg("Enter\n");
+ 
+-
+ 	/* Read Model ID */
+-	VL53L0_RdByte(vl53l0_dev, VL53L0_REG_IDENTIFICATION_MODEL_ID, &id);
+-	vl53l0_errmsg("read MODLE_ID: 0x%x\n", id);
+-	if (id == 0xee) {
+-		vl53l0_errmsg("STM VL53L0 Found\n");
+-	} else if (id == 0) {
++	for (i = 0; i < 5; i++) {
++		VL53L0_RdByte(vl53l0_dev,
++			VL53L0_REG_IDENTIFICATION_MODEL_ID, &id);
++		vl53l0_errmsg("read MODLE_ID: 0x%x\n", id);
++		if (id == 0xee) {
++			vl53l0_errmsg("STM VL53L0 Found\n");
++			break;
++		}
++
++		msleep(20);
++	}
++	if (id != 0xee) {
+ 		vl53l0_errmsg("Not found STM VL53L0\n");
+ 		return -EIO;
+ 	}
+-- 
+2.11.0
+

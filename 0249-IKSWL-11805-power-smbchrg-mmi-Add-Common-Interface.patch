@@ -1,0 +1,103 @@
+From 6ccfd50f4803a2529998f5986cceb7f5fdda2d99 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Mon, 4 May 2015 17:02:09 -0500
+Subject: [PATCH 249/959] IKSWL-11805: power: smbchrg-mmi: Add Common Interface
+
+Add common interface for items and other layers need
+to read.  This will make it easier to keep the upper
+layers the same.
+
+Change-Id: I927c7f2a27285021c9720a887b4a790cb89b2ef8
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/744315
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 54 +++++++++++++++++++++++++++++++++++++
+ 1 file changed, 54 insertions(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index e41bfc7d76b..31133ace8f2 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -765,6 +765,9 @@ static enum power_supply_property smbchg_battery_properties[] = {
+ 	POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED,
+ 	POWER_SUPPLY_PROP_TEMP_HOTSPOT,
+ 	POWER_SUPPLY_PROP_CHARGE_RATE,
++	POWER_SUPPLY_PROP_CHARGE_FULL,
++	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
++	POWER_SUPPLY_PROP_CYCLE_COUNT,
+ };
+ 
+ #define CHGR_STS			0x0E
+@@ -1018,6 +1021,48 @@ static int get_prop_batt_voltage_max_design(struct smbchg_chip *chip)
+ 	return uv;
+ }
+ 
++#define DEFAULT_CHARGE_FULL	3000000
++static int get_prop_charge_full(struct smbchg_chip *chip)
++{
++	int uah, rc;
++
++	rc = get_property_from_fg(chip,
++			POWER_SUPPLY_PROP_CHARGE_FULL, &uah);
++	if (rc) {
++		pr_smb(PR_STATUS, "Couldn't get charge full rc = %d\n", rc);
++		uah = DEFAULT_CHARGE_FULL;
++	}
++	return uah;
++}
++
++#define DEFAULT_CHARGE_FULL_DESIGN	3000000
++static int get_prop_charge_full_design(struct smbchg_chip *chip)
++{
++	int uah, rc;
++
++	rc = get_property_from_fg(chip,
++			POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN, &uah);
++	if (rc) {
++		pr_smb(PR_STATUS, "Couldn't get full design rc = %d\n", rc);
++		uah = DEFAULT_CHARGE_FULL_DESIGN;
++	}
++	return uah;
++}
++
++#define DEFAULT_CYCLE_COUNT	0
++static int get_prop_cycle_count(struct smbchg_chip *chip)
++{
++	int count, rc;
++
++	rc = get_property_from_fg(chip,
++			POWER_SUPPLY_PROP_CYCLE_COUNT, &count);
++	if (rc) {
++		pr_smb(PR_STATUS, "Couldn't get cyclec count rc = %d\n", rc);
++		count = DEFAULT_CYCLE_COUNT;
++	}
++	return count;
++}
++
+ static int get_prop_batt_health(struct smbchg_chip *chip)
+ {
+ 	if (chip->batt_hot)
+@@ -2926,6 +2971,15 @@ static int smbchg_battery_get_property(struct power_supply *psy,
+ 	case POWER_SUPPLY_PROP_SAFETY_TIMER_ENABLE:
+ 		val->intval = chip->safety_timer_en;
+ 		break;
++	case POWER_SUPPLY_PROP_CYCLE_COUNT:
++		val->intval = get_prop_cycle_count(chip);
++		break;
++	case POWER_SUPPLY_PROP_CHARGE_FULL:
++		val->intval = get_prop_charge_full(chip);
++		break;
++	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
++		val->intval = get_prop_charge_full_design(chip);
++		break;
+ 	default:
+ 		return -EINVAL;
+ 	}
+-- 
+2.11.0
+

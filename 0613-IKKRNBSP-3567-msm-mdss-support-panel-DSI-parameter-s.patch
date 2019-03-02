@@ -1,0 +1,373 @@
+From c2596535e9314127def3dceeae02e707f224cedd Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Wed, 13 Jan 2016 15:18:59 -0800
+Subject: [PATCH 613/959] IKKRNBSP-3567: msm: mdss: support panel DSI parameter
+ sysfs interface
+
+Common implementation to support changing panel DSI parameters on the
+fly by sysfs interface.
+
+Change-Id: Ib542185e2aea7ccee10aa47c4d8ac4c71c103f8d
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/807245
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi.h       |   2 +
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 109 ++++++++++++++++++++++++++++++
+ drivers/video/msm/mdss/mdss_fb.c        | 113 ++++++++++++++++++++++++++++++++
+ drivers/video/msm/mdss/mdss_panel.h     |  31 +++++++++
+ 4 files changed, 255 insertions(+)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi.h b/drivers/video/msm/mdss/mdss_dsi.h
+index 146d115ca8c..c20929f3bff 100644
+--- a/drivers/video/msm/mdss/mdss_dsi.h
++++ b/drivers/video/msm/mdss/mdss_dsi.h
+@@ -458,6 +458,8 @@ struct mdss_dsi_ctrl_pdata {
+ 	struct dsi_panel_cmds video2cmd;
+ 	struct dsi_panel_cmds cmd2video;
+ 
++	struct dsi_panel_cmds *param_cmds[PARAM_ID_NUM];
++
+ 	struct dcs_cmd_list cmdlist;
+ 	struct completion dma_comp;
+ 	struct completion mdp_comp;
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index b62158f02b4..44f247f14b6 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -219,6 +219,50 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
+ 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+ }
+ 
++static int mdss_dsi_panel_set_param(struct mdss_panel_data *pdata,
++		u16 id, u16 val, bool cmd_sent)
++{
++	struct mdss_panel_info *pinfo = &pdata->panel_info;
++	struct dsi_panel_cmds *cmds;
++	struct mdss_dsi_ctrl_pdata *ctrl;
++
++	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata, panel_data);
++	if (!ctrl) {
++		pr_err("%s: ctrl is null\n", __func__);
++		return -EINVAL;
++	}
++
++	if (!mdss_panel_param_is_supported(pinfo, id)) {
++		pr_debug("%s: id %d is disabled, ignore request\n",
++			__func__, id);
++		return 0;
++	}
++
++	if (val >= pinfo->param[id]->val_max) {
++		pr_warn("%s: unsupported value: %d\n", __func__, val);
++		return -EINVAL;
++	}
++
++	if (pinfo->param[id]->value == val) {
++		pr_debug("%s: already in wanted value %d for id %d\n",
++			__func__, val, id);
++		return 0;
++	}
++
++	if (cmd_sent) {
++		cmds = ctrl->param_cmds[id];
++		if (!cmds || !cmds[val].cmd_cnt) {
++			pr_warn("%s: value %d not supported for id %d\n",
++					__func__, val, id);
++			return -EINVAL;
++		}
++		mdss_dsi_panel_cmds_send(ctrl, &cmds[val]);
++	}
++	pinfo->param[id]->value = val;
++
++	return 0;
++}
++
+ static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+ {
+ 	int rc = 0;
+@@ -1101,6 +1145,67 @@ exit_free:
+ 	return -ENOMEM;
+ }
+ 
++static struct panel_param mdss_dsi_panel_param[PARAM_ID_NUM] = {
++	/* parameters to be added */
++};
++
++static int mdss_panel_parse_param_prop(struct device_node *np,
++				struct mdss_panel_info *pinfo,
++				struct mdss_dsi_ctrl_pdata *ctrl)
++{
++	int i, j, cmd_num, rc = 0;
++	struct panel_param *param;
++	struct dsi_panel_cmds *cmds;
++	char *prop;
++
++	for (i = 0; i < ARRAY_SIZE(mdss_dsi_panel_param); i++) {
++		param = &mdss_dsi_panel_param[i];
++		cmds = kcalloc(param->val_max, sizeof(struct dsi_panel_cmds),
++				GFP_KERNEL);
++		if (cmds == NULL) {
++			rc = -ENOMEM;
++			goto err;
++		}
++		ctrl->param_cmds[i] = cmds;
++		cmd_num = 0;
++
++		for (j = 0; j < param->val_max; j++) {
++			prop = param->val_map[j].prop;
++			if (!prop || !of_get_property(np, prop, NULL))
++				continue;
++			rc = mdss_dsi_parse_dcs_cmds(np,
++					&cmds[j], prop, NULL);
++			if (rc) {
++				pr_err("%s: failed to read prop %s\n",
++					__func__, prop);
++				goto err;
++			}
++			if (cmds[j].cmd_cnt)
++				cmd_num++;
++		}
++
++		if (cmd_num == 0) {
++			kfree(ctrl->param_cmds[i]);
++			ctrl->param_cmds[i] = NULL;
++			continue;
++		}
++
++		param->is_supported = true;
++		pinfo->param[i] = param;
++		pr_info("%s: %s feature enabled with %d dt cmds\n",
++				__func__, param->param_name, cmd_num);
++	}
++
++	return rc;
++err:
++	for (i = 0; i < ARRAY_SIZE(mdss_dsi_panel_param); i++) {
++		kfree(ctrl->param_cmds[i]);
++		ctrl->param_cmds[i] = NULL;
++		pinfo->param[i] = NULL;
++		mdss_dsi_panel_param[i].is_supported = false;
++	}
++	return rc;
++}
+ 
+ int mdss_panel_get_dst_fmt(u32 bpp, char mipi_mode, u32 pixel_packing,
+ 				char *dst_format)
+@@ -2553,6 +2658,9 @@ static int mdss_panel_parse_dt(struct device_node *np,
+ 	pinfo->blank_progress_notify_enabled = of_property_read_bool(np,
+ 				"qcom,mdss-dsi-use-blank-in-progress-notifier");
+ 
++	if (mdss_panel_parse_param_prop(np, pinfo, ctrl_pdata))
++		pr_err("Error parsing panel parameter properties\n");
++
+ 	return 0;
+ 
+ error:
+@@ -2785,6 +2893,7 @@ int mdss_dsi_panel_init(struct device_node *node,
+ 	ctrl_pdata->low_power_config = mdss_dsi_panel_low_power_config;
+ 	ctrl_pdata->panel_data.set_backlight = mdss_dsi_panel_bl_ctrl;
+ 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
++	ctrl_pdata->panel_data.set_param = mdss_dsi_panel_set_param;
+ 
+ 	return 0;
+ }
+diff --git a/drivers/video/msm/mdss/mdss_fb.c b/drivers/video/msm/mdss/mdss_fb.c
+index d4e48ea9fce..9f15dfc38b5 100644
+--- a/drivers/video/msm/mdss/mdss_fb.c
++++ b/drivers/video/msm/mdss/mdss_fb.c
+@@ -890,6 +890,115 @@ static struct attribute_group panel_id_attr_group = {
+ 	.attrs = panel_id_attrs,
+ };
+ 
++static struct panel_param *mdss_fb_dev_to_param(struct device *dev, u16 id)
++{
++	struct fb_info *fbi = dev_get_drvdata(dev);
++	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
++	struct mdss_panel_info *pinfo = mfd->panel_info;
++	struct panel_param *param;
++
++	if (!pinfo) {
++		pr_err("pinfo is null\n");
++		return NULL;
++	}
++
++	if (id >= PARAM_ID_NUM) {
++		pr_err("panel param id %d not available\n", id);
++		return NULL;
++	}
++
++	param = pinfo->param[id];
++	if (!param)
++		pr_err("panel param is null\n");
++
++	return param;
++}
++
++static int __maybe_unused mdss_fb_set_param(struct device *dev,
++		u16 id, const char *name)
++{
++	struct fb_info *fbi = dev_get_drvdata(dev);
++	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
++	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
++	struct mdss_panel_data *pdata = dev_get_platdata(&mfd->pdev->dev);
++	struct panel_param *param;
++	int ret = -EINVAL;
++	u16 value;
++	const char *param_name, *val_name;
++
++	if (!ctl || !pdata || !pdata->set_param) {
++		pr_err("mdp or panel data is null\n");
++		return -EINVAL;
++	}
++
++	param = mdss_fb_dev_to_param(dev, id);
++	if (!param)
++		return -EINVAL;
++
++	param_name = param->param_name;
++	for (value = 0; value < param->val_max; value++) {
++		val_name = param->val_map[value].name;
++		if (val_name && !strncmp(name, val_name, strlen(val_name)))
++			break;
++	}
++
++	if (value >= param->val_max) {
++		pr_err("invalid value name %s for %s\n", name, param_name);
++		return -EINVAL;
++	}
++
++	mutex_lock(&ctl->offlock);
++	if (mdss_fb_is_power_off(mfd)) {
++		pr_warn("panel is not powered\n");
++		ret = -EPERM;
++		goto unlock;
++	}
++
++	ret = pdata->set_param(pdata, id, value, true);
++	if (ret)
++		pr_err("failed to set %s at %s\n", param_name, val_name);
++	else
++		pr_info("succeeded to set %s at %s\n", param_name, val_name);
++
++unlock:
++	mutex_unlock(&ctl->offlock);
++	return ret;
++}
++
++static int __maybe_unused mdss_fb_get_param(struct device *dev,
++		u16 id, const char **name)
++{
++	struct panel_param *param = mdss_fb_dev_to_param(dev, id);
++
++	if (!param || !name) {
++		pr_err("param or name is null\n");
++		return -EINVAL;
++	}
++
++	*name = param->val_map[param->value].name;
++	return 0;
++}
++
++static struct device_attribute param_attrs[PARAM_ID_NUM] = {
++	/* attributes to be added */
++};
++
++static int mdss_fb_create_param_sysfs(struct msm_fb_data_type *mfd)
++{
++	int i, rc = 0;
++
++	for (i = 0; i < PARAM_ID_NUM; i++) {
++		if (!mdss_panel_param_is_supported(mfd->panel_info, i))
++			continue;
++		rc = device_create_file(mfd->fbi->dev, &param_attrs[i]);
++		if (rc) {
++			pr_err("failed to create sysfs for id %d\n", i);
++			break;
++		}
++	}
++	return rc;
++}
++
+ static int mdss_fb_create_sysfs(struct msm_fb_data_type *mfd)
+ {
+ 	int rc;
+@@ -904,6 +1013,10 @@ static int mdss_fb_create_sysfs(struct msm_fb_data_type *mfd)
+ 	if (rc)
+ 		pr_err("panel id group creation failed, rc=%d\n", rc);
+ 
++	rc = mdss_fb_create_param_sysfs(mfd);
++	if (rc)
++		pr_err("panel parameter sysfs creation failed, rc=%d\n", rc);
++
+ err:
+ 	return rc;
+ }
+diff --git a/drivers/video/msm/mdss/mdss_panel.h b/drivers/video/msm/mdss/mdss_panel.h
+index 1bf4d981b57..a1eacf43041 100644
+--- a/drivers/video/msm/mdss/mdss_panel.h
++++ b/drivers/video/msm/mdss/mdss_panel.h
+@@ -32,6 +32,23 @@ struct panel_id {
+ /* worst case prefill lines for all chipsets including all vertical blank */
+ #define MDSS_MDP_MAX_PREFILL_FETCH 25
+ 
++enum panel_param_id {
++	PARAM_ID_NUM = 0,
++};
++
++struct panel_param_val_map {
++	char *name;
++	char *prop;
++};
++
++struct panel_param {
++	char *param_name;
++	struct panel_param_val_map *val_map;
++	u16 val_max;
++	u16 value;
++	bool is_supported;
++};
++
+ /* panel type list */
+ #define NO_PANEL		0xffff	/* No Panel */
+ #define MDDI_PANEL		1	/* MDDI */
+@@ -600,6 +617,7 @@ struct mdss_panel_info {
+ 
+ 	u32 disp_on_check_val;
+ 	bool blank_progress_notify_enabled;
++	struct panel_param *param[PARAM_ID_NUM];
+ };
+ 
+ struct mdss_panel_timing {
+@@ -638,6 +656,8 @@ struct mdss_panel_timing {
+ struct mdss_panel_data {
+ 	struct mdss_panel_info panel_info;
+ 	void (*set_backlight) (struct mdss_panel_data *pdata, u32 bl_level);
++	int (*set_param)(struct mdss_panel_data *pdata,
++		u16 id, u16 value, bool sent_cmd);
+ 	unsigned char *mmss_cc_base;
+ 
+ 	/**
+@@ -918,4 +938,15 @@ static inline struct mdss_panel_timing *mdss_panel_get_timing_by_name(
+ 		struct mdss_panel_data *pdata,
+ 		const char *name) { return NULL; };
+ #endif
++
++static inline bool mdss_panel_param_is_supported(struct mdss_panel_info *p,
++	u16 id)
++{
++	if (id < PARAM_ID_NUM && p && p->param[id] &&
++		p->param[id]->is_supported)
++		return true;
++
++	return false;
++};
++
+ #endif /* MDSS_PANEL_H */
+-- 
+2.11.0
+

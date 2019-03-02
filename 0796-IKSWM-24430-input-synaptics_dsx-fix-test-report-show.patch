@@ -1,0 +1,83 @@
+From 5c2b41e0eb384a037929170c767bb52a372e944f Mon Sep 17 00:00:00 2001
+From: Alexander Filonenko <alexf@motorola.com>
+Date: Mon, 14 Mar 2016 16:55:51 -0500
+Subject: [PATCH 796/959] IKSWM-24430 input: synaptics_dsx: fix test report
+ show/store
+
+Use I2C device for warning reporting in show/store.
+
+Change-Id: I4b515a7372ac690089e07396daf2a6c47a702623
+Signed-off-by: Alexander Filonenko <alexf@motorola.com>
+Reviewed-on: http://gerrit.mot.com/833235
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Konstantin Makariev <kmakariev@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ .../touchscreen/synaptics_dsx_test_reporting.c     | 27 ++++++++++++++++++++--
+ 1 file changed, 25 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_test_reporting.c b/drivers/input/touchscreen/synaptics_dsx_test_reporting.c
+index 52e34afb139..9aead912e25 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_test_reporting.c
++++ b/drivers/input/touchscreen/synaptics_dsx_test_reporting.c
+@@ -57,6 +57,11 @@
+ 
+ #define NO_AUTO_CAL_MASK 0x01
+ 
++static inline ssize_t synaptics_dsx_test_reporting_show_error(struct device *dev,
++		struct device_attribute *attr, char *buf);
++static inline ssize_t synaptics_dsx_test_reporting_store_error(struct device *dev,
++		struct device_attribute *attr, const char *buf, size_t count);
++
+ #define concat(a, b) a##b
+ 
+ #define GROUP(_attrs) {\
+@@ -74,7 +79,7 @@ static ssize_t concat(synaptics_rmi4_f54, _##propname##_show)(\
+ struct device_attribute dev_attr_##propname =\
+ 		__ATTR(propname, (perm),\
+ 		concat(synaptics_rmi4_f54, _##propname##_show),\
+-		synaptics_rmi4_store_error);
++		synaptics_dsx_test_reporting_store_error);
+ 
+ #define show_prototype(propname)\
+ 	show_prototype_ext(propname, S_IRUSR | S_IRGRP | S_IROTH)
+@@ -87,7 +92,7 @@ static ssize_t concat(synaptics_rmi4_f54, _##propname##_store)(\
+ \
+ struct device_attribute dev_attr_##propname =\
+ 		__ATTR(propname, S_IWUSR | S_IWGRP,\
+-		synaptics_rmi4_show_error,\
++		synaptics_dsx_test_reporting_show_error,\
+ 		concat(synaptics_rmi4_f54, _##propname##_store));
+ 
+ #define show_store_prototype_ext(propname, perm)\
+@@ -2318,6 +2323,24 @@ static struct synaptics_rmi4_f54_handle *f54;
+ 
+ static struct completion remove_complete;
+ 
++static inline ssize_t synaptics_dsx_test_reporting_show_error(struct device *dev,
++		struct device_attribute *attr, char *buf)
++{
++	dev_warn(&f54->rmi4_data->i2c_client->dev,
++			"%s: Attempted to read from write-only attribute %s\n",
++			__func__, attr->attr.name);
++	return -EPERM;
++}
++
++static inline ssize_t synaptics_dsx_test_reporting_store_error(struct device *dev,
++		struct device_attribute *attr, const char *buf, size_t count)
++{
++	dev_warn(&f54->rmi4_data->i2c_client->dev,
++			"%s: Attempted to write to read-only attribute %s\n",
++			__func__, attr->attr.name);
++	return -EPERM;
++}
++
+ static bool is_report_type_valid(enum f54_report_types report_type)
+ {
+ 	switch (report_type) {
+-- 
+2.11.0
+

@@ -1,0 +1,64 @@
+From cb6e5f6923b197e6d69c731f8bfff2a324cceef2 Mon Sep 17 00:00:00 2001
+From: Mike Lockwood <lockwood@google.com>
+Date: Thu, 6 Mar 2014 15:49:39 -0800
+Subject: [PATCH 368/959] USB: gadget: mtp: Fix hang in ioctl(MTP_RECEIVE_FILE)
+ for WritePartialObject
+
+In receive_file_work, we now queue reads with length rounded up to
+max packet size rather than mtp_rx_req_len.
+Otherwise the read request will never complete.
+
+Bug: 12195339
+
+Change-Id: I32272fc46934377db11ae3b2523b6aaf258a6c32
+Signed-off-by: Mike Lockwood <lockwood@google.com>
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/766429
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-on: http://gerrit.mot.com/791537
+---
+ drivers/usb/gadget/f_mtp.c | 11 +++++------
+ 1 file changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/usb/gadget/f_mtp.c b/drivers/usb/gadget/f_mtp.c
+index 74ae426fc2f..0b1bfa9952b 100644
+--- a/drivers/usb/gadget/f_mtp.c
++++ b/drivers/usb/gadget/f_mtp.c
+@@ -923,7 +923,7 @@ static void receive_file_work(struct work_struct *data)
+ 	struct file *filp;
+ 	loff_t offset;
+ 	int64_t count;
+-	int ret, cur_buf = 0;
++	int ret, len, cur_buf = 0;
+ 	int r = 0;
+ 	ktime_t start_time;
+ 
+@@ -934,9 +934,6 @@ static void receive_file_work(struct work_struct *data)
+ 	count = dev->xfer_file_length;
+ 
+ 	DBG(cdev, "receive_file_work(%lld)\n", count);
+-	if (!IS_ALIGNED(count, dev->ep_out->maxpacket))
+-		DBG(cdev, "%s- count(%lld) not multiple of mtu(%d)\n", __func__,
+-						count, dev->ep_out->maxpacket);
+ 
+ 	while (count > 0 || write_req) {
+ 		if (count > 0) {
+@@ -944,8 +941,10 @@ static void receive_file_work(struct work_struct *data)
+ 			read_req = dev->rx_req[cur_buf];
+ 			cur_buf = (cur_buf + 1) % RX_REQ_MAX;
+ 
+-			/* some h/w expects size to be aligned to ep's MTU */
+-			read_req->length = mtp_rx_req_len;
++			len = ALIGN(count, dev->ep_out->maxpacket);
++			if (len > mtp_rx_req_len)
++				len = mtp_rx_req_len;
++			read_req->length = len;
+ 
+ 			dev->rx_done = 0;
+ 			ret = usb_ep_queue(dev->ep_out, read_req, GFP_KERNEL);
+-- 
+2.11.0
+

@@ -1,0 +1,41 @@
+From 553008a7d084a3e79b7ea480f73a27dba54acf77 Mon Sep 17 00:00:00 2001
+From: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Date: Fri, 8 Jan 2016 15:50:46 -0600
+Subject: [PATCH 602/959] IKSWM-15924 arm/dts: msm8952: Pull down sensorhub
+ input pins
+
+Both wake and non-wake interrupts were being fired inadvertently by the
+sensorhub when it resetted. Configure the pins to be pulled down so that
+they stay low during the course of a sensorhub reset.
+
+Change-Id: I786659b5d3c106570e1752e21047f99cfc221f8a
+Signed-off-by: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Reviewed-on: http://gerrit.mot.com/811867
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-by: Eric Hefner <ehefner@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 3e31ebb589b..ad91a38141b 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -197,7 +197,7 @@
+ 		label = "stml0xx-inputs";
+ 
+ 		stml0xx_inputs_default: stml0xx-inputs {
+-			bias-disable;	 /* no pull */
++			bias-pull-down;	/* pull down */
+ 			drive-strength = <2>;
+ 		};
+ 	};
+-- 
+2.11.0
+

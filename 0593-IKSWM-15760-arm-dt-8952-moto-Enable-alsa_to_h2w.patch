@@ -1,0 +1,35 @@
+From 6239ed63d6ac9b51f101bbc13051327572ae14dd Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Wed, 6 Jan 2016 10:27:59 -0600
+Subject: [PATCH 593/959] IKSWM-15760: arm/dt: 8952-moto: Enable alsa_to_h2w
+
+Enable the alsa_to_h2w device for reporting headset events.
+
+Change-Id: Ib7a21e99eeaf4e4b4660d7238f55f1c0865a58ca
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/811071
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 946b99b6079..cd01ea0dfef 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -764,6 +764,9 @@
+ 		dma-names = "tx", "rx";
+ 	};
+ 
++	alsa_to_h2w {
++		compatible = "mmi,alsa-to-h2w";
++	};
+ };
+ 
+ &sdhc_1 {
+-- 
+2.11.0
+

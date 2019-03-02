@@ -1,0 +1,177 @@
+From e3719af95081647f72f77424b916a391f28c4bb7 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Fri, 4 Mar 2016 11:55:04 -0600
+Subject: [PATCH 734/959] IKSWM-19515: arm/dt: batterydata: Update GA40 data
+
+Add the ATL version of the battery and update the
+Sony version so that it is distinguishable.
+
+Change-Id: If976457a7ab06f6517ac588985691218fa07950c
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/829362
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/batterydata-ga40-atl.dtsi  | 61 +++++++++++++++++++++++
+ arch/arm/boot/dts/qcom/batterydata-ga40-sony.dtsi | 61 +++++++++++++++++++++++
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi   |  5 +-
+ 3 files changed, 126 insertions(+), 1 deletion(-)
+ create mode 100644 arch/arm/boot/dts/qcom/batterydata-ga40-atl.dtsi
+ create mode 100644 arch/arm/boot/dts/qcom/batterydata-ga40-sony.dtsi
+
+diff --git a/arch/arm/boot/dts/qcom/batterydata-ga40-atl.dtsi b/arch/arm/boot/dts/qcom/batterydata-ga40-atl.dtsi
+new file mode 100644
+index 00000000000..1f9ea83ce6d
+--- /dev/null
++++ b/arch/arm/boot/dts/qcom/batterydata-ga40-atl.dtsi
+@@ -0,0 +1,61 @@
++/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++qcom,ga40-atl {
++	serialnum = "SNN5970";
++	/* #2316940_Moto_GA40_3000mAh_averaged_MasterSlave_Feb1st2016*/
++	qcom,max-voltage-uv = <4350000>;
++	qcom,nom-batt-capacity-mah = <3000>;
++	qcom,batt-id-kohm = <243>;
++	qcom,battery-beta = <3900>;
++	qcom,battery-type = "GA40-ATL-3000mah";
++	qcom,chg-rslow-comp-c1 = <2547565>;
++	qcom,chg-rslow-comp-c2 = <2942607>;
++	qcom,chg-rs-to-rslow = <680441>;
++	qcom,chg-rslow-comp-thr = <0x99>;
++	qcom,checksum = <0xA926>;
++	qcom,gui-version = "PMI8950GUI - 2.0.0.15";
++	qcom,fg-profile-data = [
++		 E0 83 83 7C
++		 91 80 3E 76
++		 64 83 5D 6F
++		 8D 88 0A 8F
++		 03 82 86 99
++		 8A B7 EB C2
++		 5B 11 FB 83
++		 24 7D 02 81
++		 1B 77 56 83
++		 6F 68 C9 7A
++		 A1 87 13 82
++		 C4 9A 1F BE
++		 D1 CB 5B 0E
++		 F3 0B E3 5B
++		 CE 6E 64 FC
++		 D4 3E BE 3C
++		 DE 2B 00 00
++		 E5 47 9C 38
++		 DE 2B 00 00
++		 00 00 00 00
++		 00 00 00 00
++		 89 6A 7E 69
++		 0C 78 03 90
++		 68 77 D1 6A
++		 57 6F 86 80
++		 59 76 44 69
++		 87 6D 69 A8
++		 1A 24 5B D6
++		 5C A0 71 0C
++		 28 00 FF 36
++		 F0 11 30 03
++		 00 00 00 0C
++	];
++};
+diff --git a/arch/arm/boot/dts/qcom/batterydata-ga40-sony.dtsi b/arch/arm/boot/dts/qcom/batterydata-ga40-sony.dtsi
+new file mode 100644
+index 00000000000..217ddfc4247
+--- /dev/null
++++ b/arch/arm/boot/dts/qcom/batterydata-ga40-sony.dtsi
+@@ -0,0 +1,61 @@
++/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++qcom,ga40-sony {
++	serialnum = "SNN5966";
++	/* #2265165_Moto_GA40_3000mAh_averaged_MasterSlave_Dec18th2015*/
++	qcom,max-voltage-uv = <4350000>;
++	qcom,nom-batt-capacity-mah = <3000>;
++	qcom,batt-id-kohm = <243>;
++	qcom,battery-beta = <3900>;
++	qcom,battery-type = "GA40-SONY-3000mah";
++	qcom,chg-rslow-comp-c1 = <2477894>;
++	qcom,chg-rslow-comp-c2 = <2918165>;
++	qcom,chg-rs-to-rslow = <769547>;
++	qcom,chg-rslow-comp-thr = <0x99>;
++	qcom,checksum = <0xAF1F>;
++	qcom,gui-version = "PMI8950GUI - 2.0.0.15";
++	qcom,fg-profile-data = [
++		 C7 83 5A 77
++		 E5 7B 15 75
++		 29 83 12 73
++		 B8 77 DD 68
++		 1A 82 2E 98
++		 DF B4 C1 BB
++		 6A 17 1E 88
++		 C3 7D 9E 80
++		 45 75 1D 83
++		 B5 7A 1B 8C
++		 E6 83 11 82
++		 1A 9A 44 BD
++		 A1 CA 9B 0D
++		 D5 0B 1F 60
++		 CE 6E 64 FC
++		 E2 2C 4F 44
++		 AA 42 00 00
++		 EC 46 7B 39
++		 FE 22 00 00
++		 00 00 00 00
++		 00 00 00 00
++		 F9 6B 7C 6A
++		 F1 75 7C 81
++		 FE 7C 2F 71
++		 E4 74 27 80
++		 A6 7C 96 70
++		 92 6F D9 A9
++		 20 4E 59 B7
++		 4F A0 71 0C
++		 28 00 FF 36
++		 F0 11 30 03
++		 00 00 00 0C
++	];
++};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index ec391052360..7b16f9945d7 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -444,7 +444,10 @@
+ /{
+ 	mot_batterydata: qcom,battery-data {
+ 		qcom,batt-id-range-pct = <100>;
+-		#include "batterydata-ga40-3000mah.dtsi"
++		df-serialnum = "SNN5966";
++
++		#include "batterydata-ga40-sony.dtsi"
++		#include "batterydata-ga40-atl.dtsi"
+ 	};
+ };
+ 
+-- 
+2.11.0
+

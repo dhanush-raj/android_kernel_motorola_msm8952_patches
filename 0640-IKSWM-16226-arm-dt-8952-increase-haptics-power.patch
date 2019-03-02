@@ -1,0 +1,39 @@
+From cb5cec78ed6812e948d0b547cf617c11e74b16d5 Mon Sep 17 00:00:00 2001
+From: Xiaofei Ma <xiaofei@motorola.com>
+Date: Fri, 22 Jan 2016 11:34:12 -0600
+Subject: [PATCH 640/959] IKSWM-16226 arm/dt: 8952: increase haptics power
+
+Based on the test result from hw and mechanical
+team, the voltage of vibrator should be increased.
+
+Change-Id: Id5f50f776f4b15b79a599f7ff998f2ddf646a906
+Signed-off-by: Xiaofei Ma <xiaofei@motorola.com>
+Reviewed-on: http://gerrit.mot.com/815195
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Reviewed-by: Dmitry Ornatsky <ornatsky@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 24e7683e2c4..65f27d2e53f 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -847,6 +847,10 @@
+ 			qcom,fs-curr-ua = <25000>;
+ 			/delete-property/ qcom,en-ext-pfet-sc-pro;
+ 		};
++
++		pmi8950_haptic: qcom,haptic@c000 {
++			qcom,vmax-mv = <2400>;
++		};
+ 	};
+ };
+ 
+-- 
+2.11.0
+

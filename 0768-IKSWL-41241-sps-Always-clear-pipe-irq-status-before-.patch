@@ -1,0 +1,46 @@
+From 5ccbae516410f7b6f91523707cccbdf03b9a9e91 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Mon, 1 Jun 2015 09:41:45 -0700
+Subject: [PATCH 768/959] IKSWL-41241:sps: Always clear pipe irq  status before
+ enabling sps irq.
+
+   Clear pipe irq  status before enabling sps irq to avoid spurious sps irq.
+
+Change-Id: I44387c1ad2500864acf8893bf250fdeaab279092
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/753115
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Reviewed-by: Russell Knize <rknize@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/831354
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+---
+ drivers/platform/msm/sps/sps_bam.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/platform/msm/sps/sps_bam.c b/drivers/platform/msm/sps/sps_bam.c
+index ec59fd449e4..0f11089c5a1 100644
+--- a/drivers/platform/msm/sps/sps_bam.c
++++ b/drivers/platform/msm/sps/sps_bam.c
+@@ -1153,9 +1153,13 @@ static void pipe_set_irq(struct sps_bam *dev, u32 pipe_index,
+ 				"sps:BAM %pa pipe %d forced to use polling\n",
+ 				 BAM_ID(dev), pipe_index);
+ 	}
+-	if ((pipe->state & BAM_STATE_MTI) == 0)
++	if ((pipe->state & BAM_STATE_MTI) == 0) {
++		bam_pipe_get_and_clear_irq_status(&dev->base,
++						   pipe_index);
++
+ 		bam_pipe_set_irq(&dev->base, pipe_index, irq_enable,
+ 					 pipe->irq_mask, dev->props.ee);
++	}
+ 	else
+ 		bam_pipe_set_mti(&dev->base, pipe_index, irq_enable,
+ 					 pipe->irq_mask, pipe->irq_gen_addr);
+-- 
+2.11.0
+

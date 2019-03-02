@@ -1,0 +1,40 @@
+From bcd18e39916ed0eec8823151dd0b5364f5b4ef12 Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Wed, 18 Nov 2015 21:49:58 -0600
+Subject: [PATCH 495/959] IKSWM-11518 ASoC: msm8952: add Opalum worker
+
+Opalum algorithm can take external configuration to
+define excursion module and its tune.
+
+Need worker thread to load its configuration and pass
+it to qDSP when requested over mixer controls.
+
+Change-Id: I6c6eb8d0ac09f21af8fd463b45f2c431c2a037ac
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/801316
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/codecs/msm8x16-wcd.h | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/sound/soc/codecs/msm8x16-wcd.h b/sound/soc/codecs/msm8x16-wcd.h
+index 99f64644fce..bb839cd787f 100644
+--- a/sound/soc/codecs/msm8x16-wcd.h
++++ b/sound/soc/codecs/msm8x16-wcd.h
+@@ -305,6 +305,9 @@ struct msm8x16_wcd_priv {
+ 	unsigned long status_mask;
+ 	struct wcd_imped_i_ref imped_i_ref;
+ 	enum wcd_mbhc_imp_det_pin imped_det_pin;
++	struct workqueue_struct *ospl2xx_wq;
++	struct work_struct ospl2xx_config;
++
+ };
+ 
+ extern int msm8x16_wcd_mclk_enable(struct snd_soc_codec *codec, int mclk_enable,
+-- 
+2.11.0
+

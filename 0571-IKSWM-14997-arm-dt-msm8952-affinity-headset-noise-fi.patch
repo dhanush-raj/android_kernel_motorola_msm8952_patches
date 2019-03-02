@@ -1,0 +1,41 @@
+From 2b2048371da3cef0f88d477a2becb31a153bacb0 Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Mon, 21 Dec 2015 13:17:39 -0600
+Subject: [PATCH 571/959] IKSWM-14997 arm/dt: msm8952: affinity headset noise
+ fix
+
+remove QC micbias2 enable controls for headset path.
+we use SensorHub solution which contols micbias for headset.
+
+Change-Id: I9aceffb002440dcd02ae8ebcf9184324e55340a4
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/808885
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 564236132a4..ba7a4471d92 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -626,10 +626,10 @@
+ 			"SPK_RX_BIAS", "MCLK",
+ 			"INT_LDO_H", "MCLK",
+ 			"MIC BIAS External", "Handset Mic",
+-			"MIC BIAS External2", "Headset Mic",
++			"MIC BIAS External", "Headset Mic",
+ 			"MIC BIAS External", "Secondary Mic",
+ 			"AMIC1", "MIC BIAS External",
+-			"AMIC2", "MIC BIAS External2",
++			"AMIC2", "MIC BIAS External",
+ 			"AMIC3", "MIC BIAS External";
+ 		qcom,msm-gpios =
+ 			"cs35l34_clk",
+-- 
+2.11.0
+

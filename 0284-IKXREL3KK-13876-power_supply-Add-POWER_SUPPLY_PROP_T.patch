@@ -1,0 +1,50 @@
+From babfe2801179586c27efdad9b39ec4309bf99482 Mon Sep 17 00:00:00 2001
+From: Vidyadhar Gurram <rnh786@motorola.com>
+Date: Fri, 31 Oct 2014 10:44:04 -0500
+Subject: [PATCH 284/959] IKXREL3KK-13876: power_supply: Add
+ POWER_SUPPLY_PROP_TAPER_REACHED
+
+This property is meant to indicate that the current sinking into the battery is less
+than the Taper current threshold.
+
+Change-Id: I2e1d2869c56a8363b9193ed6dc612ca44b8f7eac
+Signed-off-by: Vidyadhar Gurram <rnh786@motorola.com>
+Reviewed-on: http://gerrit.mot.com/684759
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jiang-Li Yuan <jlyuan@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/power_supply_sysfs.c | 1 +
+ include/linux/power_supply.h       | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/drivers/power/power_supply_sysfs.c b/drivers/power/power_supply_sysfs.c
+index b1c7e11e803..592af6df433 100644
+--- a/drivers/power/power_supply_sysfs.c
++++ b/drivers/power/power_supply_sysfs.c
+@@ -225,6 +225,7 @@ static struct device_attribute power_supply_attrs[] = {
+ 	POWER_SUPPLY_ATTR(resistance_capacitive),
+ 	POWER_SUPPLY_ATTR(resistance_id),
+ 	POWER_SUPPLY_ATTR(resistance_now),
++	POWER_SUPPLY_ATTR(taper_reached),
+ 	/* Local extensions */
+ 	POWER_SUPPLY_ATTR(usb_hc),
+ 	POWER_SUPPLY_ATTR(usb_otg),
+diff --git a/include/linux/power_supply.h b/include/linux/power_supply.h
+index ecce82d3f98..eff9b6ee26d 100644
+--- a/include/linux/power_supply.h
++++ b/include/linux/power_supply.h
+@@ -191,6 +191,7 @@ enum power_supply_property {
+ 	/* unit is in ohms due to ID being typically in kohm range */
+ 	POWER_SUPPLY_PROP_RESISTANCE_ID,
+ 	POWER_SUPPLY_PROP_RESISTANCE_NOW,
++	POWER_SUPPLY_PROP_TAPER_REACHED,
+ 	/* Local extensions */
+ 	POWER_SUPPLY_PROP_USB_HC,
+ 	POWER_SUPPLY_PROP_USB_OTG,
+-- 
+2.11.0
+

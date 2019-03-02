@@ -1,0 +1,45 @@
+From a3cdddfe48ac43ff93d95c8dd6c6d1513b67d848 Mon Sep 17 00:00:00 2001
+From: Mike Lockwood <lockwood@google.com>
+Date: Tue, 5 Aug 2014 16:13:05 -0700
+Subject: [PATCH 369/959] USB: gadget: f_mtp: Fix integer overflow when
+ transferring large files.
+
+The ALIGN() macro will overflow if given large integers, and MTP uses
+0xFFFFFFFF for SendObject data packet size when the file is >= 4 gig.
+
+Signed-off-by: Mike Lockwood <lockwood@google.com>
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Change-Id: I234c9d3cd54a92aa14377144b03edfe26da5b6b2
+Reviewed-on: http://gerrit.mot.com/766428
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/791538
+---
+ drivers/usb/gadget/f_mtp.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/usb/gadget/f_mtp.c b/drivers/usb/gadget/f_mtp.c
+index 0b1bfa9952b..ab4629fcce3 100644
+--- a/drivers/usb/gadget/f_mtp.c
++++ b/drivers/usb/gadget/f_mtp.c
+@@ -941,8 +941,13 @@ static void receive_file_work(struct work_struct *data)
+ 			read_req = dev->rx_req[cur_buf];
+ 			cur_buf = (cur_buf + 1) % RX_REQ_MAX;
+ 
+-			len = ALIGN(count, dev->ep_out->maxpacket);
+-			if (len > mtp_rx_req_len)
++			/* The ALIGN macro may overflow if count is very large, so we only use it
++			 * if count <= mtp_rx_req_len.  This is safe because mtp_rx_req_len
++			 * should already be aligned.
++			 */
++			if (count <= mtp_rx_req_len)
++				len = ALIGN(count, dev->ep_out->maxpacket);
++			else
+ 				len = mtp_rx_req_len;
+ 			read_req->length = len;
+ 
+-- 
+2.11.0
+

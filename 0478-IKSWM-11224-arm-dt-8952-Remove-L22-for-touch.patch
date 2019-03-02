@@ -1,0 +1,50 @@
+From 9fcb24d8576cda45d6fce162be988ce01371294c Mon Sep 17 00:00:00 2001
+From: Xiaofei Ma <xiaofei@motorola.com>
+Date: Mon, 16 Nov 2015 11:13:37 -0600
+Subject: [PATCH 478/959] IKSWM-11224: arm/dt: 8952: Remove L22 for touch
+
+Touch vdd will come from display panel directly.
+
+Change-Id: Idcf4542ec69287e93071b78556d31e992b8a43bf
+Signed-off-by: Xiaofei Ma <xiaofei@motorola.com>
+Reviewed-on: http://gerrit.mot.com/799514
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Alexander Filonenko <alexf@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-athene-p0.dts    | 6 ++++++
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 1 -
+ 2 files changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+index 91985828d46..be9b57c2187 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
++++ b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+@@ -100,3 +100,9 @@
+ &stml0xx{
+ 	sensor2-supply = <&pm8950_l17>;
+ };
++
++&i2c_3 { /* BLSP1 QUP3 */
++	synaptics@20 {
++		touch_vdd-supply = <&pm8950_l22>;
++	};
++};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index ecd72233761..8e87fda1558 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -757,7 +757,6 @@
+ 		interrupts = <65 0>;
+ 		gpios = <&msm_gpio 65 0>, /* IRQ */
+ 			<&msm_gpio 64 0>; /* RESET */
+-		touch_vdd-supply = <&pm8950_l22>;
+ 		vdd_quirk-supply = <&pm8950_l6>;
+ 		/*vcc_i2c-supply = <&pm8950_l6>;*/
+ 		synaptics,gpio-config;
+-- 
+2.11.0
+

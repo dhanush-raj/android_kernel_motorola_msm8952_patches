@@ -1,0 +1,252 @@
+From 530481ac13b38ba58a9fb123f1f6545028346f4c Mon Sep 17 00:00:00 2001
+From: Yuanyuan Zhong <zyy@motorola.com>
+Date: Tue, 10 Jun 2014 14:23:07 -0500
+Subject: [PATCH 181/959] IKSWM-4458 pstore/ram: Allow annotation appending
+
+Existing pstore ram annotation stores messages and exports them
+after reset. Add function which can be used to append messages
+to the annotation after reset and before they are exported to
+annotation-ramoops file.
+
+Change-Id: I0823c7c7345f5350c5774c0f9c1743c5ae37126b
+Signed-off-by: Yuanyuan Zhong <zyy@motorola.com>
+Reviewed-on: http://gerrit.mot.com/644635
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Yi-Wei Zhao <gbjc64@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+(cherry picked from commit be4d6cd34e3890e7e5c2db2fd46c5bc9c0efac88)
+Reviewed-on: http://gerrit.mot.com/664832
+SLTApproved: Christopher Fries <cfries@motorola.com>
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ fs/pstore/Kconfig          |  14 +++++
+ fs/pstore/ram.c            |   9 ++-
+ fs/pstore/ram_core.c       | 138 +++++++++++++++++++++++++++++++++++++++++++++
+ include/linux/pstore_ram.h |   9 +++
+ 4 files changed, 168 insertions(+), 2 deletions(-)
+
+diff --git a/fs/pstore/Kconfig b/fs/pstore/Kconfig
+index da12fd4e3d4..49f7678cb15 100644
+--- a/fs/pstore/Kconfig
++++ b/fs/pstore/Kconfig
+@@ -58,3 +58,17 @@ config PSTORE_RAM
+ 	  "ramoops.ko".
+ 
+ 	  For more information, see Documentation/ramoops.txt.
++
++config PSTORE_RAM_ANNOTATION_APPEND
++	bool "Allow appending messages to pstore ram annotation"
++	default n
++	depends on PSTORE_RAM
++	help
++	  Existing pstore ram annotation stores messages and exports them
++	  after reset. Sometimes only after reset can we do some postmortem
++	  analysis. This adds function which can be used to append the
++	  analysis info to pstore ram annotation. The function should only
++	  be used before pstore ram annotation is exported. It's safe to use
++	  the function before pstore is initialized. Content will be buffered
++	  and merged to annotation-ramoops file.
++	  If unsure, say N.
+diff --git a/fs/pstore/ram.c b/fs/pstore/ram.c
+index 903d0532e82..a4c3a3e2e09 100644
+--- a/fs/pstore/ram.c
++++ b/fs/pstore/ram.c
+@@ -176,18 +176,23 @@ static ssize_t ramoops_pstore_read(u64 *id, enum pstore_type_id *type,
+ 	prz = ramoops_get_next_prz(cxt->przs, &cxt->dump_read_cnt,
+ 				   cxt->max_dump_cnt, id, type,
+ 				   PSTORE_TYPE_DMESG, 1);
+-	if (!prz_ok(prz))
++	if (!prz_ok(prz)) {
+ 		prz = ramoops_get_next_prz(&cxt->cprz, &cxt->console_read_cnt,
+ 					   1, id, type, PSTORE_TYPE_CONSOLE, 0);
++		if (prz && !persistent_ram_old_size(prz))
++			persistent_ram_annotation_merge(NULL);
++	}
+ 	if (!prz_ok(prz))
+ 		prz = ramoops_get_next_prz(&cxt->fprz, &cxt->ftrace_read_cnt,
+ 					   1, id, type, PSTORE_TYPE_FTRACE, 0);
+ 	if (!prz_ok(prz))
+ 		prz = ramoops_get_next_prz(&cxt->mprz, &cxt->pmsg_read_cnt,
+ 					   1, id, type, PSTORE_TYPE_PMSG, 0);
+-	if (!prz_ok(prz))
++	if (!prz_ok(prz)) {
+ 		prz = ramoops_get_next_prz(&cxt->aprz, &cxt->annotate_read_cnt,
+ 					1, id, type, PSTORE_TYPE_ANNOTATE, 0);
++		persistent_ram_annotation_merge(prz);
++	}
+ 	if (!prz_ok(prz))
+ 		return 0;
+ 
+diff --git a/fs/pstore/ram_core.c b/fs/pstore/ram_core.c
+index 66636ef9a14..b51be672dcf 100644
+--- a/fs/pstore/ram_core.c
++++ b/fs/pstore/ram_core.c
+@@ -314,6 +314,144 @@ static int notrace persistent_ram_update_user(struct persistent_ram_zone *prz,
+ 	return ret;
+ }
+ 
++#ifdef CONFIG_PSTORE_RAM_ANNOTATION_APPEND
++struct praa_buf {
++	struct list_head list;
++	int size, space;
++	char data[];
++};
++
++struct persistent_ram_annotation_append_buffer {
++	spinlock_t lock;	/* protect list and buf */
++	struct list_head list;
++	struct praa_buf *buf;
++	int total_size;
++	int stop;
++} praa_buffer = {
++	.lock	= __SPIN_LOCK_UNLOCKED(praa_buffer.lock),
++	.list	= LIST_HEAD_INIT(praa_buffer.list),
++};
++
++int persistent_ram_annotation_append(const char *fmt, ...)
++{
++	va_list args;
++	unsigned long flags;
++	int len = 0;
++	char line_buf[512];
++	struct praa_buf *buf;
++
++	va_start(args, fmt);
++	len += vsnprintf(line_buf + len, sizeof(line_buf) - len, fmt, args);
++	va_end(args);
++
++	spin_lock_irqsave(&praa_buffer.lock, flags);
++	if (praa_buffer.stop) {
++		spin_unlock_irqrestore(&praa_buffer.lock, flags);
++		pr_err("%s() called too late by %pf()\n", __func__,
++				__builtin_return_address(0));
++		return 0;
++	}
++
++	while (1) {
++		if (!praa_buffer.buf) {
++			buf = (struct praa_buf *) __get_free_page(GFP_ATOMIC);
++			if (buf) {
++				buf->size = 0;
++				buf->space = PAGE_SIZE - 1 -
++					offsetof(struct praa_buf, data);
++				praa_buffer.buf = buf;
++			} else {
++				pr_err("%s NOMEM\n", __func__);
++				len = 0;
++				break;
++			}
++		}
++		buf = praa_buffer.buf;
++		if (len + 1 > buf->space) {
++			buf->data[buf->size] = '\0';
++			list_add_tail(&buf->list, &praa_buffer.list);
++			praa_buffer.total_size += buf->size;
++			praa_buffer.buf = NULL;
++			continue;
++		}
++		memcpy(&buf->data[buf->size], line_buf, len);
++		buf->space -= len;
++		buf->size += len;
++		break;
++	}
++	spin_unlock_irqrestore(&praa_buffer.lock, flags);
++	return len;
++}
++
++static int persistent_ram_annotation_append_stop(void)
++{
++	int ret;
++	unsigned long flags;
++	struct praa_buf *buf;
++	spin_lock_irqsave(&praa_buffer.lock, flags);
++	if (praa_buffer.stop) {
++		spin_unlock_irqrestore(&praa_buffer.lock, flags);
++		return 0;
++	}
++	praa_buffer.stop = 1;
++	if (praa_buffer.buf) {
++		buf = praa_buffer.buf;
++		praa_buffer.buf = NULL;
++		buf->data[buf->size] = '\0';
++		list_add_tail(&buf->list, &praa_buffer.list);
++		praa_buffer.total_size += buf->size;
++	}
++	ret = praa_buffer.total_size;
++	spin_unlock_irqrestore(&praa_buffer.lock, flags);
++	return ret;
++}
++
++static void persistent_ram_annotation_append_push(char *ptr)
++{
++	unsigned long flags;
++	struct praa_buf *buf, *n;
++
++	spin_lock_irqsave(&praa_buffer.lock, flags);
++	list_for_each_entry_safe(buf, n, &praa_buffer.list, list) {
++		if (ptr) {
++			memcpy(ptr, buf->data, buf->size);
++			ptr += buf->size;
++		}
++		list_del(&buf->list);
++		praa_buffer.total_size -= buf->size;
++		free_page((unsigned long)buf);
++	}
++	spin_unlock_irqrestore(&praa_buffer.lock, flags);
++}
++
++void persistent_ram_annotation_merge(struct persistent_ram_zone *prz)
++{
++	size_t ext_size;
++	char *old_log2;
++
++	ext_size = persistent_ram_annotation_append_stop();
++	if (ext_size) {
++		if (!prz) {
++			persistent_ram_annotation_append_push(NULL);
++			pr_info("%s: discarded %zu\n", __func__, ext_size);
++			return;
++		}
++		old_log2 = krealloc(prz->old_log,
++				prz->old_log_size + ext_size, GFP_KERNEL);
++		if (old_log2) {
++			persistent_ram_annotation_append_push(old_log2 +
++				prz->old_log_size);
++			prz->old_log = old_log2;
++			prz->old_log_size += ext_size;
++			pr_info("%s: merged %zu\n", __func__, ext_size);
++		} else {
++			pr_err("%s: cannot merge %zu\n", __func__, ext_size);
++			persistent_ram_annotation_append_push(NULL);
++		}
++	}
++}
++#endif
++
+ void persistent_ram_save_old(struct persistent_ram_zone *prz)
+ {
+ 	struct persistent_ram_buffer *buffer = prz->buffer;
+diff --git a/include/linux/pstore_ram.h b/include/linux/pstore_ram.h
+index 14ca1873094..da2218e2a54 100644
+--- a/include/linux/pstore_ram.h
++++ b/include/linux/pstore_ram.h
+@@ -70,6 +70,15 @@ void *persistent_ram_old(struct persistent_ram_zone *prz);
+ void persistent_ram_free_old(struct persistent_ram_zone *prz);
+ ssize_t persistent_ram_ecc_string(struct persistent_ram_zone *prz,
+ 	char *str, size_t len);
++#ifdef CONFIG_PSTORE_RAM_ANNOTATION_APPEND
++__printf(1, 2)  int persistent_ram_annotation_append(const char *fmt, ...);
++void persistent_ram_annotation_merge(struct persistent_ram_zone *prz);
++#else
++static inline __printf(1, 2) void persistent_ram_annotation_append(
++			const char *fmt, ...) { };
++static inline void persistent_ram_annotation_merge(
++			struct persistent_ram_zone *prz) { };
++#endif
+ 
+ void ramoops_console_write_buf(const char *buf, size_t size);
+ 
+-- 
+2.11.0
+

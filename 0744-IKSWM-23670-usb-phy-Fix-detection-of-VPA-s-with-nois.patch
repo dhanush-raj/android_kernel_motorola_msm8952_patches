@@ -1,0 +1,45 @@
+From f0d7e812fd6931fd716f8a766447efa51997ba32 Mon Sep 17 00:00:00 2001
+From: Xuehui Ye <yexh1@motorola.com>
+Date: Fri, 4 Mar 2016 10:43:34 +0800
+Subject: [PATCH 744/959] IKSWM-23670: usb: phy: Fix detection of VPA's with
+ noisy id.
+
+Debounce the ID line for 150 msec before handling id interrupts.
+
+Change-Id: I779cc0fb63a9a9593beb58e78cd64ed5f81271f3
+Signed-off-by: Xuehui Ye <yexh1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/829068
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/usb/phy/phy-msm-usb.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/usb/phy/phy-msm-usb.c b/drivers/usb/phy/phy-msm-usb.c
+index f78489e3448..00599e86b89 100644
+--- a/drivers/usb/phy/phy-msm-usb.c
++++ b/drivers/usb/phy/phy-msm-usb.c
+@@ -4661,7 +4661,7 @@ static void msm_id_status_w(struct work_struct *w)
+ 
+ }
+ 
+-#define MSM_ID_STATUS_DELAY	5 /* 5msec */
++#define MSM_ID_STATUS_DELAY	150 /* 150msec */
+ static irqreturn_t msm_id_irq(int irq, void *data)
+ {
+ 	struct msm_otg *motg = data;
+@@ -4674,7 +4674,7 @@ static irqreturn_t msm_id_irq(int irq, void *data)
+ 
+ 	if (!aca_id_turned_on) {
+ 		cancel_delayed_work(&motg->id_status_work);
+-		/*schedule delayed work for 5msec for ID line state to settle*/
++		/*schedule delayed work for 150ms for ID line state to settle*/
+ 		queue_delayed_work(motg->otg_wq, &motg->id_status_work,
+ 				msecs_to_jiffies(MSM_ID_STATUS_DELAY));
+ 	}
+-- 
+2.11.0
+

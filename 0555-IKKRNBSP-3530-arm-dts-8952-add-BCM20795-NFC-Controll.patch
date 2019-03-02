@@ -1,0 +1,94 @@
+From 671606be339442a7068738335f504a93ea235dd7 Mon Sep 17 00:00:00 2001
+From: lumy1 <lumy1@motorola.com>
+Date: Tue, 1 Dec 2015 10:55:33 +0800
+Subject: [PATCH 555/959] IKKRNBSP-3530 arm/dts: 8952: add BCM20795 NFC
+ Controller
+
+Change-Id: I997d077ae1fe15f1336cbee45d44fa2ac5a0d178
+Signed-off-by: lumy1 <lumy1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/803669
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 55 +++++++++++++++++++++++++
+ 1 file changed, 55 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index bb2536dc1a0..564236132a4 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -345,6 +345,44 @@
+ 			bias-pull-up;
+ 		};
+ 	};
++
++	pmx_nfc_irq {
++		qcom,pins = <&gp 13>;
++		qcom,num-grp-pins = <1>;
++		qcom,pin-func = <0>;
++		label = "nfc_irq";
++
++		nfc_irq_default: default {
++			bias-pull-down;
++			drive-strength = <2>;
++		};
++	};
++
++	pmx_nfc_pwr {
++		qcom,pins = <&gp 129>;
++		qcom,num-grp-pins = <1>;
++		qcom,pin-func = <0>;
++		label = "nfc_pwr";
++
++		nfc_pwr_default: default {
++			bias-pull-down;
++			output-low;
++			drive-strength = <2>;
++		};
++	};
++
++	pmx_nfc_en {
++		qcom,pins = <&gp 130>;
++		qcom,num-grp-pins = <1>;
++		qcom,pin-func = <0>;
++		label = "nfc_en";
++
++		nfc_en_default: default {
++			bias-pull-down;
++			output-low;
++			drive-strength = <2>;
++		};
++	};
+ };
+ 
+ &usb_otg {
+@@ -841,6 +879,23 @@
+ 	/delete-property/ qcom,mdss-fb-splash-logo-enabled;
+ };
+ 
++&i2c_4 { /* BLSP1 QUP4 */
++	/* BCM 20795 NFC Controller */
++	bcm2079x@76 {
++		status = "/chosen", "mmi,nfc", "true";
++		compatible = "brcm,bcm2079x";
++		reg = <0x76>;
++		interrupt-parent = <&msm_gpio>;
++		interrupts = <13 0>; 		/* NFC_IRQ */
++		gpios = <&msm_gpio 130 0>, 	/* NFC_ENABLE_IN */
++			<&msm_gpio 13 0>, 		/* NFC_IRQ */
++			<&msm_gpio 129 0>; 		/* NFC_POWER_ON */
++
++		pinctrl-names = "default";
++		pinctrl-0 = <&nfc_irq_default &nfc_pwr_default &nfc_en_default>;
++	};
++};
++
+ &i2c_3 { /* BLSP1 QUP3 */
+ 	synaptics@20 {
+ 		compatible = "synaptics,synaptics_dsx_i2c";
+-- 
+2.11.0
+

@@ -1,0 +1,37 @@
+From 69304e03195482fb99cbf2e3b0afe859f20cabb3 Mon Sep 17 00:00:00 2001
+From: wengjun1 <wengjun1@motorola.com>
+Date: Thu, 3 Mar 2016 17:23:30 +0800
+Subject: [PATCH 733/959] IKSWM-23472 arm/dt: 8952: Keep touch reset output
+ high
+
+Keep touch reset high in suspend to minimize current drain.
+
+Change-Id: Id18ccb9fedf8df3b3462c67f4aca7e88dca8d441
+Signed-off-by: wengjun1 <wengjun1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/828709
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Konstantin Makariev <kmakariev@motorola.com>
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index e931f05ad20..ec391052360 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -926,7 +926,7 @@
+ 		synaptics,gpio-config;
+ 		/* pins used by touchscreen */
+ 		pinctrl-names = "default", "active";
+-		pinctrl-0 = <&touch_reset_default &touch_int_default>;
++		pinctrl-0 = <&touch_reset_active &touch_int_default>;
+ 		pinctrl-1 = <&touch_reset_active &touch_int_active>;
+ 		touchstate_modes {
+ 			touchmode-default = <&default_active &default_suspended>;
+-- 
+2.11.0
+

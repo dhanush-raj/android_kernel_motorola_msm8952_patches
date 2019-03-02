@@ -1,0 +1,51 @@
+From 5a017c0d3c4c13c4d4f24cf3f3ab72fc22971530 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Fri, 20 Mar 2015 18:05:10 -0700
+Subject: [PATCH 211/959] IKSWM-4458 drivers:lmk: Fix double delete issue
+
+someone may change a process's oom_score_adj by proc fs, even though the
+process has exited. In that case, the task was deleted from the rb tree
+already, and the redundant deleting would trigger rb_erase panic finally.
+In this patch, we make sure to clear the node after deteting and check
+its empty status before rb_erase.
+
+Change-Id: Ib73ba1a3a233a91bf3b32c51bacaefc41f2555d4
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ drivers/staging/android/lowmemorykiller.c | 5 ++++-
+ kernel/fork.c                             | 3 +++
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/staging/android/lowmemorykiller.c b/drivers/staging/android/lowmemorykiller.c
+index 99583b8080d..f8132d562be 100644
+--- a/drivers/staging/android/lowmemorykiller.c
++++ b/drivers/staging/android/lowmemorykiller.c
+@@ -753,7 +753,10 @@ void add_2_adj_tree(struct task_struct *task)
+ void delete_from_adj_tree(struct task_struct *task)
+ {
+ 	spin_lock(&lmk_lock);
+-	rb_erase(&task->adj_node, &tasks_scoreadj);
++	if (!RB_EMPTY_NODE(&task->adj_node)) {
++		rb_erase(&task->adj_node, &tasks_scoreadj);
++		RB_CLEAR_NODE(&task->adj_node);
++	}
+ 	spin_unlock(&lmk_lock);
+ }
+ 
+diff --git a/kernel/fork.c b/kernel/fork.c
+index 4ec1f0d0be1..a751c988715 100644
+--- a/kernel/fork.c
++++ b/kernel/fork.c
+@@ -360,6 +360,9 @@ static struct task_struct *dup_task_struct(struct task_struct *orig)
+ 
+ 	account_kernel_stack(ti, 1);
+ 
++#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
++	RB_CLEAR_NODE(&tsk->adj_node);
++#endif
+ 	return tsk;
+ 
+ free_ti:
+-- 
+2.11.0
+

@@ -1,0 +1,39 @@
+From f2ba93f7aaab0de8dc394e084293ad1a7bd0ffa8 Mon Sep 17 00:00:00 2001
+From: Jane Zhou <a17711@motorola.com>
+Date: Mon, 29 Jun 2015 16:46:23 -0700
+Subject: [PATCH 772/959] IKKRNBSP-3747: net:rmnet_data remove warning message
+ for invalid cmd
+
+remove warning message for invalid cmd to avoid overloading logs
+when uploading or downloading large media files by using 4G signal,
+which may cause watchdog reset issue.
+
+Change-Id: I73ea842847319de810aaafe630de8af3a24bbb3b
+Signed-off-by: Jane Zhou <a17711@motorola.com>
+Reviewed-on: http://gerrit.mot.com/761700
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Yi-Wei Zhao <gbjc64@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/831627
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ net/rmnet_data/rmnet_data_vnd.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/net/rmnet_data/rmnet_data_vnd.c b/net/rmnet_data/rmnet_data_vnd.c
+index 50aaf17d6c4..5d519ab82ed 100644
+--- a/net/rmnet_data/rmnet_data_vnd.c
++++ b/net/rmnet_data/rmnet_data_vnd.c
+@@ -455,7 +455,6 @@ static int rmnet_vnd_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
+ 		break;
+ 
+ 	default:
+-		LOGM("Unknown IOCTL 0x%08X", cmd);
+ 		rc = -EINVAL;
+ 	}
+ 
+-- 
+2.11.0
+

@@ -1,0 +1,40 @@
+From fab83d01b59e73fea33de920e106f8b3d9279b6f Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Mon, 4 Apr 2016 18:04:41 -0700
+Subject: [PATCH 842/959] IKSWM-28071 :mmc: Corrent the ret value of
+ mmc_host_suspend
+
+ The ret vaule was overwritten by the functions(mmc_cmdq_halt)
+ when ret < 0.  This will cause the suspend function finally
+ return success even it has failed.
+
+Change-Id: Ia33e54f9cb0cf72b435578cf24c7d9b74b2b45d8
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/841048
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: David Ding <dding@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sheng-Zhe Zhao <a18689@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/mmc/core/host.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/drivers/mmc/core/host.c b/drivers/mmc/core/host.c
+index f4053232798..1a905ab9fbb 100644
+--- a/drivers/mmc/core/host.c
++++ b/drivers/mmc/core/host.c
+@@ -81,8 +81,7 @@ static int mmc_host_runtime_suspend(struct device *dev)
+ 		mmc_host_clk_hold(host);
+ 		host->cmdq_ops->enable(host);
+ 		mmc_host_clk_release(host);
+-		ret = mmc_cmdq_halt(host, false);
+-		if (ret) {
++		if (mmc_cmdq_halt(host, false)) {
+ 			pr_err("%s: halt: failed: %d\n", __func__, ret);
+ 			goto out;
+ 		}
+-- 
+2.11.0
+

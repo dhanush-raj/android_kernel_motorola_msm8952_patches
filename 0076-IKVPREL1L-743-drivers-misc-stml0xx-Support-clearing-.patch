@@ -1,0 +1,80 @@
+From 6a93d5365b6451a19d1d30af9454bb263d7e7a18 Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Fri, 26 Sep 2014 10:02:18 -0500
+Subject: [PATCH 076/959] IKVPREL1L-743:drivers:misc:stml0xx: Support clearing
+ interrupts
+
+Add a write for init_complete to clear the interrupt on the hub
+Add a read for clearing the motion data interrupt
+
+This commit corresponds to the sensorhub change that allows
+for more control of clearing interrupt bits.  The interrupts
+are not completely cleared on the interrupt status reads, but
+when the actual data registers are read.
+
+Change-Id: If78b69c1bfbc57ef1c493e95c6d69af200f97b39
+Signed-off-by: Dan Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/674076
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_wake_irq.c | 13 +++++++++++++
+ include/linux/stml0xx.h                 |  1 +
+ 2 files changed, 14 insertions(+)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index 4214dd1fdaf..89959ecbcf3 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -199,6 +199,11 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 			"Cover status: %d", state);
+ 	}
+ 	if (irq_status & M_INIT_COMPLETE) {
++		/* set the init complete register, */
++		/* to let the hub know it was received */
++		buf[0] = 0x01;
++		err = stml0xx_spi_send_write_reg(INIT_COMPLETE_REG, buf, 1);
++
+ 		queue_work(ps_stml0xx->irq_work_queue,
+ 			&ps_stml0xx->initialize_work);
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+@@ -290,6 +295,10 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 	}
+ 	if (irq2_status & M_MMOVEME) {
+ 		unsigned char status;
++
++		/* read motion data reg to clear movement interrupt */
++		err = stml0xx_spi_send_read_reg(MOTION_DATA, buf, 2);
++
+ 		/* Client recieving action will be upper 2 most significant */
+ 		/* bits of the least significant byte of status. */
+ 		status = (irq2_status & STML0XX_CLIENT_MASK) | M_MMOVEME;
+@@ -300,6 +309,10 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 	}
+ 	if (irq2_status & M_NOMMOVE) {
+ 		unsigned char status;
++
++		/* read motion data reg to clear movement interrupt */
++		err = stml0xx_spi_send_read_reg(MOTION_DATA, buf, 2);
++
+ 		/* Client recieving action will be upper 2 most significant */
+ 		/* bits of the least significant byte of status. */
+ 		status = (irq2_status & STML0XX_CLIENT_MASK) | M_NOMMOVE;
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 03b0e27ccdf..951c466563f 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -318,6 +318,7 @@ struct stm_response {
+ #define REV_ID                          0x01
+ #define ERROR_STATUS                    0x02
+ #define LOWPOWER_REG                    0x03
++#define INIT_COMPLETE_REG               0x04
+ 
+ #define STML0XX_PEEKDATA_REG             0x09
+ #define STML0XX_PEEKSTATUS_REG           0x0A
+-- 
+2.11.0
+

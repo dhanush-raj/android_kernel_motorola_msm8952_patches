@@ -1,0 +1,54 @@
+From a3c30f90c989e489d773cdcb8bb533500fce10b0 Mon Sep 17 00:00:00 2001
+From: wengjun1 <wengjun1@motorola.com>
+Date: Fri, 11 Dec 2015 14:51:01 +0800
+Subject: [PATCH 551/959] IKSWM-13820 input: synaptics_dsx_i2c: add LPWG bit
+
+Add subpacket F12_2D_CTRL20(1)/* to get access to
+"Report Low Power Wakeup Gestures" bit.
+
+Change-Id: I18e100bcb4e23725be368c77748ae4159737505e
+Signed-off-by: wengjun1 <wengjun1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/806567
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Konstantin Makariev <kmakariev@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/touchscreen/synaptics_dsx_i2c.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.c b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+index 49b1f128774..0ec3ebce2e7 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.c
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+@@ -144,6 +144,17 @@ static struct f12_c20_0_type {
+ 	unsigned char y_suppression;
+ } f12_c20_0;
+ 
++static struct f12_c20_1_type {
++	union {
++		struct {
++			unsigned char reserved:1;
++			unsigned char report_lpwg_only:1;
++			unsigned char reserved2:6;
++		} __packed;
++		unsigned char data[1];
++	};
++} f12_c20_1;
++
+ static struct f12_c23_0_type {
+ 	union {
+ 		struct {
+@@ -193,6 +204,7 @@ static struct synaptics_rmi4_subpkt f12_c08[] = {
+ 
+ static struct synaptics_rmi4_subpkt f12_c20[] = {
+ 	RMI4_SUBPKT(f12_c20_0),
++	RMI4_SUBPKT(f12_c20_1),
+ };
+ 
+ static struct synaptics_rmi4_subpkt f12_c23[] = {
+-- 
+2.11.0
+

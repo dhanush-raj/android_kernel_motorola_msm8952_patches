@@ -1,0 +1,79 @@
+From 4f637cdb5dbd8932c85308bbaf80869d8997d9e3 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Wed, 3 Jun 2015 14:28:48 -0700
+Subject: [PATCH 214/959] IKSWM-4458 kernel: avoid adding non-thread-group task
+ to LMK rbtree
+
+To maintain the task adj RB tree, we add a task to the RB tree when fork,
+and delete it when exit. The place is exactly the same as the linear
+p->tasks list, only when the task is thread_group_leader.
+
+But to handle the oom_score_adj change case, which did not check the
+thread_group_leader, we may del/add a non-leader task to the RB tree.
+Finally leave the task in the RB tree, since we would not really delete
+a non-leader task from the tree. The orphan task would finally be freed,
+and cause later use-after-free panic when accessing RB tree.
+
+Solution:
+Move the rbtree adj_node to signal_struct, which is shared between
+task and all threads. This can make sure we only add one node for
+a thread group.
+
+Change-Id: I1e8dfe490656408863b3726c7bc9e4ee6dc5abc1
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ include/linux/sched.h | 6 +++---
+ kernel/fork.c         | 6 +++---
+ 2 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/include/linux/sched.h b/include/linux/sched.h
+index 3bd9a849b31..6e4bac065bd 100644
+--- a/include/linux/sched.h
++++ b/include/linux/sched.h
+@@ -694,6 +694,9 @@ struct signal_struct {
+ 	short oom_score_adj;		/* OOM kill score adjustment */
+ 	short oom_score_adj_min;	/* OOM kill score adjustment min value.
+ 					 * Only settable by CAP_SYS_RESOURCE. */
++#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
++	struct rb_node adj_node;
++#endif
+ 
+ 	struct mutex cred_guard_mutex;	/* guard against foreign influences on
+ 					 * credential calculations
+@@ -1271,9 +1274,6 @@ struct task_struct {
+ #endif
+ 
+ 	struct list_head tasks;
+-#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
+-	struct rb_node adj_node;
+-#endif
+ #ifdef CONFIG_SMP
+ 	struct plist_node pushable_tasks;
+ 	struct rb_node pushable_dl_tasks;
+diff --git a/kernel/fork.c b/kernel/fork.c
+index a751c988715..73b283bbf65 100644
+--- a/kernel/fork.c
++++ b/kernel/fork.c
+@@ -360,9 +360,6 @@ static struct task_struct *dup_task_struct(struct task_struct *orig)
+ 
+ 	account_kernel_stack(ti, 1);
+ 
+-#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
+-	RB_CLEAR_NODE(&tsk->adj_node);
+-#endif
+ 	return tsk;
+ 
+ free_ti:
+@@ -1102,6 +1099,9 @@ static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
+ 	sig->oom_score_adj = current->signal->oom_score_adj;
+ 	sig->oom_score_adj_min = current->signal->oom_score_adj_min;
+ 
++#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
++	RB_CLEAR_NODE(&sig->adj_node);
++#endif
+ 	sig->has_child_subreaper = current->signal->has_child_subreaper ||
+ 				   current->signal->is_child_subreaper;
+ 
+-- 
+2.11.0
+

@@ -1,0 +1,47 @@
+From 61bcbfa07a6feb8b00f79ea34866d69e4ad13798 Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Tue, 5 Aug 2014 20:21:56 -0500
+Subject: [PATCH 062/959] IKLOCSEN-1574:misc:stml0xx: suspend/resume fix null
+ dereference
+
+Set our driver data for the spi and add remove the
+unneeded kfree.
+
+Signed-off-by: Dan Moore <dtmoore@motorola.com>
+Change-Id: I5dd605d519b2d11d14610a777c2dc2d441e8187c
+Reviewed-on: http://gerrit.mot.com/659961
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Sridhar Vashist <svashist@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 54d689372b0..78680710fb7 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -749,6 +749,7 @@ static int stml0xx_probe(struct spi_device *spi)
+ 		goto err1;
+ 	}
+ 	ps_stml0xx->pdata = pdata;
++	spi_set_drvdata(spi, ps_stml0xx);
+ 
+ 	if (ps_stml0xx->pdata->init) {
+ 		err = ps_stml0xx->pdata->init();
+@@ -952,8 +953,6 @@ static int stml0xx_remove(struct spi_device *spi)
+ 	regulator_put(ps_stml0xx->regulator_2);
+ 	regulator_put(ps_stml0xx->regulator_1);
+ 
+-	kfree(ps_stml0xx);
+-
+ 	return 0;
+ }
+ 
+-- 
+2.11.0
+

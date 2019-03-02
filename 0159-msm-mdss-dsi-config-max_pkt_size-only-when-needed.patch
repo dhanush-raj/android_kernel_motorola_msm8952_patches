@@ -1,0 +1,97 @@
+From b241772b97df4adfd98448539bdd5b87b61caff6 Mon Sep 17 00:00:00 2001
+From: Chandan Uddaraju <chandanu@codeaurora.org>
+Date: Mon, 20 Apr 2015 14:54:08 -0700
+Subject: [PATCH 159/959] msm: mdss: dsi: config max_pkt_size only when needed
+
+Currently, we configure max_pkt_size for every DCS read
+command. Avoid sending max_pkt_size DCS command for every
+DCS read by adding conditional check for the configured
+max_pkt_size value for every DCS read.
+
+'commit 944b189c90d5 ("msm: mdss: dsi: config max_pkt
+size only when needed")'
+Signed-off-by: Chandan Uddaraju <chandanu@codeaurora.org>
+Signed-off-by: Parasuraman <parasur@motorola.com>
+Change-Id: Id87a29cf08e6761888d2aa4be994d3a5d23cdbad
+Reviewed-on: http://gerrit.mot.com/784112
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi.c      |  2 ++
+ drivers/video/msm/mdss/mdss_dsi.h      |  1 +
+ drivers/video/msm/mdss/mdss_dsi_host.c | 11 ++++++++++-
+ 3 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi.c b/drivers/video/msm/mdss/mdss_dsi.c
+index e1c49d2363b..9ba42360998 100644
+--- a/drivers/video/msm/mdss/mdss_dsi.c
++++ b/drivers/video/msm/mdss/mdss_dsi.c
+@@ -1153,6 +1153,8 @@ panel_power_ctrl:
+ 	    && (panel_info->new_fps != panel_info->mipi.frame_rate))
+ 		panel_info->mipi.frame_rate = panel_info->new_fps;
+ 
++	/* Initialize Max Packet size for DCS reads */
++	ctrl_pdata->cur_max_pkt_size = 0;
+ end:
+ 	pr_debug("%s-:\n", __func__);
+ 
+diff --git a/drivers/video/msm/mdss/mdss_dsi.h b/drivers/video/msm/mdss/mdss_dsi.h
+index 7d34e176a83..ac45ef26a23 100644
+--- a/drivers/video/msm/mdss/mdss_dsi.h
++++ b/drivers/video/msm/mdss/mdss_dsi.h
+@@ -478,6 +478,7 @@ struct mdss_dsi_ctrl_pdata {
+ 	struct dsi_buf status_buf;
+ 	int status_mode;
+ 	int rx_len;
++	int cur_max_pkt_size;
+ 
+ 	struct dsi_pinctrl_res pin_res;
+ 
+diff --git a/drivers/video/msm/mdss/mdss_dsi_host.c b/drivers/video/msm/mdss/mdss_dsi_host.c
+index 27f16064c10..10839868c99 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_host.c
++++ b/drivers/video/msm/mdss/mdss_dsi_host.c
+@@ -380,7 +380,6 @@ void mdss_dsi_host_init(struct mdss_panel_data *pdata)
+ 	if (pinfo->data_lane0)
+ 		dsi_ctrl |= BIT(4);
+ 
+-
+ 	data = 0;
+ 	if (pinfo->te_sel)
+ 		data |= BIT(31);
+@@ -1758,6 +1757,14 @@ do_send:
+ 	while (!end) {
+ 		pr_debug("%s:  rlen=%d pkt_size=%d rx_byte=%d\n",
+ 				__func__, rlen, pkt_size, rx_byte);
++		/*
++		 * Skip max_pkt_size dcs cmd if
++		 * its already been configured
++		 * for the requested pkt_size
++		 */
++		if (pkt_size == ctrl->cur_max_pkt_size)
++			goto skip_max_pkt_size;
++
+ 		max_pktsize[0] = pkt_size;
+ 		mdss_dsi_buf_init(tp);
+ 		ret = mdss_dsi_cmd_dma_add(tp, &pkt_size_cmd);
+@@ -1784,9 +1791,11 @@ do_send:
+ 			rp->read_cnt = 0;
+ 			goto end;
+ 		}
++		ctrl->cur_max_pkt_size = pkt_size;
+ 		pr_debug("%s: max_pkt_size=%d sent\n",
+ 					__func__, pkt_size);
+ 
++skip_max_pkt_size:
+ 		mdss_dsi_buf_init(tp);
+ 		ret = mdss_dsi_cmd_dma_add(tp, cmds);
+ 		if (!ret) {
+-- 
+2.11.0
+

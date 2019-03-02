@@ -1,0 +1,78 @@
+From e69839a374ddfe47f47c7c8e60df1c371bc85697 Mon Sep 17 00:00:00 2001
+From: Zac Crosby <zac@motorola.com>
+Date: Thu, 11 Sep 2014 09:18:20 -0500
+Subject: [PATCH 167/959] IKKRNBSP-3413 msm: mdss: Update display related
+ on/off debug messages
+
+Update display related on/off messages so that it is clear when
+the display turns off & on.
+
+Port of f03d1bed9145 from 8996.
+
+Change-Id: I536a66788c197fd1ea59521a1c66d9934264f936
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/785840
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi.c       | 2 ++
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 5 +++--
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi.c b/drivers/video/msm/mdss/mdss_dsi.c
+index 892f38937c4..7a0e02ea9f8 100644
+--- a/drivers/video/msm/mdss/mdss_dsi.c
++++ b/drivers/video/msm/mdss/mdss_dsi.c
+@@ -1115,6 +1115,7 @@ static int mdss_dsi_off(struct mdss_panel_data *pdata, int power_state)
+ 
+ 	pr_debug("%s+: ctrl=%pK ndx=%d power_state=%d\n",
+ 		__func__, ctrl_pdata, ctrl_pdata->ndx, power_state);
++	pr_info("%s[%d]+.\n", __func__, ctrl_pdata->ndx);
+ 
+ 	if (power_state == panel_info->panel_power_state) {
+ 		pr_debug("%s: No change in power state %d -> %d\n", __func__,
+@@ -1279,6 +1280,7 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
+ 	cur_power_state = pdata->panel_info.panel_power_state;
+ 	pr_debug("%s+: ctrl=%pK ndx=%d cur_power_state=%d\n", __func__,
+ 		ctrl_pdata, ctrl_pdata->ndx, cur_power_state);
++	pr_info("%s[%d]+.\n", __func__, ctrl_pdata->ndx);
+ 
+ 	pinfo = &pdata->panel_info;
+ 	mipi = &pdata->panel_info.mipi;
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index f68b5e6da78..50cb1212213 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -767,7 +767,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
+ 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+ 				panel_data);
+ 
+-	pr_debug("%s: ctrl=%pK ndx=%d\n", __func__, ctrl, ctrl->ndx);
++	pr_info("%s[%d]+.\n", __func__, ctrl->ndx);
+ 
+ 	if (pinfo->dcs_cmd_by_left) {
+ 		if (ctrl->ndx != DSI_CTRL_LEFT)
+@@ -788,6 +788,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
+ 	if (ctrl->ds_registered)
+ 		mdss_dba_utils_video_on(pinfo->dba_data, pinfo);
+ end:
++	pr_info("%s[%d]-.\n", __func__, ctrl->ndx);
+ 	pr_debug("%s:-\n", __func__);
+ 	return ret;
+ }
+@@ -850,7 +851,7 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
+ 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+ 				panel_data);
+ 
+-	pr_debug("%s: ctrl=%pK ndx=%d\n", __func__, ctrl, ctrl->ndx);
++	pr_info("%s[%d]+.\n", __func__, ctrl->ndx);
+ 
+ 	if (pinfo->dcs_cmd_by_left) {
+ 		if (ctrl->ndx != DSI_CTRL_LEFT)
+-- 
+2.11.0
+

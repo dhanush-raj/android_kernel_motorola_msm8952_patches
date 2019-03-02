@@ -1,0 +1,76 @@
+From b373b536a1a0835ee16f470bf63ceb297dd54ec8 Mon Sep 17 00:00:00 2001
+From: yangjq <yangjq@lenovo.com>
+Date: Mon, 9 Nov 2015 17:53:41 +0800
+Subject: [PATCH 526/959] IKKRNBSP-3496 power: Add function to show active
+ wakelocks
+
+Add a function to dump the active wakelocks
+Check for the possible buffer overflow
+
+Change-Id: I2b26dd3366a3180bb6ea090527cebc85a4307ae6
+Signed-off-by: yangjq <yangjq@lenovo.com>
+Reviewed-on: http://gerrit.mot.com/798289
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravi Chebolu <arc095@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/base/power/wakeup.c | 27 +++++++++++++++++++++++++++
+ include/linux/pm_wakeup.h   |  1 +
+ 2 files changed, 28 insertions(+)
+
+diff --git a/drivers/base/power/wakeup.c b/drivers/base/power/wakeup.c
+index 87efcd6109e..4f034ee9a90 100644
+--- a/drivers/base/power/wakeup.c
++++ b/drivers/base/power/wakeup.c
+@@ -971,6 +971,33 @@ static int wakeup_sources_stats_show(struct seq_file *m, void *unused)
+ 	return 0;
+ }
+ 
++int wakelock_dump_active_info(char *buf, int size)
++{
++	struct wakeup_source *ws;
++	unsigned long flags;
++	char *p = buf;
++
++	rcu_read_lock();
++	list_for_each_entry_rcu(ws, &wakeup_sources, entry) {
++		spin_lock_irqsave(&ws->lock, flags);
++		if (ws->active) {
++			if (time_after(ws->timer_expires, jiffies)) {
++				long timeout = ws->timer_expires - jiffies;
++
++				p += snprintf(p, size - (p - buf),
++				"   (active)[%s], time left %d (msecs)\n",
++				ws->name, jiffies_to_msecs(timeout));
++			} else /* active */
++				p += snprintf(p, size - (p - buf),
++				"   (active)[%s]\n", ws->name);
++		}
++		spin_unlock_irqrestore(&ws->lock, flags);
++	}
++	rcu_read_unlock();
++
++	return p - buf;
++}
++
+ static int wakeup_sources_stats_open(struct inode *inode, struct file *file)
+ {
+ 	return single_open(file, wakeup_sources_stats_show, NULL);
+diff --git a/include/linux/pm_wakeup.h b/include/linux/pm_wakeup.h
+index 1c73e4b49c6..1c7ddae93bf 100644
+--- a/include/linux/pm_wakeup.h
++++ b/include/linux/pm_wakeup.h
+@@ -100,6 +100,7 @@ extern void __pm_relax(struct wakeup_source *ws);
+ extern void pm_relax(struct device *dev);
+ extern void __pm_wakeup_event(struct wakeup_source *ws, unsigned int msec);
+ extern void pm_wakeup_event(struct device *dev, unsigned int msec);
++extern int wakelock_dump_active_info(char *buf, int size);
+ 
+ #else /* !CONFIG_PM_SLEEP */
+ 
+-- 
+2.11.0
+

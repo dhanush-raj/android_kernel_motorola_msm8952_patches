@@ -1,0 +1,41 @@
+From 8660851d1e600c8248f9ec2cb379f48e93fffdbd Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Wed, 26 Aug 2015 15:03:02 -0500
+Subject: [PATCH 053/959] IKKRNBSP-3333 leds: leds-qpnp-wled: log crucial
+ backlight transitions
+
+We usually log in kernel any time backlight transitions to and from 0
+brightness level. It is very usefull for debugging.
+
+Change-Id: Iaadc883cb9ca8d14f1933f3d5da4b833ad7e671f
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/779534
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/leds/leds-qpnp-wled.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/leds/leds-qpnp-wled.c b/drivers/leds/leds-qpnp-wled.c
+index 0e13a62f841..bc8fc21a35d 100644
+--- a/drivers/leds/leds-qpnp-wled.c
++++ b/drivers/leds/leds-qpnp-wled.c
+@@ -780,6 +780,12 @@ static void qpnp_wled_work(struct work_struct *work)
+ 	}
+ 
+ 	if (!!level != wled->prev_state) {
++
++        if (level == 0)
++            dev_info(&wled->spmi->dev, "backlight disabled\n");
++        else
++            dev_info(&wled->spmi->dev, "backlight enabled\n");
++
+ 		rc = qpnp_wled_module_en(wled, wled->ctrl_base, !!level);
+ 
+ 		if (rc) {
+-- 
+2.11.0
+

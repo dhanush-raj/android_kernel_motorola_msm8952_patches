@@ -1,0 +1,42 @@
+From eb6c1fc2a3871c82690e790bd45f22bfa48cb1a0 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Mon, 26 Oct 2015 07:58:52 -0500
+Subject: [PATCH 408/959] IKKRNBSP-3472 arm/dt: msm8952: add utag partitions to
+ DT
+
+Utags driver will use device tree instead of kernel command
+line to get the locations of the partitions.
+
+Change-Id: I5d13447745cb983227903b065c0e90f63c204f87
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/794375
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Yin-Jun Chen <a7301c@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index a8b912d9d4c..67ad795f975 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -53,6 +53,13 @@
+ 		};
+ 
+ 	};
++
++	utags@1 {
++		compatible = "mmi,utags";
++		mmi,main-utags = "/dev/block/bootdevice/by-name/utags";
++		mmi,backup-utags = "/dev/block/bootdevice/by-name/utagsBackup";
++	};
++
+ };
+ 
+ &tlmm_pinmux {
+-- 
+2.11.0
+

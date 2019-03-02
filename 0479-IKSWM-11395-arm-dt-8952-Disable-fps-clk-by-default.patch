@@ -1,0 +1,36 @@
+From b85ebed2c172f66c5ff60ec43a0067d302e4e055 Mon Sep 17 00:00:00 2001
+From: Xiaofei Ma <xiaofei@motorola.com>
+Date: Mon, 16 Nov 2015 14:11:35 -0600
+Subject: [PATCH 479/959] IKSWM-11395: arm/dt: 8952: Disable fps clk by default
+
+Fps clocks are controlled by HAL/TAC now. So we
+need not turn on the clocks when initialization.
+
+Change-Id: Ib836f3ef8232286aa8ae310a688e6660c534a1bc
+Signed-off-by: Xiaofei Ma <xiaofei@motorola.com>
+Reviewed-on: http://gerrit.mot.com/800363
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravi Chebolu <arc095@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-fps.dtsi | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-fps.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-fps.dtsi
+index f381cb9308d..d89df1cb5e9 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-fps.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-fps.dtsi
+@@ -127,7 +127,6 @@
+ 			pinctrl-names = "default", "active";
+ 			pinctrl-0 = <&fps_rst_default &fps_int_default>;
+ 			pinctrl-1 = <&fps_rst_active &fps_int_active>;
+-			fpc,enable-on-boot;
+ 			fpc,txout_boost_enable;
+ 			vcc_spi-supply = <&pm8950_l6>;
+ 			vcc_ana-supply = <&pm8950_l6>;
+-- 
+2.11.0
+

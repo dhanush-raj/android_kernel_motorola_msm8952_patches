@@ -1,0 +1,51 @@
+From 867f5a21fec74b721286f33c8ce4930b481007cb Mon Sep 17 00:00:00 2001
+From: Vidyadhar Gurram <rnh786@motorola.com>
+Date: Thu, 30 Apr 2015 15:32:43 -0500
+Subject: [PATCH 244/959] IKKRNBSP-3179: power: smbcharger-mmi: Ignore Battery
+ Thermistor glitches.
+
+It is seen that Battery Thermistor glitches to higher temperature
+values. This change would be reverted once we have a HW fix.
+
+Change-Id: Ie39005f7f5de45afcff3fa29e28b23127352afb4
+Signed-off-by: Vidyadhar Gurram <rnh786@motorola.com>
+Reviewed-on: http://gerrit.mot.com/743594
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 42a6eb360bb..7876ddc3f40 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -942,6 +942,8 @@ static int get_prop_batt_capacity(struct smbchg_chip *chip)
+ }
+ 
+ #define DEFAULT_BATT_TEMP		200
++#define GLITCH_BATT_TEMP		600
++#define ERROR_BATT_TEMP 		597
+ static int get_prop_batt_temp(struct smbchg_chip *chip)
+ {
+ 	int temp, rc;
+@@ -951,6 +953,12 @@ static int get_prop_batt_temp(struct smbchg_chip *chip)
+ 		pr_smb(PR_STATUS, "Couldn't get temperature rc = %d\n", rc);
+ 		temp = DEFAULT_BATT_TEMP;
+ 	}
++
++	if (temp > GLITCH_BATT_TEMP) {
++		dev_err(chip->dev, "GLITCH: Temperature Read %d \n", temp);
++		temp = ERROR_BATT_TEMP;
++	}
++
+ 	return temp;
+ }
+ 
+-- 
+2.11.0
+

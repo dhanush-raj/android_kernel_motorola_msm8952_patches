@@ -1,0 +1,51 @@
+From 9317759569a1032580c9a3a5948b875698ba1d80 Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Wed, 7 Oct 2015 16:54:37 -0700
+Subject: [PATCH 401/959] IKKRNBSP-3425 arm/dts: Athene: enable HBM feature for
+ TDI and LGD panel
+
+Make panel brightness support two levels switching on the fly.
+
+Change-Id: I4a00048d47d126026186a98eb52f14bf24c2b4e5
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/789590
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi | 2 ++
+ arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi | 2 ++
+ 2 files changed, 4 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+index c481d6eb135..d95090f5a2e 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -63,6 +63,8 @@ qcom,mdss-dsi-off-command = [
+ qcom,mdss-dsi-cabc-ui-command = [15 01 00 00 00 00 02 55 01];
+ qcom,mdss-dsi-cabc-mv-command = [15 01 00 00 00 00 02 55 03];
+ qcom,mdss-dsi-cabc-dis-command = [15 01 00 00 00 00 02 55 00];
++qcom,mdss-dsi-hbm-on-command = [15 01 00 00 00 00 02 51 EB];
++qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 BD];
+ 
+ qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+ qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
+index 463f8485b4c..878f9fa1b90 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
+@@ -71,6 +71,8 @@ qcom,mdss-dsi-off-command = [
+ qcom,mdss-dsi-cabc-ui-command = [15 01 00 00 00 00 02 55 01];
+ qcom,mdss-dsi-cabc-mv-command = [15 01 00 00 00 00 02 55 03];
+ qcom,mdss-dsi-cabc-dis-command = [15 01 00 00 00 00 02 55 00];
++qcom,mdss-dsi-hbm-on-command = [15 01 00 00 00 00 02 51 FF];
++qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 CC];
+ 
+ qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+ qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+-- 
+2.11.0
+

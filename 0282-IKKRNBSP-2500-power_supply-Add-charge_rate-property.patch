@@ -1,0 +1,84 @@
+From 2fc4632f440f53dcf7b0829fd6463998e796919a Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <a6808c@motorola.com>
+Date: Tue, 8 Jul 2014 00:56:49 +0800
+Subject: [PATCH 282/959] IKKRNBSP-2500: power_supply: Add charge_rate
+ property.
+
+ Add a new power_supply property charge_rate to show charger charging
+ rate: None, Normal, Weak, Turbo.
+
+Change-Id: I5f383ba24626dbf0c98dce59d7bcd5f3ec4d5b5f
+Signed-off-by: Jiangli Yuan <a6808c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/651693
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-by: Yi-Wei Zhao <gbjc64@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/power_supply_sysfs.c | 8 ++++++++
+ include/linux/power_supply.h       | 8 ++++++++
+ 2 files changed, 16 insertions(+)
+
+diff --git a/drivers/power/power_supply_sysfs.c b/drivers/power/power_supply_sysfs.c
+index e8cf5a33427..d5eae376693 100644
+--- a/drivers/power/power_supply_sysfs.c
++++ b/drivers/power/power_supply_sysfs.c
+@@ -70,6 +70,10 @@ static ssize_t power_supply_show_property(struct device *dev,
+ 	static char *scope_text[] = {
+ 		"Unknown", "System", "Device"
+ 	};
++
++	static char *charge_rate[] = {
++		"None", "Normal", "Weak", "Turbo"
++	};
+ 	ssize_t ret = 0;
+ 	struct power_supply *psy = dev_get_drvdata(dev);
+ 	const ptrdiff_t off = attr - power_supply_attrs;
+@@ -94,6 +98,9 @@ static ssize_t power_supply_show_property(struct device *dev,
+ 		return sprintf(buf, "%s\n", status_text[value.intval]);
+ 	else if (off == POWER_SUPPLY_PROP_CHARGE_TYPE)
+ 		return sprintf(buf, "%s\n", charge_type[value.intval]);
++	else if (off == POWER_SUPPLY_PROP_CHARGE_RATE)
++		return snprintf(buf, strlen(charge_rate[value.intval]) + 2,
++				"%s\n", charge_rate[value.intval]);
+ 	else if (off == POWER_SUPPLY_PROP_HEALTH)
+ 		return sprintf(buf, "%s\n", health_text[value.intval]);
+ 	else if (off == POWER_SUPPLY_PROP_TECHNOLOGY)
+@@ -176,6 +183,7 @@ static struct device_attribute power_supply_attrs[] = {
+ 	POWER_SUPPLY_ATTR(charge_now_raw),
+ 	POWER_SUPPLY_ATTR(charge_now_error),
+ 	POWER_SUPPLY_ATTR(charge_avg),
++	POWER_SUPPLY_ATTR(charge_rate),
+ 	POWER_SUPPLY_ATTR(charge_counter),
+ 	POWER_SUPPLY_ATTR(charge_counter_shadow),
+ 	POWER_SUPPLY_ATTR(constant_charge_current),
+diff --git a/include/linux/power_supply.h b/include/linux/power_supply.h
+index 10c1ed0a400..62d8ac66d3e 100644
+--- a/include/linux/power_supply.h
++++ b/include/linux/power_supply.h
+@@ -82,6 +82,13 @@ enum {
+ };
+ 
+ enum {
++	POWER_SUPPLY_CHARGE_RATE_NONE = 0,
++	POWER_SUPPLY_CHARGE_RATE_NORMAL,
++	POWER_SUPPLY_CHARGE_RATE_WEAK,
++	POWER_SUPPLY_CHARGE_RATE_TURBO,
++};
++
++enum {
+ 	POWER_SUPPLY_SCOPE_UNKNOWN = 0,
+ 	POWER_SUPPLY_SCOPE_SYSTEM,
+ 	POWER_SUPPLY_SCOPE_DEVICE,
+@@ -141,6 +148,7 @@ enum power_supply_property {
+ 	POWER_SUPPLY_PROP_CHARGE_NOW_RAW,
+ 	POWER_SUPPLY_PROP_CHARGE_NOW_ERROR,
+ 	POWER_SUPPLY_PROP_CHARGE_AVG,
++	POWER_SUPPLY_PROP_CHARGE_RATE,
+ 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
+ 	POWER_SUPPLY_PROP_CHARGE_COUNTER_SHADOW,
+ 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
+-- 
+2.11.0
+

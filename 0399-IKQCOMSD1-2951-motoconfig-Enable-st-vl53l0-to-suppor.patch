@@ -1,0 +1,32 @@
+From fa086fb92fe3f8c82aba210a625f4030b814c5d0 Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Mon, 28 Sep 2015 12:18:58 -0500
+Subject: [PATCH 399/959] IKQCOMSD1-2951 motoconfig: Enable st vl53l0 to
+ support laser focus
+
+Enable st vl53l0 to support laser focus
+
+Change-Id: Ib7c6d843056cb212ee23278114d06054a4602ea8
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/786674
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index d473ce99ebb..be91fd5c238 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -52,3 +52,4 @@ CONFIG_MSM_TZ_LOG=y
+ CONFIG_MSM_TZ_LOG_WDOG_DUMP=y
+ CONFIG_LEDS_ATC=y
+ CONFIG_INPUT_KEYCHORD=y
++CONFIG_STMVL53L0=y
+-- 
+2.11.0
+

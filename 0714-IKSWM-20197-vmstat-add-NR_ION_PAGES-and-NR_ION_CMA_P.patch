@@ -1,0 +1,265 @@
+From 385231115350630510f9956f81cebdc2453d6b4b Mon Sep 17 00:00:00 2001
+From: Yuanyuan Zhong <zyy@motorola.com>
+Date: Fri, 10 Apr 2015 16:46:22 -0500
+Subject: [PATCH 714/959] IKSWM-20197 vmstat: add NR_ION_PAGES and
+ NR_ION_CMA_PAGES
+
+Add NR_ION_PAGES and NR_ION_CMA_PAGES to account for memory
+allocated by ION.
+
+Change-Id: I1404f5943306824a0f64f35994b9b11d00b2cd6a
+Signed-off-by: Yuanyuan Zhong <zyy@motorola.com>
+Reviewed-on: http://gerrit.mot.com/754832
+Reviewed-by: Jeffrey Vanhoof <jvanhoof@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+(cherry picked from commit ddae4d16eb7418e594cb0a78986ea8ce939f73aa)
+
+Conflicts:
+
+	include/linux/mmzone.h
+	mm/vmstat.c
+
+Change-Id: I85cf9e18cc53948204a00341f5c5db57a3d14f8c
+Reviewed-on: http://gerrit.mot.com/826388
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/staging/android/ion/ion_cma_heap.c        |  8 ++++++++
+ drivers/staging/android/ion/ion_cma_secure_heap.c |  4 ++++
+ drivers/staging/android/ion/ion_page_pool.c       |  3 +++
+ drivers/staging/android/ion/ion_system_heap.c     |  6 ++++++
+ drivers/staging/android/lowmemorykiller.c         |  6 ++++++
+ include/linux/mmzone.h                            |  2 ++
+ mm/page_alloc.c                                   | 10 ++++++++--
+ mm/vmstat.c                                       |  2 ++
+ 8 files changed, 39 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/staging/android/ion/ion_cma_heap.c b/drivers/staging/android/ion/ion_cma_heap.c
+index aeb3b7b82a8..b343d657631 100644
+--- a/drivers/staging/android/ion/ion_cma_heap.c
++++ b/drivers/staging/android/ion/ion_cma_heap.c
+@@ -63,6 +63,7 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
+ {
+ 	struct device *dev = heap->priv;
+ 	struct ion_cma_buffer_info *info;
++	struct zone *zone;
+ 
+ 	dev_dbg(dev, "Request buffer allocation len %ld\n", len);
+ 
+@@ -84,6 +85,9 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
+ 		goto err;
+ 	}
+ 
++	zone = page_zone(pfn_to_page(PFN_DOWN(info->handle)));
++	mod_zone_page_state(zone, NR_ION_CMA_PAGES, (len >> PAGE_SHIFT));
++
+ 	info->table = kmalloc(sizeof(struct sg_table), GFP_KERNEL);
+ 	if (!info->table) {
+ 		dev_err(dev, "Fail to allocate sg table\n");
+@@ -105,6 +109,7 @@ free_table:
+ 	kfree(info->table);
+ free_mem:
+ 	dma_free_coherent(dev, len, info->cpu_addr, info->handle);
++	mod_zone_page_state(zone, NR_ION_CMA_PAGES, -(len >> PAGE_SHIFT));
+ err:
+ 	kfree(info);
+ 	return ION_CMA_ALLOCATE_FAILED;
+@@ -114,10 +119,13 @@ static void ion_cma_free(struct ion_buffer *buffer)
+ {
+ 	struct device *dev = buffer->heap->priv;
+ 	struct ion_cma_buffer_info *info = buffer->priv_virt;
++	struct zone *zone = page_zone(pfn_to_page(PFN_DOWN(info->handle)));
+ 
+ 	dev_dbg(dev, "Release buffer %pK\n", buffer);
+ 	/* release memory */
+ 	dma_free_coherent(dev, buffer->size, info->cpu_addr, info->handle);
++	mod_zone_page_state(zone, NR_ION_CMA_PAGES,
++			-(buffer->size >> PAGE_SHIFT));
+ 	sg_free_table(info->table);
+ 	/* release sg table */
+ 	kfree(info->table);
+diff --git a/drivers/staging/android/ion/ion_cma_secure_heap.c b/drivers/staging/android/ion/ion_cma_secure_heap.c
+index a03092078ca..4b6c121bb62 100644
+--- a/drivers/staging/android/ion/ion_cma_secure_heap.c
++++ b/drivers/staging/android/ion/ion_cma_secure_heap.c
+@@ -155,6 +155,8 @@ static int ion_secure_cma_add_to_pool(
+ 		ret = -ENOMEM;
+ 		goto out_free;
+ 	}
++	mod_zone_page_state(page_zone(pfn_to_page(PFN_DOWN(handle))),
++			NR_ION_CMA_PAGES, (len >> PAGE_SHIFT));
+ 
+ 	chunk->cpu_addr = cpu_addr;
+ 	chunk->handle = handle;
+@@ -337,6 +339,8 @@ static void ion_secure_cma_free_chunk(struct ion_cma_secure_heap *sheap,
+ 			chunk->chunk_size >> PAGE_SHIFT);
+ 	dma_free_attrs(sheap->dev, chunk->chunk_size, chunk->cpu_addr,
+ 				chunk->handle, &attrs);
++	mod_zone_page_state(page_zone(pfn_to_page(PFN_DOWN(chunk->handle))),
++			NR_ION_CMA_PAGES, -(chunk->chunk_size >> PAGE_SHIFT));
+ 	atomic_sub(chunk->chunk_size, &sheap->total_pool_size);
+ 	list_del(&chunk->entry);
+ 	kfree(chunk);
+diff --git a/drivers/staging/android/ion/ion_page_pool.c b/drivers/staging/android/ion/ion_page_pool.c
+index ce92919a366..2c5c3e3cc01 100644
+--- a/drivers/staging/android/ion/ion_page_pool.c
++++ b/drivers/staging/android/ion/ion_page_pool.c
+@@ -33,6 +33,7 @@ static void *ion_page_pool_alloc_pages(struct ion_page_pool *pool)
+ 
+ 	if (!page)
+ 		return NULL;
++	mod_zone_page_state(page_zone(page), NR_ION_PAGES, 1 << pool->order);
+ 
+ 	if (pool->gfp_mask & __GFP_ZERO)
+ 		if (msm_ion_heap_high_order_page_zero(page, pool->order))
+@@ -41,6 +42,7 @@ static void *ion_page_pool_alloc_pages(struct ion_page_pool *pool)
+ 	return page;
+ error_free_pages:
+ 	__free_pages(page, pool->order);
++	mod_zone_page_state(page_zone(page), NR_ION_PAGES, -(1 << pool->order));
+ 	return NULL;
+ }
+ 
+@@ -48,6 +50,7 @@ static void ion_page_pool_free_pages(struct ion_page_pool *pool,
+ 				     struct page *page)
+ {
+ 	__free_pages(page, pool->order);
++	mod_zone_page_state(page_zone(page), NR_ION_PAGES, -(1 << pool->order));
+ }
+ 
+ static int ion_page_pool_add(struct ion_page_pool *pool, struct page *page)
+diff --git a/drivers/staging/android/ion/ion_system_heap.c b/drivers/staging/android/ion/ion_system_heap.c
+index c08384324a5..af7802d28bf 100644
+--- a/drivers/staging/android/ion/ion_system_heap.c
++++ b/drivers/staging/android/ion/ion_system_heap.c
+@@ -565,12 +565,15 @@ static int ion_system_contig_heap_allocate(struct ion_heap *heap,
+ 	page = alloc_pages(low_order_gfp_flags | __GFP_ZERO, order);
+ 	if (!page)
+ 		return -ENOMEM;
++	mod_zone_page_state(page_zone(page), NR_ION_PAGES, 1 << order);
+ 
+ 	split_page(page, order);
+ 
+ 	len = PAGE_ALIGN(len);
+ 	for (i = len >> PAGE_SHIFT; i < (1 << order); i++)
+ 		__free_page(page + i);
++	mod_zone_page_state(page_zone(page), NR_ION_PAGES,
++		(len >> PAGE_SHIFT) - (1 << order));
+ 
+ 	table = kzalloc(sizeof(struct sg_table), GFP_KERNEL);
+ 	if (!table) {
+@@ -593,6 +596,8 @@ static int ion_system_contig_heap_allocate(struct ion_heap *heap,
+ out:
+ 	for (i = 0; i < len >> PAGE_SHIFT; i++)
+ 		__free_page(page + i);
++	mod_zone_page_state(page_zone(page), NR_ION_PAGES,
++			-(len >> PAGE_SHIFT));
+ 	kfree(table);
+ 	return ret;
+ }
+@@ -606,6 +611,7 @@ void ion_system_contig_heap_free(struct ion_buffer *buffer)
+ 
+ 	for (i = 0; i < pages; i++)
+ 		__free_page(page + i);
++	mod_zone_page_state(page_zone(page), NR_ION_PAGES, -pages);
+ 	sg_free_table(table);
+ 	kfree(table);
+ }
+diff --git a/drivers/staging/android/lowmemorykiller.c b/drivers/staging/android/lowmemorykiller.c
+index 7a1e78ab09a..1ea57f294f9 100644
+--- a/drivers/staging/android/lowmemorykiller.c
++++ b/drivers/staging/android/lowmemorykiller.c
+@@ -579,6 +579,8 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 				"   Slab Reclaimable is %ldkB\n" \
+ 				"   Slab UnReclaimable is %ldkB\n" \
+ 				"   Total Slab is %ldkB\n" \
++				"   ION is %ldkB\n" \
++				"   ION_CMA is %ldkB\n" \
+ 				"   GFP mask is 0x%x\n",
+ 			     selected->comm, selected->pid,
+ 			     selected_oom_score_adj,
+@@ -602,6 +604,10 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 				(long)(PAGE_SIZE / 1024) +
+ 			     global_page_state(NR_SLAB_UNRECLAIMABLE) *
+ 				(long)(PAGE_SIZE / 1024),
++			     global_page_state(NR_ION_PAGES) *
++				(long)(PAGE_SIZE / 1024),
++			     global_page_state(NR_ION_CMA_PAGES) *
++				(long)(PAGE_SIZE / 1024),
+ 			     sc->gfp_mask);
+ 
+ 		if (lowmem_debug_level >= 2 && selected_oom_score_adj == 0) {
+diff --git a/include/linux/mmzone.h b/include/linux/mmzone.h
+index babc344d625..c6b4bcdc8d3 100644
+--- a/include/linux/mmzone.h
++++ b/include/linux/mmzone.h
+@@ -161,6 +161,8 @@ enum zone_stat_item {
+ 	NR_ANON_TRANSPARENT_HUGEPAGES,
+ 	NR_FREE_CMA_PAGES,
+ 	NR_SWAPCACHE,
++	NR_ION_PAGES,
++	NR_ION_CMA_PAGES,
+ 	NR_VM_ZONE_STAT_ITEMS };
+ 
+ /*
+diff --git a/mm/page_alloc.c b/mm/page_alloc.c
+index d68d29ef0c4..4657bbac1e6 100644
+--- a/mm/page_alloc.c
++++ b/mm/page_alloc.c
+@@ -3182,7 +3182,7 @@ void show_free_areas(unsigned int filter)
+ 		" dirty:%lu writeback:%lu unstable:%lu\n"
+ 		" free:%lu slab_reclaimable:%lu slab_unreclaimable:%lu\n"
+ 		" mapped:%lu shmem:%lu pagetables:%lu bounce:%lu\n"
+-		" free_cma:%lu\n",
++		" free_cma:%lu ion:%lu ion_cma:%lu\n",
+ 		global_page_state(NR_ACTIVE_ANON),
+ 		global_page_state(NR_INACTIVE_ANON),
+ 		global_page_state(NR_ISOLATED_ANON),
+@@ -3200,7 +3200,9 @@ void show_free_areas(unsigned int filter)
+ 		global_page_state(NR_SHMEM),
+ 		global_page_state(NR_PAGETABLE),
+ 		global_page_state(NR_BOUNCE),
+-		global_page_state(NR_FREE_CMA_PAGES));
++		global_page_state(NR_FREE_CMA_PAGES),
++		global_page_state(NR_ION_PAGES),
++		global_page_state(NR_ION_CMA_PAGES));
+ 
+ 	for_each_populated_zone(zone) {
+ 		int i;
+@@ -3234,6 +3236,8 @@ void show_free_areas(unsigned int filter)
+ 			" unstable:%lukB"
+ 			" bounce:%lukB"
+ 			" free_cma:%lukB"
++			" ion:%lukB"
++			" ion_cma:%lukB"
+ 			" writeback_tmp:%lukB"
+ 			" pages_scanned:%lu"
+ 			" all_unreclaimable? %s"
+@@ -3265,6 +3269,8 @@ void show_free_areas(unsigned int filter)
+ 			K(zone_page_state(zone, NR_UNSTABLE_NFS)),
+ 			K(zone_page_state(zone, NR_BOUNCE)),
+ 			K(zone_page_state(zone, NR_FREE_CMA_PAGES)),
++			K(zone_page_state(zone, NR_ION_PAGES)),
++			K(zone_page_state(zone, NR_ION_CMA_PAGES)),
+ 			K(zone_page_state(zone, NR_WRITEBACK_TEMP)),
+ 			zone->pages_scanned,
+ 			(!zone_reclaimable(zone) ? "yes" : "no")
+diff --git a/mm/vmstat.c b/mm/vmstat.c
+index fa3d7bd6d6c..1d90881e82e 100644
+--- a/mm/vmstat.c
++++ b/mm/vmstat.c
+@@ -743,6 +743,8 @@ const char * const vmstat_text[] = {
+ 	"nr_anon_transparent_hugepages",
+ 	"nr_free_cma",
+ 	"nr_swapcache",
++	"nr_ion",
++	"nr_ion_cma",
+ 	"nr_dirty_threshold",
+ 	"nr_dirty_background_threshold",
+ 
+-- 
+2.11.0
+

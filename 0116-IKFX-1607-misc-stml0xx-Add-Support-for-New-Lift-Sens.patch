@@ -1,0 +1,117 @@
+From 72806ba36e9612e23a20e6c28f010fdedd348d7f Mon Sep 17 00:00:00 2001
+From: Mark Elkins <elkins@motorola.com>
+Date: Fri, 27 Feb 2015 15:32:34 -0500
+Subject: [PATCH 116/959] IKFX-1607: misc: stml0xx: Add Support for New Lift
+ Sensor to 8916 Devices
+
+Add Lift virtual sensor to implement the Lift to launch Moto Voice gesture.
+This change passes the gesture trigger event to the virtual stml0xx_as
+device.
+
+Lift gesture is a wake IRQ.
+
+Change-Id: I035d24128a630faed2e77dbb91472a5bda382a5a
+Signed-off-by: Mark Elkins <elkins@motorola.com>
+Reviewed-on: http://gerrit.mot.com/720453
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: John Zafiris <johnz@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_wake_irq.c | 15 +++++++++++++++
+ include/linux/stml0xx.h                 | 25 ++++++++++++++++---------
+ 2 files changed, 31 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index d98afc0bef2..6fe735dc03d 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -343,6 +343,21 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 			"Sending SIM Value=%d", STM16_TO_HOST(SIM_DATA,
+ 					&buf[WAKE_IRQ_IDX_SIM]));
+ 	}
++	if (irq_status & M_LIFT) {
++		stml0xx_as_data_buffer_write(
++			ps_stml0xx,
++			DT_LIFT,
++			&buf[WAKE_IRQ_IDX_LIFT],
++			12,
++			0,
++			stm_ws->ts_ns);
++
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++			"Lift triggered. Dist=%d. ZRot=%d. GravDiff=%d.\n",
++			STM32_TO_HOST(LIFT_DISTANCE, &buf[WAKE_IRQ_IDX_LIFT]),
++			STM32_TO_HOST(LIFT_ROTATION, &buf[WAKE_IRQ_IDX_LIFT]),
++			STM32_TO_HOST(LIFT_GRAV_DIFF, &buf[WAKE_IRQ_IDX_LIFT]));
++	}
+ 	if (irq2_status & M_MMOVEME) {
+ 		unsigned char status;
+ 
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index efd0e9f534a..4d065efc11f 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -201,6 +201,7 @@
+ #define M_CAMERA_ACT		0x000800
+ #define M_NFC			0x001000
+ #define M_SIM			0x002000
++#define M_LIFT			0x004000
+ #define M_LOG_MSG		0x008000
+ 
+ /* algo config mask */
+@@ -282,7 +283,8 @@ enum STML0XX_data_types {
+ 	DT_UNCALIB_GYRO,
+ 	DT_UNCALIB_MAG,
+ 	DT_ACCEL2,
+-	DT_FLUSH
++	DT_FLUSH,
++	DT_LIFT,
+ };
+ 
+ enum {
+@@ -425,6 +427,7 @@ struct stm_response {
+ #define CAMERA                          0x4C
+ #define NFC                             0x4D
+ #define SIM                             0x4E
++#define LIFT                            0x51
+ 
+ #define SH_LOG_LEVEL_REG                0x55
+ 
+@@ -506,14 +509,15 @@ struct stm_response {
+ #define WAKE_IRQ_IDX_FLAT                   8
+ #define WAKE_IRQ_IDX_STOWED                 9
+ #define WAKE_IRQ_IDX_CAMERA                10
+-#define WAKE_IRQ_IDX_SIM                   12
+-#define WAKE_IRQ_IDX_MOTION                14
+-#define WAKE_IRQ_IDX_MODALITY              16
+-#define WAKE_IRQ_IDX_MODALITY_ORIENT       23
+-#define WAKE_IRQ_IDX_MODALITY_STOWED       30
+-#define WAKE_IRQ_IDX_MODALITY_ACCUM        37
+-#define WAKE_IRQ_IDX_MODALITY_ACCUM_MVMT   39
+-#define WAKE_IRQ_IDX_LOG_MSG               43
++#define WAKE_IRQ_IDX_LIFT                  12
++#define WAKE_IRQ_IDX_SIM                   24
++#define WAKE_IRQ_IDX_MOTION                26
++#define WAKE_IRQ_IDX_MODALITY              28
++#define WAKE_IRQ_IDX_MODALITY_ORIENT       35
++#define WAKE_IRQ_IDX_MODALITY_STOWED       42
++#define WAKE_IRQ_IDX_MODALITY_ACCUM        49
++#define WAKE_IRQ_IDX_MODALITY_ACCUM_MVMT   51
++#define WAKE_IRQ_IDX_LOG_MSG               55
+ 
+ /* stml0xx_readbuff offsets. */
+ #define IRQ_WAKE_LO  0
+@@ -562,6 +566,9 @@ struct stm_response {
+ #define GRAV_Z		4
+ #define CAMERA_VALUE	0
+ #define SIM_DATA	0
++#define LIFT_DISTANCE	0
++#define LIFT_ROTATION	4
++#define LIFT_GRAV_DIFF	8
+ 
+ #define STML0XX_LED_MAX_DELAY 0xFFFF
+ #define STML0XX_LED_MAX_BRIGHTNESS 0x00FFFFFF
+-- 
+2.11.0
+

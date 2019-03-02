@@ -1,0 +1,75 @@
+From e8298afc3fa6dde63e6c75dc6db0e0304c4ae511 Mon Sep 17 00:00:00 2001
+From: parasur <parasur@motorola.com>
+Date: Fri, 1 May 2015 15:19:03 -0500
+Subject: [PATCH 807/959] IKKRNBSP-3741: msm/mdss: fix fb notification for ref
+ count 0
+
+System server crash causes the FB ref count to drop to 0
+and eventually display will turn off without following
+through the typical display BLANK operation.
+
+This results in the display cutting power,
+but not notifying any of the registered modules
+updating the FB notification when ref count drop to 0
+
+Signed-off-by: Parasuraman <parasur@motorola.com>
+
+Change-Id: Iaf1eec3fad90d568981e10be71e8ebcb4a816585
+(cherry picked from commit e2093954f60ab36fe39120bbda247107d5489c3b)
+Reviewed-on: http://gerrit.mot.com/831072
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Patrick Auchter <auchter@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_fb.c | 15 +++++++++++++--
+ 1 file changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_fb.c b/drivers/video/msm/mdss/mdss_fb.c
+index cf761a45c16..3d1523dc54f 100644
+--- a/drivers/video/msm/mdss/mdss_fb.c
++++ b/drivers/video/msm/mdss/mdss_fb.c
+@@ -2835,10 +2835,12 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
+ 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
+ 	struct mdss_fb_proc_info *pinfo = NULL, *temp_pinfo = NULL;
+ 	struct mdss_fb_proc_info *proc_info = NULL;
+-	int ret = 0, ad_ret = 0;
++	int blank, ret = 0, ad_ret = 0;
++
+ 	int pid = current->tgid;
+ 	bool unknown_pid = true, release_needed = false;
+ 	struct task_struct *task = current->group_leader;
++	struct fb_event event;
+ 
+ 	if (!mfd->ref_cnt) {
+ 		pr_info("try to close unopened fb %d! from pid:%d name:%s\n",
+@@ -2936,13 +2938,22 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
+ 									ad_ret);
+ 		}
+ 
++		blank = FB_BLANK_POWERDOWN;
++		event.info = info;
++		event.data = &blank;
++
++		fb_notifier_call_chain(FB_EARLY_EVENT_BLANK, &event);
++
+ 		ret = mdss_fb_blank_sub(FB_BLANK_POWERDOWN, info,
+ 			mfd->op_enable);
+ 		if (ret) {
++			fb_notifier_call_chain(FB_R_EARLY_EVENT_BLANK, &event);
+ 			pr_err("can't turn off fb%d! rc=%d current process=%s pid=%d known pid=%d\n",
+ 			      mfd->index, ret, task->comm, current->tgid, pid);
+ 			return ret;
+-		}
++		} else
++			fb_notifier_call_chain(FB_EVENT_BLANK, &event);
++
+ 		if (mfd->fb_ion_handle)
+ 			mdss_fb_free_fb_ion_memory(mfd);
+ 
+-- 
+2.11.0
+

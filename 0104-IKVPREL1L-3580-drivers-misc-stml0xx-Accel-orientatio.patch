@@ -1,0 +1,88 @@
+From 81d077038a18fbcf2f8ee5b041503cccebe5374a Mon Sep 17 00:00:00 2001
+From: mguntaka <mguntaka@motorola.com>
+Date: Thu, 4 Dec 2014 17:17:25 -0600
+Subject: [PATCH 104/959] IKVPREL1L-3580:drivers:misc:stml0xx:Accel
+ orientations for callisto
+
+This change is to handle dual accel orientations in callisto
+
+Change-Id: Iac5627e9075289cf8f6ecf8ea615a3a476815c05
+Signed-off-by: mguntaka <mguntaka@motorola.com>
+Reviewed-on: http://gerrit.mot.com/695080
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Vladimir Karpovich <vkarpovich@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c  |  7 +++++++
+ drivers/misc/stml0xx/stml0xx_reset.c | 13 +++++++++++++
+ include/linux/stml0xx.h              |  3 +++
+ 3 files changed, 23 insertions(+)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 0746a682f79..7a802bb600d 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -450,6 +450,13 @@ static struct stml0xx_platform_data *stml0xx_of_init(struct spi_device *spi)
+ 	of_property_read_u32(np, "headset_button_4_keycode",
+ 			     &pdata->headset_button_4_keycode);
+ 
++	pdata->accel_orientation_1 = 0;
++	pdata->accel_orientation_2 = 0;
++	of_property_read_u32(np, "accel_orientation_1",
++			     &pdata->accel_orientation_1);
++	of_property_read_u32(np, "accel_orientation_2",
++			     &pdata->accel_orientation_2);
++
+ 	return pdata;
+ }
+ #else
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index de3f0d407b7..a6c8d7eb4ad 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -80,6 +80,19 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 
+ 	stml0xx_detect_lowpower_mode();
+ 
++	if ((pdata->accel_orientation_1 > 0) ||
++				(pdata->accel_orientation_2 > 0)) {
++		buf[0] = pdata->accel_orientation_1 & 0xff;
++		buf[1] = pdata->accel_orientation_2 & 0xff;
++		err = stml0xx_spi_send_write_reg_reset(ACCEL_ORIENTATION, buf,
++				2, RESET_NOT_ALLOWED);
++		if (err < 0) {
++			dev_err(&ps_stml0xx->spi->dev,
++				"Unable to wrie accel orientation value");
++			ret_err = err;
++		}
++	}
++
+ 	buf[0] = stml0xx_g_acc_delay;
+ 	err = stml0xx_spi_send_write_reg_reset(ACCEL_UPDATE_RATE, buf,
+ 			1, RESET_NOT_ALLOWED);
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 5717bf6d764..c5b3e213886 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -346,6 +346,7 @@ struct stm_response {
+ #define LOG_MSG_STATUS                  0x02
+ #define LOWPOWER_REG                    0x03
+ #define INIT_COMPLETE_REG               0x04
++#define ACCEL_ORIENTATION		0x06
+ 
+ #define STML0XX_PEEKDATA_REG             0x09
+ #define STML0XX_PEEKSTATUS_REG           0x0A
+@@ -574,6 +575,8 @@ struct stml0xx_platform_data {
+ 	int headset_button_2_keycode;
+ 	int headset_button_3_keycode;
+ 	int headset_button_4_keycode;
++	int accel_orientation_1;
++	int accel_orientation_2;
+ };
+ 
+ struct stml0xx_data {
+-- 
+2.11.0
+

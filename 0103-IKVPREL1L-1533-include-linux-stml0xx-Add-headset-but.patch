@@ -1,0 +1,39 @@
+From 299d658f87e9c0819b62ddeb06923e5281fa7333 Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Thu, 23 Oct 2014 15:39:29 -0500
+Subject: [PATCH 103/959] IKVPREL1L-1533 include: linux: stml0xx: Add headset
+ buttons
+
+Create new headset button values to route each button events.
+each buttons will be configured by device tree.
+
+Change-Id: I821d2843c53a953385bc53e82a85ae44135dbf9d
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/682287
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ include/linux/stml0xx.h | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 8203c0c7625..5717bf6d764 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -570,6 +570,10 @@ struct stml0xx_platform_data {
+ 	int headset_button_1_2_threshold;
+ 	int headset_button_2_3_threshold;
+ 	int headset_button_3_upper_threshold;
++	int headset_button_1_keycode;
++	int headset_button_2_keycode;
++	int headset_button_3_keycode;
++	int headset_button_4_keycode;
+ };
+ 
+ struct stml0xx_data {
+-- 
+2.11.0
+

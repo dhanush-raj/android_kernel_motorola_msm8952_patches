@@ -1,0 +1,77 @@
+From 66c116f25f3066a6f59ff9c223ecd9faac2cd282 Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Fri, 19 Feb 2016 22:10:03 -0600
+Subject: [PATCH 697/959] IKSWM-16622 ASoC: msm: Add Tertiary loopback gain
+ control
+
+Add tertiary loopback gain control to adjust LPASS sidetone
+gain from tertiary tx to quinary rx.
+
+Change-Id: Ib072bc9aac22a8d2b964174c9ffdd44be3ac8962
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/823816
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Joseph Dwyer <josephdwyer@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/msm/qdsp6v2/msm-qti-pp-config.c | 27 +++++++++++++++++++++++++++
+ 1 file changed, 27 insertions(+)
+
+diff --git a/sound/soc/msm/qdsp6v2/msm-qti-pp-config.c b/sound/soc/msm/qdsp6v2/msm-qti-pp-config.c
+index 94d6cf7a7c7..456218de84f 100644
+--- a/sound/soc/msm/qdsp6v2/msm-qti-pp-config.c
++++ b/sound/soc/msm/qdsp6v2/msm-qti-pp-config.c
+@@ -426,6 +426,24 @@ static int msm_qti_pp_set_pri_mi2s_lb_vol_mixer(struct snd_kcontrol *kcontrol,
+ 	return 0;
+ }
+ 
++static int msm_qti_pp_get_tert_mi2s_lb_vol_mixer(struct snd_kcontrol *kcontrol,
++				       struct snd_ctl_elem_value *ucontrol)
++{
++	ucontrol->value.integer.value[0] = msm_afe_lb_vol_ctrl;
++	return 0;
++}
++
++static int msm_qti_pp_set_tert_mi2s_lb_vol_mixer(struct snd_kcontrol *kcontrol,
++			    struct snd_ctl_elem_value *ucontrol)
++{
++	afe_loopback_gain(AFE_PORT_ID_TERTIARY_MI2S_TX,
++			  ucontrol->value.integer.value[0]);
++
++	msm_afe_lb_vol_ctrl = ucontrol->value.integer.value[0];
++
++	return 0;
++}
++
+ static int msm_qti_pp_get_quat_mi2s_fm_vol_mixer(struct snd_kcontrol *kcontrol,
+ 				       struct snd_ctl_elem_value *ucontrol)
+ {
+@@ -688,6 +706,12 @@ static const struct snd_kcontrol_new pri_mi2s_lb_vol_mixer_controls[] = {
+ 	msm_qti_pp_set_pri_mi2s_lb_vol_mixer, afe_lb_vol_gain),
+ };
+ 
++static const struct snd_kcontrol_new tert_mi2s_lb_vol_mixer_controls[] = {
++	SOC_SINGLE_EXT_TLV("TERT MI2S LOOPBACK Volume", SND_SOC_NOPM, 0,
++	INT_RX_VOL_GAIN, 0, msm_qti_pp_get_tert_mi2s_lb_vol_mixer,
++	msm_qti_pp_set_tert_mi2s_lb_vol_mixer, afe_lb_vol_gain),
++};
++
+ static const struct snd_kcontrol_new int_hfp_vol_mixer_controls[] = {
+ 	SOC_SINGLE_EXT_TLV("Internal HFP RX Volume", SND_SOC_NOPM, 0,
+ 	INT_RX_VOL_GAIN, 0, msm_qti_pp_get_hfp_vol_mixer,
+@@ -864,6 +888,9 @@ void msm_qti_pp_add_controls(struct snd_soc_platform *platform)
+ 	snd_soc_add_platform_controls(platform, pri_mi2s_lb_vol_mixer_controls,
+ 			ARRAY_SIZE(pri_mi2s_lb_vol_mixer_controls));
+ 
++	snd_soc_add_platform_controls(platform, tert_mi2s_lb_vol_mixer_controls,
++			ARRAY_SIZE(tert_mi2s_lb_vol_mixer_controls));
++
+ 	snd_soc_add_platform_controls(platform, int_hfp_vol_mixer_controls,
+ 			ARRAY_SIZE(int_hfp_vol_mixer_controls));
+ 
+-- 
+2.11.0
+

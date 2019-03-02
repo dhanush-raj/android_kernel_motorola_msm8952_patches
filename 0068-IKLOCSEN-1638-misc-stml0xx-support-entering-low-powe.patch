@@ -1,0 +1,143 @@
+From ae9ef1295a0c3f593cc971fe6d0bbad73966821e Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Tue, 26 Aug 2014 16:35:45 -0500
+Subject: [PATCH 068/959] IKLOCSEN-1638:misc:stml0xx: support entering low
+ power mode
+
+Support entering low power mode if supported
+by the kernel and sensorhub
+
+Remove extra reset from reset_and_init
+
+Change-Id: Ie4e476e0d2f2eead723a7c8691a0112d89b24378
+Signed-off-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/666496
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c  | 30 +++++++++++++-----------------
+ drivers/misc/stml0xx/stml0xx_reset.c |  4 +---
+ include/linux/stml0xx.h              |  1 +
+ 3 files changed, 15 insertions(+), 20 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index f439bc525f6..037c46c7f74 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -103,12 +103,10 @@ struct stml0xx_data *stml0xx_misc_data;
+ void stml0xx_wake(struct stml0xx_data *ps_stml0xx)
+ {
+ 	if (ps_stml0xx != NULL && ps_stml0xx->pdata != NULL) {
+-		if (!(ps_stml0xx->sh_lowpower_enabled))
+-			return;
+-
+ 		mutex_lock(&ps_stml0xx->sh_wakeup_lock);
+ 
+-		if (ps_stml0xx->sh_wakeup_count == 0)
++		if (ps_stml0xx->sh_wakeup_count == 0 &&
++				ps_stml0xx->sh_lowpower_enabled)
+ 			gpio_set_value(ps_stml0xx->pdata->gpio_sh_wake, 1);
+ 
+ 		ps_stml0xx->sh_wakeup_count++;
+@@ -120,14 +118,12 @@ void stml0xx_wake(struct stml0xx_data *ps_stml0xx)
+ void stml0xx_sleep(struct stml0xx_data *ps_stml0xx)
+ {
+ 	if (ps_stml0xx != NULL && ps_stml0xx->pdata != NULL) {
+-		if (!(ps_stml0xx->sh_lowpower_enabled))
+-			return;
+-
+ 		mutex_lock(&ps_stml0xx->sh_wakeup_lock);
+ 
+ 		if (ps_stml0xx->sh_wakeup_count > 0) {
+ 			ps_stml0xx->sh_wakeup_count--;
+-			if (ps_stml0xx->sh_wakeup_count == 0) {
++			if (ps_stml0xx->sh_wakeup_count == 0 &&
++					ps_stml0xx->sh_lowpower_enabled) {
+ 				gpio_set_value(ps_stml0xx->pdata->gpio_sh_wake,
+ 					       0);
+ 			}
+@@ -144,7 +140,7 @@ void stml0xx_sleep(struct stml0xx_data *ps_stml0xx)
+ void stml0xx_detect_lowpower_mode(unsigned char *cmdbuff)
+ {
+ 	int err;
+-	uint8_t buf[2];
++	uint8_t buf[STML0XX_POWER_REG_SIZE] = {0};
+ 
+ 	if (stml0xx_misc_data->pdata->gpio_sh_wake >= 0) {
+ 		mutex_lock(&stml0xx_misc_data->sh_wakeup_lock);
+@@ -154,7 +150,8 @@ void stml0xx_detect_lowpower_mode(unsigned char *cmdbuff)
+ 		gpio_set_value(stml0xx_misc_data->pdata->gpio_sh_wake, 1);
+ 
+ 		/* detect whether lowpower mode is supported */
+-		err = stml0xx_spi_send_read_reg(LOWPOWER_REG, buf, 2);
++		err = stml0xx_spi_send_read_reg_reset(LOWPOWER_REG, buf,
++				STML0XX_POWER_REG_SIZE, RESET_NOT_ALLOWED);
+ 
+ 		if (err >= 0) {
+ 			if ((int)buf[1] == 1)
+@@ -169,12 +166,13 @@ void stml0xx_detect_lowpower_mode(unsigned char *cmdbuff)
+ 			if (stml0xx_misc_data->sh_lowpower_enabled) {
+ 				/* send back to the hub the kernel
+ 				 * supports low power mode */
+-				cmdbuff[0] =
+-				    stml0xx_misc_data->sh_lowpower_enabled;
++				memset(buf, 0x01, STML0XX_POWER_REG_SIZE);
+ 				err =
+-				    stml0xx_spi_send_write_reg(LOWPOWER_REG,
+-							       cmdbuff, 1);
+-
++					stml0xx_spi_send_write_reg_reset(
++							LOWPOWER_REG,
++							buf,
++							STML0XX_POWER_REG_SIZE,
++							RESET_NOT_ALLOWED);
+ 				if (err < 0) {
+ 					/* if we failed to let the sensorhub
+ 					 * know we support lowpower mode
+@@ -313,8 +311,6 @@ static struct stml0xx_platform_data *stml0xx_of_init(struct spi_device *spi)
+ 		stml0xx_misc_data->sh_lowpower_enabled = 0;
+ 	}
+ 
+-	stml0xx_misc_data->sh_wakeup_count = 0;
+-
+ 	if (of_get_property(np, "lux_table", &len) == NULL) {
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+ 			"lux_table len access failure");
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index 7ee1bdfe5bc..970ea94dc2e 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -61,13 +61,11 @@ int stml0xx_reset_and_init(void)
+ 	int err, ret_err = 0;
+ 	unsigned char *rst_cmdbuff = stml0xx_misc_data->spi_tx_buf;
+ 	unsigned char buf[SPI_MSG_SIZE];
+-	dev_dbg(&stml0xx_misc_data->spi->dev, "stml0xx_reset_and_init");
++	dev_err(&stml0xx_misc_data->spi->dev, "stml0xx_reset_and_init");
+ 
+ 	if (rst_cmdbuff == NULL)
+ 		return -ENOMEM;
+ 
+-	stml0xx_reset(stml0xx_misc_data->pdata, rst_cmdbuff);
+-
+ 	wake_lock(&stml0xx_misc_data->reset_wakelock);
+ 
+ 	pdata = stml0xx_misc_data->pdata;
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 189e4f3e3b3..1f14357ac32 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -156,6 +156,7 @@
+ #define STML0XX_CONTROL_REG_SIZE 200
+ #define STML0XX_STATUS_REG_SIZE 8
+ #define STML0XX_TOUCH_REG_SIZE  8
++#define STML0XX_POWER_REG_SIZE  3
+ #define STML0XX_MAG_CAL_SIZE 26
+ #define STML0XX_AS_DATA_BUFF_SIZE 20
+ #define STML0XX_MS_DATA_BUFF_SIZE 20
+-- 
+2.11.0
+

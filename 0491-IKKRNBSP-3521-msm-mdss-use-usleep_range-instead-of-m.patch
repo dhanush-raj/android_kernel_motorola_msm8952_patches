@@ -1,0 +1,84 @@
+From 84b612f42aaa6f70c74b8fd19a69180a2e2ac538 Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Mon, 16 Nov 2015 09:31:27 -0800
+Subject: [PATCH 491/959] IKKRNBSP-3521: msm: mdss: use usleep_range instead of
+ msleep in mdss util
+
+Use usleep_range instead of msleep in mdss util to avoid extra delay
+added to panel suspend/resume timing.
+
+Change-Id: I2a5202fcdd425060b044fbf796f8f814a2429f06
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/800304
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Shanshan Dai <daiss1@lenovo.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_io_util.c | 18 ++++++++++++------
+ 1 file changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_io_util.c b/drivers/video/msm/mdss/mdss_io_util.c
+index b269fcd4d7b..3019f56ae2a 100644
+--- a/drivers/video/msm/mdss/mdss_io_util.c
++++ b/drivers/video/msm/mdss/mdss_io_util.c
+@@ -223,7 +223,8 @@ int msm_dss_enable_vreg(struct dss_vreg *in_vreg, int num_vreg, int enable)
+ 			}
+ 			need_sleep = !regulator_is_enabled(in_vreg[i].vreg);
+ 			if (in_vreg[i].pre_on_sleep && need_sleep)
+-				msleep(in_vreg[i].pre_on_sleep);
++				usleep_range(in_vreg[i].pre_on_sleep * 1000,
++					in_vreg[i].pre_on_sleep * 1000);
+ 			rc = regulator_set_optimum_mode(in_vreg[i].vreg,
+ 				in_vreg[i].enable_load);
+ 			if (rc < 0) {
+@@ -234,7 +235,8 @@ int msm_dss_enable_vreg(struct dss_vreg *in_vreg, int num_vreg, int enable)
+ 			}
+ 			rc = regulator_enable(in_vreg[i].vreg);
+ 			if (in_vreg[i].post_on_sleep && need_sleep)
+-				msleep(in_vreg[i].post_on_sleep);
++				usleep_range(in_vreg[i].post_on_sleep * 1000,
++					in_vreg[i].post_on_sleep * 1000);
+ 			if (rc < 0) {
+ 				DEV_ERR("%pS->%s: %s enable failed\n",
+ 					__builtin_return_address(0), __func__,
+@@ -245,12 +247,14 @@ int msm_dss_enable_vreg(struct dss_vreg *in_vreg, int num_vreg, int enable)
+ 	} else {
+ 		for (i = num_vreg-1; i >= 0; i--) {
+ 			if (in_vreg[i].pre_off_sleep)
+-				msleep(in_vreg[i].pre_off_sleep);
++				usleep_range(in_vreg[i].pre_off_sleep * 1000,
++					in_vreg[i].pre_off_sleep * 1000);
+ 			regulator_set_optimum_mode(in_vreg[i].vreg,
+ 				in_vreg[i].disable_load);
+ 			regulator_disable(in_vreg[i].vreg);
+ 			if (in_vreg[i].post_off_sleep)
+-				msleep(in_vreg[i].post_off_sleep);
++				usleep_range(in_vreg[i].post_off_sleep * 1000,
++					in_vreg[i].post_off_sleep * 1000);
+ 		}
+ 	}
+ 	return rc;
+@@ -261,12 +265,14 @@ disable_vreg:
+ vreg_set_opt_mode_fail:
+ 	for (i--; i >= 0; i--) {
+ 		if (in_vreg[i].pre_off_sleep)
+-			msleep(in_vreg[i].pre_off_sleep);
++			usleep_range(in_vreg[i].pre_off_sleep * 1000,
++				in_vreg[i].pre_off_sleep * 1000);
+ 		regulator_set_optimum_mode(in_vreg[i].vreg,
+ 			in_vreg[i].disable_load);
+ 		regulator_disable(in_vreg[i].vreg);
+ 		if (in_vreg[i].post_off_sleep)
+-			msleep(in_vreg[i].post_off_sleep);
++			usleep_range(in_vreg[i].post_off_sleep * 1000,
++				in_vreg[i].post_off_sleep * 1000);
+ 	}
+ 
+ 	return rc;
+-- 
+2.11.0
+

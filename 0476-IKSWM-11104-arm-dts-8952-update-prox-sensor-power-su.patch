@@ -1,0 +1,52 @@
+From aa830f352052afdb89dc3e0afe55d906ead20d9b Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Thu, 12 Nov 2015 12:10:31 -0800
+Subject: [PATCH 476/959] IKSWM-11104 arm/dts: 8952: update prox sensor power
+ supply
+
+Prox sensor power supply changes from L17 to L22 on P1.
+
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Change-Id: I057208fc04cfbb3d1eda93576730cf7afad7be5a
+Reviewed-on: http://gerrit.mot.com/799401
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Dmitry Ornatsky <ornatsky@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-athene-p0.dts    | 4 ++++
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 2 +-
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+index 520e2a94811..91985828d46 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
++++ b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+@@ -96,3 +96,7 @@
+ 		status = "disabled";
+ 	};
+ };
++
++&stml0xx{
++	sensor2-supply = <&pm8950_l17>;
++};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 5fa861be047..ecd72233761 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -470,7 +470,7 @@
+ 			accel_orientation_2 = <1>; /* Not used */
+ 			accel_swap = <0>;          /* Not used */
+ 			sensor1-supply = <&pm8950_l6>;
+-			sensor2-supply = <&pm8950_l17>;
++			sensor2-supply = <&pm8950_l22>;
+ 
+ 			pinctrl-names = "default";
+ 			pinctrl-0 = <&stml0xx_inputs_default
+-- 
+2.11.0
+

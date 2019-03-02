@@ -1,0 +1,79 @@
+From 674df08cd2eacb83042797a27543c460a49089b3 Mon Sep 17 00:00:00 2001
+From: "Russ W. Knize" <Russ.Knize@motorola.com>
+Date: Mon, 3 Nov 2014 16:20:55 -0600
+Subject: [PATCH 348/959] IKSWL-1135: esdfs: add support for Android/media tree
+
+Propagated from IKVPREL1L-1794.
+
+Android 5.0 added a new app-specific tree to hold media files for
+MediaStore: Android/media.  It is treated the same way as Andrioid/data
+except that MediaScanner can traverse it (no .nomedia).
+
+Change-Id: I4a49cba65f51cf36c1af7cc8276b3e5c0725a92b
+Signed-off-by: Russ Knize <Russ.Knize@motorola.com>
+Reviewed-on: http://gerrit.mot.com/685496
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/esdfs/derive.c | 7 +++++++
+ fs/esdfs/esdfs.h  | 3 ++-
+ 2 files changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/fs/esdfs/derive.c b/fs/esdfs/derive.c
+index 62a19568821..6377e019924 100644
+--- a/fs/esdfs/derive.c
++++ b/fs/esdfs/derive.c
+@@ -324,6 +324,10 @@ void esdfs_derive_perms(struct dentry *dentry)
+ 					"obb",
+ 					dentry->d_name.len))
+ 			inode_i->tree = ESDFS_TREE_ANDROID_OBB;
++		else if (!strncasecmp(dentry->d_name.name,
++					"media",
++					dentry->d_name.len))
++			inode_i->tree = ESDFS_TREE_ANDROID_MEDIA;
+ 		else if (test_opt(ESDFS_SB(dentry->d_sb), DERIVE_UNIFIED) &&
+ 			   !strncasecmp(dentry->d_name.name,
+ 					"user",
+@@ -333,6 +337,7 @@ void esdfs_derive_perms(struct dentry *dentry)
+ 
+ 	case ESDFS_TREE_ANDROID_DATA:
+ 	case ESDFS_TREE_ANDROID_OBB:
++	case ESDFS_TREE_ANDROID_MEDIA:
+ 		hash = full_name_hash(dentry->d_name.name, dentry->d_name.len);
+ 		mutex_lock(&package_list_lock);
+ 		hash_for_each_possible(package_list_hash, package,
+@@ -394,6 +399,7 @@ void esdfs_set_derived_perms(struct inode *inode)
+ 	case ESDFS_TREE_ANDROID:
+ 	case ESDFS_TREE_ANDROID_DATA:
+ 	case ESDFS_TREE_ANDROID_OBB:
++	case ESDFS_TREE_ANDROID_MEDIA:
+ 		inode->i_mode |= 0771;
+ 		break;
+ 
+@@ -541,6 +547,7 @@ int esdfs_check_derived_permission(struct inode *inode, int mask)
+ 	     (ESDFS_I(inode)->tree != ESDFS_TREE_ANDROID &&
+ 	      ESDFS_I(inode)->tree != ESDFS_TREE_ANDROID_DATA &&
+ 	      ESDFS_I(inode)->tree != ESDFS_TREE_ANDROID_OBB &&
++	      ESDFS_I(inode)->tree != ESDFS_TREE_ANDROID_MEDIA &&
+ 	      ESDFS_I(inode)->tree != ESDFS_TREE_ANDROID_APP &&
+ 	      (ESDFS_I(inode)->tree != ESDFS_TREE_ROOT ||
+ 	       !(mask & ESDFS_MAY_CREATE)))))
+diff --git a/fs/esdfs/esdfs.h b/fs/esdfs/esdfs.h
+index ee2119c7d1f..c72ff9098dc 100644
+--- a/fs/esdfs/esdfs.h
++++ b/fs/esdfs/esdfs.h
+@@ -73,7 +73,8 @@ enum {
+ 	ESDFS_TREE_ANDROID,		/* .../Android */
+ 	ESDFS_TREE_ANDROID_DATA,	/* .../Android/data */
+ 	ESDFS_TREE_ANDROID_OBB,		/* .../Android/obb */
+-	ESDFS_TREE_ANDROID_APP,		/* .../Android/data|obb/... */
++	ESDFS_TREE_ANDROID_MEDIA,	/* .../Android/media */
++	ESDFS_TREE_ANDROID_APP,		/* .../Android/data|obb|media/... */
+ 	ESDFS_TREE_ANDROID_USER,	/* .../Android/user */
+ };
+ 
+-- 
+2.11.0
+

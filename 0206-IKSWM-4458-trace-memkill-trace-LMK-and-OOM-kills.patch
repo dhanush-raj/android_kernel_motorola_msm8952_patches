@@ -1,0 +1,478 @@
+From 879ea885989946e6529f79f6f6da68cf77ac7ff2 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Tue, 9 Sep 2014 11:13:18 -0700
+Subject: [PATCH 206/959] IKSWM-4458: trace: memkill: trace LMK and OOM kills
+
+How to enable tracer:
+
+  # mount -t debugfs nodev /sys/kernel/debug
+  # echo 1 > /sys/kernel/debug/tracing/tracing_on
+  # echo 1 > /sys/kernel/debug/tracing/events/memkill/enable
+  # cat /sys/kernel/debug/tracing/trace
+
+Event format:
+
+  oom_kill: <pid> <comm> <total_vm> <anon_rss> <file_rss> <oom_score_adj> <order> <points> <cached> <freeswap>
+  oom_kill_shared: <pid> <comm>
+  lmk_kill: <pid> <comm> <selected_oom_adj> <selected_tasksize> <min_adj> <cached> <freeswap>
+
+For LMK, we  considers memory status per zone. And appends gfp mask and
+per-zone free/file page state to LMK kill tracing. A field
+<Node_id>:<Zone_id>:<Nr_free>:<Nr_page> is printed for each zone.
+
+Also, we guarantees lmk trace log to always have fixed number of columns.
+
+(cherry picked from commit 8bc7dc4d892f140163f50824c9ae3479f01033b1)
+(cherry picked from commit 86111e237a69874f8d55608f82087c2bc7b9ed3d)
+(cherry picked from commit 34acdf16bbe3544c91ab13f04665ae579b59c80d)
+
+Change-Id: Ic45e181c62aead9b19d2a40363217f9220896096
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/480746
+Reviewed-on: http://gerrit.pcs.mot.com/513174
+Reviewed-by: Jason Hrycay <jason.hrycay@motorola.com>
+Reviewed-by: Thirumarai Selvi S <a16462@motorola.com>
+Reviewed-by: Christopher Fries <qcf001@motorola.com>
+Reviewed-on: http://gerrit.mot.com/650046
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/669139
+Reviewed-on: http://gerrit.mot.com/727654
+SME-Granted: SME Approvals Granted
+Reviewed-by: Sheng-Zhe Zhao <a18689@motorola.com>
+---
+ drivers/staging/android/lowmemorykiller.c | 124 +++++++++++++++++--------
+ include/trace/events/memkill.h            | 145 ++++++++++++++++++++++++++++++
+ mm/oom_kill.c                             |   8 ++
+ 3 files changed, 240 insertions(+), 37 deletions(-)
+ create mode 100644 include/trace/events/memkill.h
+
+diff --git a/drivers/staging/android/lowmemorykiller.c b/drivers/staging/android/lowmemorykiller.c
+index 06584711362..748a8edff7b 100644
+--- a/drivers/staging/android/lowmemorykiller.c
++++ b/drivers/staging/android/lowmemorykiller.c
+@@ -47,9 +47,12 @@
+ #include <linux/show_mem_notifier.h>
+ #include <linux/vmpressure.h>
+ 
++#include <trace/events/memkill.h>
++
+ #define CREATE_TRACE_POINTS
+ #include <trace/events/almk.h>
+ 
++
+ #ifdef CONFIG_HIGHMEM
+ #define _ZONE ZONE_HIGHMEM
+ #else
+@@ -226,50 +229,69 @@ int can_use_cma_pages(gfp_t gfp_mask)
+ 	return can_use;
+ }
+ 
++struct zone_avail {
++	unsigned long free;
++	unsigned long file;
++};
++
++
+ void tune_lmk_zone_param(struct zonelist *zonelist, int classzone_idx,
+ 					int *other_free, int *other_file,
+-					int use_cma_pages)
++					int use_cma_pages,
++				struct zone_avail zall[][MAX_NR_ZONES])
+ {
+ 	struct zone *zone;
+ 	struct zoneref *zoneref;
+ 	int zone_idx;
+ 
+ 	for_each_zone_zonelist(zone, zoneref, zonelist, MAX_NR_ZONES) {
++		struct zone_avail *za;
++		int node_idx = zone_to_nid(zone);
++
+ 		zone_idx = zonelist_zone_idx(zoneref);
++		za = &zall[node_idx][zone_idx];
++		za->free = zone_page_state(zone, NR_FREE_PAGES);
++		za->file = zone_page_state(zone, NR_FILE_PAGES)
++					- zone_page_state(zone, NR_SHMEM)
++					- zone_page_state(zone, NR_SWAPCACHE);
+ 		if (zone_idx == ZONE_MOVABLE) {
+-			if (!use_cma_pages && other_free)
+-				*other_free -=
+-				    zone_page_state(zone, NR_FREE_CMA_PAGES);
++			if (!use_cma_pages && other_free) {
++				unsigned long free_cma = zone_page_state(zone,
++						NR_FREE_CMA_PAGES);
++				za->free -= free_cma;
++				*other_free -= free_cma;
++			}
+ 			continue;
+ 		}
+ 
+ 		if (zone_idx > classzone_idx) {
+ 			if (other_free != NULL)
+-				*other_free -= zone_page_state(zone,
+-							       NR_FREE_PAGES);
++				*other_free -= za->free;
+ 			if (other_file != NULL)
+-				*other_file -= zone_page_state(zone,
+-							       NR_FILE_PAGES)
+-					- zone_page_state(zone, NR_SHMEM)
+-					- zone_page_state(zone, NR_SWAPCACHE);
++				*other_file -= za->file;
++			za->free = za->file = 0;
+ 		} else if (zone_idx < classzone_idx) {
+ 			if (zone_watermark_ok(zone, 0, 0, classzone_idx, 0) &&
+ 			    other_free) {
++				unsigned long lowmem_reserve =
++					  zone->lowmem_reserve[classzone_idx];
+ 				if (!use_cma_pages) {
+-					*other_free -= min(
+-					  zone->lowmem_reserve[classzone_idx] +
+-					  zone_page_state(
+-					    zone, NR_FREE_CMA_PAGES),
+-					  zone_page_state(
+-					    zone, NR_FREE_PAGES));
++					unsigned long free_cma =
++						zone_page_state(zone,
++							NR_FREE_CMA_PAGES);
++					unsigned long delta =
++						min(lowmem_reserve + free_cma,
++							za->free);
++					*other_free -= delta;
++					za->free -= delta;
+ 				} else {
+-					*other_free -=
+-					  zone->lowmem_reserve[classzone_idx];
++					*other_free -= lowmem_reserve;
++					za->free -= lowmem_reserve;
+ 				}
+ 			} else {
+ 				if (other_free)
+-					*other_free -=
+-					  zone_page_state(zone, NR_FREE_PAGES);
++					*other_free -= za->free;
++				za->free = 0;
+ 			}
+ 		}
+ 	}
+@@ -304,7 +326,8 @@ void adjust_gfp_mask(gfp_t *unused)
+ }
+ #endif
+ 
+-void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc)
++void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc,
++				struct zone_avail zall[][MAX_NR_ZONES])
+ {
+ 	gfp_t gfp_mask;
+ 	struct zone *preferred_zone;
+@@ -312,6 +335,7 @@ void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc)
+ 	enum zone_type high_zoneidx, classzone_idx;
+ 	unsigned long balance_gap;
+ 	int use_cma_pages;
++        struct zone_avail *za;
+ 
+ 	gfp_mask = sc->gfp_mask;
+ 	adjust_gfp_mask(&gfp_mask);
+@@ -321,6 +345,7 @@ void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc)
+ 	first_zones_zonelist(zonelist, high_zoneidx, NULL, &preferred_zone);
+ 	classzone_idx = zone_idx(preferred_zone);
+ 	use_cma_pages = can_use_cma_pages(gfp_mask);
++        za = &zall[zone_to_nid(preferred_zone)][classzone_idx];
+ 
+ 	balance_gap = min(low_wmark_pages(preferred_zone),
+ 			  (preferred_zone->present_pages +
+@@ -332,37 +357,41 @@ void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc)
+ 			  balance_gap, 0, 0))) {
+ 		if (lmk_fast_run)
+ 			tune_lmk_zone_param(zonelist, classzone_idx, other_free,
+-				       other_file, use_cma_pages);
++				       other_file, use_cma_pages, zall);
+ 		else
+ 			tune_lmk_zone_param(zonelist, classzone_idx, other_free,
+-				       NULL, use_cma_pages);
++				       NULL, use_cma_pages, zall);
+ 
+ 		if (zone_watermark_ok(preferred_zone, 0, 0, _ZONE, 0)) {
++			unsigned long lowmem_reserve =
++				preferred_zone->lowmem_reserve[_ZONE];
+ 			if (!use_cma_pages) {
+-				*other_free -= min(
+-				  preferred_zone->lowmem_reserve[_ZONE]
+-				  + zone_page_state(
+-				    preferred_zone, NR_FREE_CMA_PAGES),
+-				  zone_page_state(
+-				    preferred_zone, NR_FREE_PAGES));
++				unsigned long free_cma = zone_page_state(
++					preferred_zone, NR_FREE_CMA_PAGES);
++				unsigned long delta = min(lowmem_reserve +
++					free_cma, za->free);
++				*other_free -= delta;
++				za->free -= delta;
+ 			} else {
+-				*other_free -=
+-				  preferred_zone->lowmem_reserve[_ZONE];
++				*other_free -= lowmem_reserve;
++				za->free -= lowmem_reserve;
+ 			}
+ 		} else {
+-			*other_free -= zone_page_state(preferred_zone,
+-						      NR_FREE_PAGES);
++			*other_free -= za->free;
++                        za->free = 0;
+ 		}
+ 
+ 		lowmem_print(4, "lowmem_shrink of kswapd tunning for highmem "
+ 			     "ofree %d, %d\n", *other_free, *other_file);
+ 	} else {
+ 		tune_lmk_zone_param(zonelist, classzone_idx, other_free,
+-			       other_file, use_cma_pages);
++			       other_file, use_cma_pages, zall);
+ 
+ 		if (!use_cma_pages) {
+-			*other_free -=
+-			  zone_page_state(preferred_zone, NR_FREE_CMA_PAGES);
++			unsigned long free_cma = zone_page_state(preferred_zone,
++						NR_FREE_CMA_PAGES);
++			*other_free -= free_cma;
++			za->free -= free_cma;
+ 		}
+ 
+ 		lowmem_print(4, "lowmem_shrink tunning for others ofree %d, "
+@@ -386,6 +415,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 	int other_free;
+ 	int other_file;
+ 	unsigned long nr_to_scan = sc->nr_to_scan;
++        struct zone_avail zall[MAX_NUMNODES][MAX_NR_ZONES];
+ 
+ 	if (nr_to_scan > 0) {
+ 		if (mutex_lock_interruptible(&scan_mutex) < 0)
+@@ -402,7 +432,8 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 	else
+ 		other_file = 0;
+ 
+-	tune_lmk_param(&other_free, &other_file, sc);
++	memset(zall, 0, sizeof(zall));
++	tune_lmk_param(&other_free, &other_file, sc, zall);
+ 
+ 	if (lowmem_adj_size < array_size)
+ 		array_size = lowmem_adj_size;
+@@ -490,6 +521,9 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 			     p->comm, p->pid, oom_score_adj, tasksize);
+ 	}
+ 	if (selected) {
++		int i, j;
++		char zinfo[ZINFO_LENGTH];
++		char *p = zinfo;
+ 		long cache_size = other_file * (long)(PAGE_SIZE / 1024);
+ 		long cache_limit = minfree * (long)(PAGE_SIZE / 1024);
+ 		long free = other_free * (long)(PAGE_SIZE / 1024);
+@@ -537,6 +571,22 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 		}
+ 
+ 		lowmem_deathpending_timeout = jiffies + HZ;
++
++		/* For easy parsing, show all zones info even its free & file
++		 * are zero. It will show as the following examples:
++		 *   0:0:756:1127 0:1:0:0 0:2:0:0
++		 *   0:0:767:322 0:1:152:2364 0:2:0:0
++		 */
++		for (i = 0; i < MAX_NUMNODES; i++)
++			for (j = 0; j < MAX_NR_ZONES; j++)
++				p += snprintf(p, ZINFO_DIGITS,
++					"%d:%d:%lu:%lu ", i, j,
++					zall[i][j].free,
++					zall[i][j].file);
++
++		trace_lmk_kill(selected->pid, selected->comm,
++				selected_oom_score_adj, selected_tasksize,
++				min_score_adj, sc->gfp_mask, zinfo);
+ 		set_tsk_thread_flag(selected, TIF_MEMDIE);
+ 		send_sig(SIGKILL, selected, 0);
+ 		rem -= selected_tasksize;
+diff --git a/include/trace/events/memkill.h b/include/trace/events/memkill.h
+new file mode 100644
+index 00000000000..651e5a7bfab
+--- /dev/null
++++ b/include/trace/events/memkill.h
+@@ -0,0 +1,145 @@
++#undef TRACE_SYSTEM
++#define TRACE_SYSTEM memkill
++
++#if !defined(_TRACE_MEMKILL_H) || defined(TRACE_HEADER_MULTI_READ)
++#define _TRACE_MEMKILL_H
++
++#include <linux/tracepoint.h>
++#include <linux/kernel.h>
++#include <linux/swap.h>
++#include <linux/sched.h>
++#include <linux/types.h>
++
++TRACE_EVENT(oom_kill,
++		TP_PROTO(pid_t pid_nr, const char *comm,
++			unsigned long total_vm, unsigned long anon_rss,
++			unsigned long file_rss, int oom_score_adj, int order,
++			unsigned int victim_points),
++
++		TP_ARGS(pid_nr, comm, total_vm, anon_rss, file_rss,
++			oom_score_adj, order, victim_points),
++
++		TP_STRUCT__entry(
++			__field(pid_t,		pid_nr)
++			__array(char,		comm,	TASK_COMM_LEN)
++			__field(unsigned long,	total_vm)
++			__field(unsigned long,	anon_rss)
++			__field(unsigned long,	file_rss)
++			__field(int,		oom_score_adj)
++			__field(int,		order)
++			__field(unsigned int,	victim_points)
++			__field(long,		cached)
++			__field(unsigned long,	freeswap)
++		),
++
++		TP_fast_assign(
++			struct sysinfo i;
++
++			si_meminfo(&i);
++			si_swapinfo(&i);
++
++			__entry->cached = (global_page_state(NR_FILE_PAGES) -
++					total_swapcache_pages() - i.bufferram)
++						<< (PAGE_SHIFT - 10);
++			if (__entry->cached < 0)
++				__entry->cached = 0;
++
++			__entry->pid_nr = pid_nr;
++			strlcpy(__entry->comm, comm, sizeof(__entry->comm));
++			__entry->total_vm = total_vm;
++			__entry->anon_rss = anon_rss;
++			__entry->file_rss = file_rss;
++			__entry->oom_score_adj = oom_score_adj;
++			__entry->order = order;
++			__entry->victim_points = victim_points;
++			__entry->freeswap = i.freeswap << (PAGE_SHIFT - 10);
++		),
++
++		TP_printk("%d %s %lu %lu %lu %d %d %u %ld %lu",
++				__entry->pid_nr, __entry->comm,
++				__entry->total_vm, __entry->anon_rss,
++				__entry->file_rss, __entry->oom_score_adj,
++				__entry->order, __entry->victim_points,
++				__entry->cached, __entry->freeswap)
++);
++
++TRACE_EVENT(oom_kill_shared,
++		TP_PROTO(pid_t pid_nr, const char *comm),
++
++		TP_ARGS(pid_nr, comm),
++
++		TP_STRUCT__entry(
++			__field(pid_t,		pid_nr)
++			__array(char,		comm,	TASK_COMM_LEN)
++		),
++
++		TP_fast_assign(
++			__entry->pid_nr = pid_nr;
++			strlcpy(__entry->comm, comm, sizeof(__entry->comm));
++		),
++
++		TP_printk("%d %s", __entry->pid_nr, __entry->comm)
++);
++
++#if BITS_PER_LONG == 32
++#define INT_DIGITS	(10)
++#else
++#define INT_DIGITS	(20)
++#endif
++/* "NODE_ID:ZONE_ID:NR_FREE:NR_FILE " */
++#define ZINFO_DIGITS	((INT_DIGITS + 1) * 4)	/* end with ignorable ' ' */
++#define ZINFO_LENGTH	(ZINFO_DIGITS * MAX_NR_ZONES * MAX_NUMNODES)
++
++TRACE_EVENT(lmk_kill,
++		TP_PROTO(pid_t pid_nr, const char *comm,
++			int selected_oom_adj, int selected_tasksize,
++			int min_adj, gfp_t gfp_mask, const char *zinfo),
++
++		TP_ARGS(pid_nr, comm, selected_oom_adj, selected_tasksize,
++			min_adj, gfp_mask, zinfo),
++
++		TP_STRUCT__entry(
++			__field(pid_t,		pid_nr)
++			__array(char,		comm,	TASK_COMM_LEN)
++			__field(int,		selected_oom_adj)
++			__field(int,		selected_tasksize)
++			__field(int,		min_adj)
++			__field(long,		cached)
++			__field(unsigned long,	freeswap)
++			__field(gfp_t,		gfp_mask)
++			__array(char,		zinfo,	ZINFO_LENGTH)
++		),
++
++		TP_fast_assign(
++			struct sysinfo i;
++
++			si_meminfo(&i);
++			si_swapinfo(&i);
++
++			__entry->cached = (global_page_state(NR_FILE_PAGES) -
++					total_swapcache_pages() - i.bufferram)
++						<< (PAGE_SHIFT - 10);
++			if (__entry->cached < 0)
++				__entry->cached = 0;
++
++			__entry->pid_nr = pid_nr;
++			strlcpy(__entry->comm, comm, sizeof(__entry->comm));
++			__entry->selected_oom_adj = selected_oom_adj;
++			__entry->selected_tasksize = selected_tasksize;
++			__entry->min_adj = min_adj;
++			__entry->freeswap = i.freeswap << (PAGE_SHIFT - 10);
++			__entry->gfp_mask = gfp_mask;
++			strlcpy(__entry->zinfo, zinfo, ZINFO_LENGTH);
++		),
++
++		TP_printk("%d %s %d %d %d %ld %lu 0x%x %s", __entry->pid_nr,
++				__entry->comm, __entry->selected_oom_adj,
++				__entry->selected_tasksize, __entry->min_adj,
++				__entry->cached, __entry->freeswap,
++				__entry->gfp_mask, __entry->zinfo)
++);
++
++#endif /* _TRACE_MEMKILL_H */
++
++/* This part must be outside protection */
++#include <trace/define_trace.h>
+diff --git a/mm/oom_kill.c b/mm/oom_kill.c
+index 5270b9d2045..9f26e485e50 100644
+--- a/mm/oom_kill.c
++++ b/mm/oom_kill.c
+@@ -38,6 +38,7 @@
+ 
+ #define CREATE_TRACE_POINTS
+ #include <trace/events/oom.h>
++#include <trace/events/memkill.h>
+ 
+ int sysctl_panic_on_oom;
+ int sysctl_oom_kill_allocating_task;
+@@ -499,6 +500,11 @@ void oom_kill_process(struct task_struct *p, gfp_t gfp_mask, int order,
+ 		task_pid_nr(victim), victim->comm, K(victim->mm->total_vm),
+ 		K(get_mm_counter(victim->mm, MM_ANONPAGES)),
+ 		K(get_mm_counter(victim->mm, MM_FILEPAGES)));
++	trace_oom_kill(
++		task_pid_nr(victim), victim->comm, K(victim->mm->total_vm),
++		K(get_mm_counter(victim->mm, MM_ANONPAGES)),
++		K(get_mm_counter(victim->mm, MM_FILEPAGES)),
++		victim->signal->oom_score_adj, order, victim_points);
+ 	task_unlock(victim);
+ 
+ 	/*
+@@ -520,6 +526,8 @@ void oom_kill_process(struct task_struct *p, gfp_t gfp_mask, int order,
+ 			task_lock(p);	/* Protect ->comm from prctl() */
+ 			pr_err("Kill process %d (%s) sharing same memory\n",
+ 				task_pid_nr(p), p->comm);
++			trace_oom_kill_shared(
++				task_pid_nr(p), p->comm);
+ 			task_unlock(p);
+ 			do_send_sig_info(SIGKILL, SEND_SIG_FORCED, p, true);
+ 		}
+-- 
+2.11.0
+

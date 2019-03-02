@@ -1,0 +1,63 @@
+From e6f4a5b109cdbb15b68f5b077e6c2fcae27120dc Mon Sep 17 00:00:00 2001
+From: Jie Song <Jie.Song@motorola.com>
+Date: Wed, 9 Dec 2015 14:28:41 -0600
+Subject: [PATCH 620/959] IKSWM-12849 diag: compute real time mode
+
+compute the real time mode at each sending diag mode.
+This change can fix the timing issue if real_time mode is set
+before SMD is ready
+
+Change-Id: I56ffb4d75d9be5ce6e507d7aa01dde6ec02db860
+Signed-off-by: Jevin Tang <a21266@motorola.com>
+Reviewed-on: http://gerrit.mot.com/806089
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Yun Tang <jevin@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/char/diag/diag_masks.c   | 2 +-
+ drivers/char/diag/diagfwd_cntl.c | 2 +-
+ drivers/char/diag/diagfwd_cntl.h | 1 +
+ 3 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/char/diag/diag_masks.c b/drivers/char/diag/diag_masks.c
+index 4daac571d80..0c4c325031c 100644
+--- a/drivers/char/diag/diag_masks.c
++++ b/drivers/char/diag/diag_masks.c
+@@ -1581,7 +1581,7 @@ void diag_send_updates_peripheral(uint8_t peripheral)
+ 	diag_send_log_mask_update(peripheral, ALL_EQUIP_ID);
+ 	diag_send_event_mask_update(peripheral);
+ 	diag_send_real_time_update(peripheral,
+-				driver->real_time_mode[DIAG_LOCAL_PROC]);
++				diag_compute_real_time(DIAG_LOCAL_PROC));
+ 	diag_send_peripheral_buffering_mode(
+ 				&driver->buffering_mode[peripheral]);
+ }
+diff --git a/drivers/char/diag/diagfwd_cntl.c b/drivers/char/diag/diagfwd_cntl.c
+index b93ddd17999..efd74d9132d 100644
+--- a/drivers/char/diag/diagfwd_cntl.c
++++ b/drivers/char/diag/diagfwd_cntl.c
+@@ -710,7 +710,7 @@ void diag_cntl_process_read_data(struct diagfwd_info *p_info, void *buf,
+ 	return;
+ }
+ 
+-static int diag_compute_real_time(int idx)
++int diag_compute_real_time(int idx)
+ {
+ 	int real_time = MODE_REALTIME;
+ 	if (driver->proc_active_mask == 0) {
+diff --git a/drivers/char/diag/diagfwd_cntl.h b/drivers/char/diag/diagfwd_cntl.h
+index 68ea1a57325..2b1f254742a 100644
+--- a/drivers/char/diag/diagfwd_cntl.h
++++ b/drivers/char/diag/diagfwd_cntl.h
+@@ -278,4 +278,5 @@ int diag_send_buffering_tx_mode_pkt(uint8_t peripheral,
+ 				    struct diag_buffering_mode_t *params);
+ int diag_send_buffering_wm_values(uint8_t peripheral,
+ 				  struct diag_buffering_mode_t *params);
++int diag_compute_real_time(int idx);
+ #endif
+-- 
+2.11.0
+

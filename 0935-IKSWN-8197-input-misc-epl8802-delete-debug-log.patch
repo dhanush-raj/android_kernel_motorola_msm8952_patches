@@ -1,0 +1,44 @@
+From 7d5974ebc31688875cf93755736a68b8c9f9bd6c Mon Sep 17 00:00:00 2001
+From: caoyi1 <caoyi1@lenovo.com>
+Date: Tue, 18 Oct 2016 11:26:02 +0800
+Subject: [PATCH 935/959] IKSWN-8197:input misc epl8802,delete debug log
+
+-delete debug driver log
+
+Change-Id: Ia8ec573c3a2e503d3f042b799b1fe376c1987e85
+Signed-off-by: caoyi1 <caoyi1@lenovo.com>
+Reviewed-on: https://gerrit.mot.com/910349
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/epl8802.c | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/drivers/input/misc/epl8802.c b/drivers/input/misc/epl8802.c
+index 1d56a02e6cf..0f8bc8f28e6 100644
+--- a/drivers/input/misc/epl8802.c
++++ b/drivers/input/misc/epl8802.c
+@@ -3271,8 +3271,6 @@ static int epl_sensor_suspend(struct i2c_client *client, pm_message_t mesg)
+ #if !defined(CONFIG_HAS_EARLYSUSPEND)
+     epld->als_suspend=1;
+ 
+-	LOG_DBG("[%s]: enable_pflag=%d, enable_lflag=%d \r\n", __func__, epld->enable_pflag, epld->enable_lflag);
+-
+     if(epld->enable_pflag == 0)
+     {
+         if(epld->enable_lflag == 1 && epl_sensor.als.polling_mode == 0)
+@@ -3345,8 +3343,6 @@ static int epl_sensor_resume(struct i2c_client *client)
+     epld->als_suspend=0;
+     epld->ps_suspend=0;
+ 
+-	LOG_DBG("[%s]: enable_pflag=%d, enable_lflag=%d \r\n", __func__, epld->enable_pflag, epld->enable_lflag);
+-
+     if(epld->enable_pflag == 0)
+     {
+         LOG_INFO("[%s]: ps is disabled \r\n", __func__);
+-- 
+2.11.0
+

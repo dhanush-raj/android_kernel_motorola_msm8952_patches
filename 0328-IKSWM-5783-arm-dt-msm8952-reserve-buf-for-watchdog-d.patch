@@ -1,0 +1,146 @@
+From 3515a1efc61ff0597c93305621e90d743b184538 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Wed, 18 Mar 2015 16:20:16 -0800
+Subject: [PATCH 328/959] IKSWM-5783 arm/dt: msm8952: reserve buf for watchdog
+ dump
+
+This change adds buffer reservation for qcom,tz-log and
+qcom,msm-watchdog. After a watchdog reset, kernel will be
+able to check the buffers for cpu context dump and tz log.
+
+Change-Id: Icc96b90260d9702732dbb026135af9d0a3c4991f
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+Reviewed-on: http://gerrit.mot.com/722584
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/787909
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+---
+ arch/arm/boot/dts/include/moto-mem-reserve.h    | 26 +++++++++++++++++++++++++
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 25 ++++++++++++++++++++++++
+ arch/arm64/boot/dts/include/moto-mem-reserve.h  | 25 ++++++++++++++++++++++++
+ 3 files changed, 76 insertions(+)
+ create mode 100644 arch/arm/boot/dts/include/moto-mem-reserve.h
+ create mode 100644 arch/arm64/boot/dts/include/moto-mem-reserve.h
+
+diff --git a/arch/arm/boot/dts/include/moto-mem-reserve.h b/arch/arm/boot/dts/include/moto-mem-reserve.h
+new file mode 100644
+index 00000000000..fec49a0b7b5
+--- /dev/null
++++ b/arch/arm/boot/dts/include/moto-mem-reserve.h
+@@ -0,0 +1,26 @@
++/*
++ * Copyright (C) 2015 Motorola Mobility LLC
++ *
++ * This software is licensed under the terms of the GNU General Public
++ * License version 2, as published by the Free Software Foundation, and
++ * may be copied, distributed, and modified under those terms.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++#ifndef __MOTO_MEM_RESERVE_H
++#define __MOTO_MEM_RESERVE_H
++
++#define WDOG_CPUCTX_SIZE_PERCPU	0x3400	/* sizeof(struct msm_wdog_cpuctx) */
++#define WDOG_CPUCTX_SIZE_8CPUS	(WDOG_CPUCTX_SIZE_PERCPU * 8)
++
++
++#define WDOG_CPUCTX_SIZE_8952	WDOG_CPUCTX_SIZE_8CPUS
++#define WDOG_CPUCTX_BASE_8952	(0xaec00000-0x400000)
++
++#define TZLOG_BCK_SIZE		0x2000
++#define TZLOG_BCK_BASE_8952	(WDOG_CPUCTX_BASE_8952 - 0x400000)
++
++#endif /* __MOTO_MEM_RESERVE_H */
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 40a48af4330..7cc92fd9386 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -14,6 +14,7 @@
+ #include "msm8952.dtsi"
+ #include "msm8952-pinctrl.dtsi"
+ #include "msm8952-camera-sensor-moto.dtsi"
++#include <moto-mem-reserve.h>
+ 
+ / {
+ 	aliases {
+@@ -31,6 +32,25 @@
+ 			reg = <0x0 0xae000000 0x0 0x80000>;
+ 			label = "ramoops_mem";
+ 		};
++
++		tzlog_bck_mem: tzlog_bck_region {
++			linux,reserve-contiguous-region;
++			linux,reserve-region;
++			/*linux,remove-completely;*/
++			reg = <0x0 TZLOG_BCK_BASE_8952
++				0x0 TZLOG_BCK_SIZE>;
++			label = "tzlog_bck_mem";
++		};
++
++		wdog_cpuctx_mem: wdog_cpuctx_region {
++			linux,reserve-contiguous-region;
++			linux,reserve-region;
++			/*linux,remove-completely;*/
++			reg = <0x0 WDOG_CPUCTX_BASE_8952
++				0x0 WDOG_CPUCTX_SIZE_8952>;
++			label = "wdog_cpuctx_mem";
++		};
++
+ 	};
+ };
+ 
+@@ -318,8 +338,13 @@
+ 		linux,contiguous-region = <&ramoops_mem>;
+ 	};
+ 
++	qcom_tzlog: tz-log@08600720 {
++		linux,contiguous-region = <&tzlog_bck_mem>;
++	};
++
+         qcom,wdt@b017000 {
+                 qcom,bark-time = <22000>;
++		linux,contiguous-region = <&wdog_cpuctx_mem>;
+         };
+ 
+ 	spi_4: spi@7af5000 { /* BLSP2 QUP1 */
+diff --git a/arch/arm64/boot/dts/include/moto-mem-reserve.h b/arch/arm64/boot/dts/include/moto-mem-reserve.h
+new file mode 100644
+index 00000000000..6d820846aaa
+--- /dev/null
++++ b/arch/arm64/boot/dts/include/moto-mem-reserve.h
+@@ -0,0 +1,25 @@
++/*
++ * Copyright (C) 2015 Motorola Mobility LLC
++ *
++ * This software is licensed under the terms of the GNU General Public
++ * License version 2, as published by the Free Software Foundation, and
++ * may be copied, distributed, and modified under those terms.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++#ifndef __MOTO_MEM_RESERVE_H
++#define __MOTO_MEM_RESERVE_H
++
++#define WDOG_CPUCTX_SIZE_PERCPU	0x5800 /* sizeof(struct msm_wdog_cpuctx) */
++#define WDOG_CPUCTX_SIZE_8CPUS	(WDOG_CPUCTX_SIZE_PERCPU * 8)
++
++#define WDOG_CPUCTX_SIZE_8952	WDOG_CPUCTX_SIZE_8CPUS
++#define WDOG_CPUCTX_BASE_8952	(0xaec00000-0x400000)
++
++#define TZLOG_BCK_SIZE		0x2000
++#define TZLOG_BCK_BASE_8952	(WDOG_CPUCTX_BASE_8952 - 0x400000)
++
++#endif /* __MOTO_MEM_RESERVE_H */
+-- 
+2.11.0
+

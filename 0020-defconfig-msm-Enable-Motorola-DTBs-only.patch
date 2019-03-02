@@ -1,0 +1,25 @@
+From 0d6b40ccc02afe3f13db85896057499179ee3d1f Mon Sep 17 00:00:00 2001
+From: Jason Hrycay <jason.hrycay@motorola.com>
+Date: Fri, 26 Jun 2015 11:56:27 -0500
+Subject: [PATCH 020/959] defconfig: msm: Enable Motorola DTBs only
+
+Enable the feature configuration to only build the Motorola specific
+DTBs to cut down on the size of the generated images.
+
+Change-Id: I5c5c9098887e0bb5182f24f25d36275133ae6d63
+Signed-off-by: Jason Hrycay <jason.hrycay@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 1 +
+ 1 file changed, 1 insertion(+)
+ create mode 100644 arch/arm/configs/ext_config/moto-msm8916.config
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+new file mode 100644
+index 00000000000..70ad5288938
+--- /dev/null
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -0,0 +1 @@
++CONFIG_MMI_DEVICE_DTBS=y
+-- 
+2.11.0
+

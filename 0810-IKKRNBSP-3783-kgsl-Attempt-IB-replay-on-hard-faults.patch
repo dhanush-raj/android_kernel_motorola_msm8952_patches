@@ -1,0 +1,40 @@
+From f6b46d31dbb2425e967e48ff3e10c5432ced4826 Mon Sep 17 00:00:00 2001
+From: Patrick Auchter <auchter@motorola.com>
+Date: Fri, 18 Mar 2016 16:07:23 -0500
+Subject: [PATCH 810/959] IKKRNBSP-3783: kgsl: Attempt IB replay on hard faults
+
+This debugging change is to determine whether the IB still
+reproduces a hard fault when it is replayed.  If the IB replay
+does cause another hard fault, the IB will then be skipped as normal.
+
+Change-Id: If30087afe072e3b9c57bc6752958952866037144
+Signed-off-by: Patrick Auchter <auchter@motorola.com>
+Reviewed-on: http://gerrit.mot.com/834997
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Fred Fettinger <fettinge@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/gpu/msm/adreno_dispatch.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/gpu/msm/adreno_dispatch.c b/drivers/gpu/msm/adreno_dispatch.c
+index 6b6d4ce2d15..bd4be85c6c0 100644
+--- a/drivers/gpu/msm/adreno_dispatch.c
++++ b/drivers/gpu/msm/adreno_dispatch.c
+@@ -1942,8 +1942,10 @@ void process_cmdbatch_fault(struct kgsl_device *device,
+ 	 * Clear the replay bit and move on to the next policy level
+ 	 */
+ 
++	/* MMI_STOPSHIP: DEBUG: Attempt replay on hard faults
+ 	if (fault & ADRENO_HARD_FAULT)
+ 		clear_bit(KGSL_FT_REPLAY, &(cmdbatch->fault_policy));
++	*/
+ 
+ 	/*
+ 	 * A timeout fault means the IB timed out - clear the policy and
+-- 
+2.11.0
+

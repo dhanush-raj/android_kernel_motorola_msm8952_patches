@@ -1,0 +1,76 @@
+From 375b9b0c9976cbe983b9407c1cfe6606e6d56bd2 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Tue, 8 Mar 2016 11:42:41 -0800
+Subject: [PATCH 747/959] IKSWM-24164:cmdq_hci.c: Add memory barrier for data
+ tranfer task
+
+ Add memory barrier(dsb) for data transfer task's desc and trans
+ desc.  We also need to disable local irq to make sure that dsb
+ operation will not be prempted and reschdule to another CPU.
+
+Change-Id: I925dc5f1538e31db6539fa46133c4b7b4836ee06
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830793
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sheng-Zhe Zhao <a18689@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/mmc/host/cmdq_hci.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/drivers/mmc/host/cmdq_hci.c b/drivers/mmc/host/cmdq_hci.c
+index f722a7f92c6..4aaf03de8dd 100644
+--- a/drivers/mmc/host/cmdq_hci.c
++++ b/drivers/mmc/host/cmdq_hci.c
+@@ -449,6 +449,7 @@ static void cmdq_prep_task_desc(struct mmc_request *mrq,
+ 	struct mmc_host *mmc = mrq->host;
+ 	struct cmdq_host *cq_host = mmc_cmdq_private(mmc);
+ 	u32 prio = !!(req_flags & PRIO);
++	unsigned long flags;
+ 
+ 	if (cq_host->quirks & CMDQ_QUIRK_PRIO_READ)
+ 		prio |= (!!(req_flags & DIR) ? 1 : 0);
+@@ -459,6 +460,7 @@ static void cmdq_prep_task_desc(struct mmc_request *mrq,
+ 		 prio, cmdq_req->data.blocks,
+ 		 (u64)mrq->cmdq_req->blk_addr);
+ 
++	local_irq_save(flags);
+ 	*data = VALID(1) |
+ 		END(1) |
+ 		INT(intr) |
+@@ -472,6 +474,9 @@ static void cmdq_prep_task_desc(struct mmc_request *mrq,
+ 		REL_WRITE(!!(req_flags & REL_WR)) |
+ 		BLK_COUNT(mrq->cmdq_req->data.blocks) |
+ 		BLK_ADDR((u64)mrq->cmdq_req->blk_addr);
++
++	mb();
++	local_irq_restore(flags);
+ }
+ 
+ static int cmdq_dma_map(struct mmc_host *host, struct mmc_request *mrq)
+@@ -498,6 +503,9 @@ static void cmdq_set_tran_desc(u8 *desc, dma_addr_t addr, int len,
+ 				bool end, bool is_dma64)
+ {
+ 	__le32 *attr = (__le32 __force *)desc;
++	unsigned long flags;
++
++	local_irq_save(flags);
+ 
+ 	*attr = (VALID(1) |
+ 		 END(end ? 1 : 0) |
+@@ -514,6 +522,9 @@ static void cmdq_set_tran_desc(u8 *desc, dma_addr_t addr, int len,
+ 
+ 		dataddr[0] = cpu_to_le32(addr);
+ 	}
++
++	mb();
++	local_irq_restore(flags);
+ }
+ 
+ static int cmdq_prep_tran_desc(struct mmc_request *mrq,
+-- 
+2.11.0
+

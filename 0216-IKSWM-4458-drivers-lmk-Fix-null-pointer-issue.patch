@@ -1,0 +1,32 @@
+From c91345cc6da933f6321a56b8bf009966a556b988 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Fri, 27 Mar 2015 14:15:25 -0700
+Subject: [PATCH 216/959] IKSWM-4458 drivers:lmk: Fix null pointer issue
+
+On some race, the tsk that lmk is using may be deleted from the RB tree
+by other thread, and rb_next would return a NULL if we use this tsk to
+get next. For this case, we need to skip this round of shrink and wait
+for the next turn. Otherwise, tsk would trigger NULL pointer panic.
+
+Change-Id: If6688d94a0b2992556cec0cf1847b58c69a38d8d
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ drivers/staging/android/lowmemorykiller.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/staging/android/lowmemorykiller.c b/drivers/staging/android/lowmemorykiller.c
+index 5eb9c0ed535..7a1e78ab09a 100644
+--- a/drivers/staging/android/lowmemorykiller.c
++++ b/drivers/staging/android/lowmemorykiller.c
+@@ -490,7 +490,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 	rcu_read_lock();
+ #ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
+ 	for (tsk = pick_first_task();
+-		tsk != pick_last_task();
++		tsk != pick_last_task() && tsk != NULL;
+ 		tsk = pick_next_from_adj_tree(tsk)) {
+ #else
+ 	for_each_process(tsk) {
+-- 
+2.11.0
+

@@ -1,0 +1,37 @@
+From ad55f56244e41f8474e1cccc2e25e5994c34a332 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Fri, 29 Jan 2016 10:13:35 -0800
+Subject: [PATCH 660/959] IKSWM-18719: emmc: Adjust emmc cmdq reqeust_queue
+ timeout to 30s
+
+ 120s is too long for emmc request, adjust to a more reasonable 30s.
+
+Change-Id: Id59df3beaf78e7595e401be0671e951f33e086a6
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/817341
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sheng-Zhe Zhao <a18689@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/mmc/card/queue.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/mmc/card/queue.c b/drivers/mmc/card/queue.c
+index dbfd75a7f88..9ff67261f3b 100644
+--- a/drivers/mmc/card/queue.c
++++ b/drivers/mmc/card/queue.c
+@@ -712,7 +712,7 @@ int mmc_cmdq_init(struct mmc_queue *mq, struct mmc_card *card)
+ 	init_completion(&mq->cmdq_pending_req_done);
+ 
+ 	blk_queue_rq_timed_out(mq->queue, mmc_cmdq_rq_timed_out);
+-	blk_queue_rq_timeout(mq->queue, 120 * HZ);
++	blk_queue_rq_timeout(mq->queue, 30 * HZ);
+ 	card->cmdq_init = true;
+ 
+ 	goto out;
+-- 
+2.11.0
+

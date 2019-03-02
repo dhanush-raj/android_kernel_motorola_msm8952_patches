@@ -1,0 +1,118 @@
+From 32b0e130fd19a05bddca4a4c84a64b26c8736409 Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Thu, 28 Jan 2016 18:13:12 -0800
+Subject: [PATCH 666/959] IKSWM-18884 qpnp-power-on: add user triggered wdt
+ reset feature
+
+Trigger a watchdog reset on non-secure hw by pressing the
+Pwr_key + Vol_down together and hold for 6s. A USB cable
+must be connected to trigger the watchdog reset.
+
+Change-Id: I2f02f0a8501ed5c3b3cce8c2037914a97a9abc8d
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/817420
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/platform/msm/Kconfig         |  8 ++++++
+ drivers/platform/msm/qpnp-power-on.c | 48 ++++++++++++++++++++++++++++++++++++
+ 2 files changed, 56 insertions(+)
+
+diff --git a/drivers/platform/msm/Kconfig b/drivers/platform/msm/Kconfig
+index 0a9f54706a7..5870209f035 100644
+--- a/drivers/platform/msm/Kconfig
++++ b/drivers/platform/msm/Kconfig
+@@ -75,6 +75,14 @@ config QPNP_POWER_ON
+ 	  PNP PMIC. It currently supports reporting the change in status of
+ 	  the KPDPWR_N line (connected to the power-key).
+ 
++config QPNP_USER_RESET
++	tristate "QPNP PMIC User Rest"
++	depends on QPNP_POWER_ON
++	help
++	  Support to trigger a watchdog reset on nonsecure hardware by power
++	  and volume down key combination. A usb cable must be connected to
++	  trigger the watchdog reset.
++
+ config QPNP_CLKDIV
+ 	tristate "QPNP PMIC clkdiv driver"
+ 	depends on OF_SPMI && SPMI
+diff --git a/drivers/platform/msm/qpnp-power-on.c b/drivers/platform/msm/qpnp-power-on.c
+index aceb58e4bb6..261df62c76e 100644
+--- a/drivers/platform/msm/qpnp-power-on.c
++++ b/drivers/platform/msm/qpnp-power-on.c
+@@ -30,6 +30,11 @@
+ #include <linux/regulator/of_regulator.h>
+ #include <linux/qpnp/power-on.h>
+ #include <linux/time.h>
++#ifdef CONFIG_QPNP_USER_RESET
++#include <linux/power_supply.h>
++#include <soc/qcom/watchdog.h>
++#include <soc/qcom/bootinfo.h>
++#endif
+ 
+ #define CREATE_MASK(NUM_BITS, POS) \
+ 	((unsigned char) (((1 << (NUM_BITS)) - 1) << (POS)))
+@@ -238,6 +243,41 @@ static const char * const qpnp_poff_reason[] = {
+ static int warm_boot;
+ module_param(warm_boot, int, 0);
+ 
++#ifdef CONFIG_QPNP_USER_RESET
++static void qpnp_user_wdt_handler(unsigned long data);
++static DEFINE_TIMER(wdt_timer, qpnp_user_wdt_handler, 0, 0);
++static void qpnp_user_wdt_handler(unsigned long data)
++{
++	pr_warn("User triggered watchdog reset(Pwr + VolDn)\n");
++	msm_trigger_wdog_bite();
++}
++
++static void qpnp_user_wdt_set(void)
++{
++	struct power_supply *psy;
++	union power_supply_propval data;
++
++	if (bi_secure_hardware())
++		return;
++
++	psy = power_supply_get_by_name("usb");
++	if (!psy || !psy->get_property)
++		return;
++
++	if (psy->get_property(psy, POWER_SUPPLY_PROP_PRESENT, &data))
++		return;
++
++	/* usb charger present*/
++	if (data.intval)
++		mod_timer(&wdt_timer, jiffies + HZ * 6);
++}
++
++static void qpnp_user_wdt_clear(void)
++{
++	del_timer(&wdt_timer);
++}
++#endif
++
+ static int
+ qpnp_pon_masked_write(struct qpnp_pon *pon, u16 addr, u8 mask, u8 val)
+ {
+@@ -718,6 +758,14 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
+ 					cfg->key_code, pon_rt_sts);
+ 	key_status = pon_rt_sts & pon_rt_bit;
+ 
++#ifdef CONFIG_QPNP_USER_RESET
++	if (pon_rt_sts & QPNP_PON_KPDPWR_N_SET &&
++	    pon_rt_sts & QPNP_PON_RESIN_N_SET) {
++		qpnp_user_wdt_set();
++	} else
++		qpnp_user_wdt_clear();
++#endif
++
+ 	/* simulate press event in case release event occured
+ 	 * without a press event
+ 	 */
+-- 
+2.11.0
+

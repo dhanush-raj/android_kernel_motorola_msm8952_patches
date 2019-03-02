@@ -1,0 +1,35 @@
+From 37042382be95c0f60d1044c695fb1603ba373d43 Mon Sep 17 00:00:00 2001
+From: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Date: Tue, 18 Aug 2015 12:39:46 -0500
+Subject: [PATCH 022/959] arm/dt: 8952: support debug uart for athene
+
+Change-Id: I4955260e34a044af5c1b700d63c13864802f64f6
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 513a7c97d6b..a7300ec29b5 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -13,3 +13,16 @@
+ 
+ #include "msm8952.dtsi"
+ #include "msm8952-pinctrl.dtsi"
++
++/ {
++	aliases {
++		serial0 = &blsp1_uart2;
++	};
++};
++
++
++&blsp1_uart2 {
++	status = "ok";
++	pinctrl-names = "default";
++	pinctrl-0 = <&uart_console_sleep>;
++};
+-- 
+2.11.0
+

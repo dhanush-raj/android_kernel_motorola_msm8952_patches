@@ -1,0 +1,36 @@
+From a6459702e6945b6eb964aacd92cc4b43e7bf2663 Mon Sep 17 00:00:00 2001
+From: Konstantin Makariev <kmakariev@motorola.com>
+Date: Thu, 25 Feb 2016 11:40:29 -0600
+Subject: [PATCH 711/959] IKSWM-22446 input: synatics_dsx_i2c: remove world
+ writable perms
+
+Removing world writable permissions on sysfs entry
+
+Change-Id: I2ef8c219dee642f922262fe096f2d906cfa31c25
+Signed-off-by: Konstantin Makariev <kmakariev@motorola.com>
+Reviewed-on: http://gerrit.mot.com/825942
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/touchscreen/synaptics_dsx_fw_update.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_fw_update.c b/drivers/input/touchscreen/synaptics_dsx_fw_update.c
+index 57a32f5ba6c..cc20c9e23e9 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_fw_update.c
++++ b/drivers/input/touchscreen/synaptics_dsx_fw_update.c
+@@ -613,7 +613,7 @@ struct image_header {
+ static struct bin_attribute dev_attr_data = {
+ 	.attr = {
+ 		.name = "data",
+-		.mode = (S_IRUGO | S_IWUGO),
++		.mode = (S_IRUGO | S_IWUSR | S_IWGRP),
+ 	},
+ 	.size = 0,
+ 	.read = fwu_sysfs_show_image,
+-- 
+2.11.0
+

@@ -1,0 +1,54 @@
+From 9bd318fd16b8987000b4323a6392852f665389b5 Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Wed, 13 May 2015 12:31:17 -0500
+Subject: [PATCH 256/959] IKSWL-14673: power: qpnp-smbcharger-mmi: Sync usb
+ present only when src detect changes
+
+In the heartbeat usb_present is synced based on USBIN_UV state. But this
+will cause issues when the input voltage is not stable and cause accy
+disconnection. Since we trigger off accy detection based on src detect,
+sync in the heartbeat only when src detect also changes.
+
+Change-Id: I613ef8ac618fd45f85616813eb669e68b1df7d4d
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/747504
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Vidyadhar Gurram <rnh786@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index cb806b219b7..1d7a77aa36b 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -6855,13 +6855,20 @@ static void smbchg_sync_accy_property_status(struct smbchg_chip *chip)
+ {
+ 	bool usb_present = is_usb_present(chip);
+ 	bool dc_present = is_dc_present(chip);
++	u8 reg = 0;
++	int rc = smbchg_read(chip, &reg, chip->usb_chgpth_base + RT_STS, 1);
++	if (rc < 0) {
++		dev_err(chip->dev, "Couldn't read usb rt status rc = %d\n", rc);
++		return;
++	}
++	reg &= USBIN_SRC_DET_BIT;
+ 
+ 	mutex_lock(&chip->usb_set_present_lock);
+-	if (!chip->usb_present && usb_present) {
++	if (reg && !chip->usb_present && usb_present) {
+ 		/* USB inserted */
+ 		chip->usb_present = usb_present;
+ 		handle_usb_insertion(chip);
+-	} else if (chip->usb_present && !usb_present) {
++	} else if (!reg && chip->usb_present && !usb_present) {
+ 		/* USB removed */
+ 		chip->usb_present = usb_present;
+ 		handle_usb_removal(chip);
+-- 
+2.11.0
+

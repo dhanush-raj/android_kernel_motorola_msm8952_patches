@@ -1,0 +1,68 @@
+From 3431845cfce8753ef1adaeda2a3fbfd8b70916d4 Mon Sep 17 00:00:00 2001
+From: "Russ W. Knize" <Russ.Knize@motorola.com>
+Date: Thu, 5 Nov 2015 14:24:44 -0600
+Subject: [PATCH 608/959] IKSWM-16334: esdfs: override creds for vm operations
+
+propagate from IKSWM-9835.
+
+Depending on how the lower file system is implemented, it might be
+necessary to override credentials before calling lower vm ops.
+
+Change-Id: I3d650f0176bbfd7d357e064ae1419794c4ad1142
+Signed-off-by: Russ Knize <Russ.Knize@motorola.com>
+Reviewed-on: http://gerrit.mot.com/812378
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/esdfs/mmap.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/fs/esdfs/mmap.c b/fs/esdfs/mmap.c
+index 9adbb7be740..ee5c1bf1099 100644
+--- a/fs/esdfs/mmap.c
++++ b/fs/esdfs/mmap.c
+@@ -18,6 +18,10 @@ static int esdfs_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+ 	struct file *file, *lower_file;
+ 	const struct vm_operations_struct *lower_vm_ops;
+ 	struct vm_area_struct lower_vma;
++	struct esdfs_sb_info *sbi = ESDFS_SB(vma->vm_file->f_path.dentry->d_sb);
++	const struct cred *creds = esdfs_override_creds(sbi, NULL);
++	if (!creds)
++		return -ENOMEM;
+ 
+ 	memcpy(&lower_vma, vma, sizeof(struct vm_area_struct));
+ 	file = lower_vma.vm_file;
+@@ -37,6 +41,8 @@ static int esdfs_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+ 	 */
+ 	lower_vma.vm_file = lower_file;
+ 	err = lower_vm_ops->fault(&lower_vma, vmf);
++
++	esdfs_revert_creds(creds, NULL);
+ 	return err;
+ }
+ 
+@@ -47,6 +53,10 @@ static int esdfs_page_mkwrite(struct vm_area_struct *vma,
+ 	struct file *file, *lower_file;
+ 	const struct vm_operations_struct *lower_vm_ops;
+ 	struct vm_area_struct lower_vma;
++	struct esdfs_sb_info *sbi = ESDFS_SB(vma->vm_file->f_path.dentry->d_sb);
++	const struct cred *creds = esdfs_override_creds(sbi, NULL);
++	if (!creds)
++		return -ENOMEM;
+ 
+ 	memcpy(&lower_vma, vma, sizeof(struct vm_area_struct));
+ 	file = lower_vma.vm_file;
+@@ -70,6 +80,7 @@ static int esdfs_page_mkwrite(struct vm_area_struct *vma,
+ 	lower_vma.vm_file = lower_file;
+ 	err = lower_vm_ops->page_mkwrite(&lower_vma, vmf);
+ out:
++	esdfs_revert_creds(creds, NULL);
+ 	return err;
+ }
+ 
+-- 
+2.11.0
+

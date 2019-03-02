@@ -1,0 +1,135 @@
+From 40d107d29d8bd4b45211b1ba149d0de9e4b9aa21 Mon Sep 17 00:00:00 2001
+From: Zac Crosby <zac@motorola.com>
+Date: Mon, 28 Sep 2015 14:16:42 -0500
+Subject: [PATCH 537/959] IKSWM-12005 msm: mdss: Send FB notification in the
+ middle of display off
+
+For the LG and BOE display, touch is required to send its 'deep sleep'
+commands after display has entered sleep, but before the reset line
+is toggled.
+
+To support this requirement, add a new FB notification to be sent in the
+middle of turning the display off.  This new notification is only sent on
+panels which have the feature enabled.
+
+Change-Id: I16c374d2fae4da263688ca838a2749f917a2bde5
+Signed-off-by: daiss1 <daiss1@motorola.com>
+(cherry picked from commit 492a4ec90d20415b74b294c480215a52371e480c)
+Reviewed-on: http://gerrit.mot.com/802384
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 23 +++++++++++++++++++++++
+ drivers/video/msm/mdss/mdss_fb.c        |  1 +
+ drivers/video/msm/mdss/mdss_panel.h     |  2 ++
+ include/linux/fb.h                      |  1 +
+ 4 files changed, 27 insertions(+)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index 5f923f3977d..b62158f02b4 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -28,6 +28,7 @@
+ #include "mdss_dsi.h"
+ #include "mdss_dba_utils.h"
+ #include "mdss_dropbox.h"
++#include "mdss_fb.h"
+ 
+ #define MDSS_PANEL_DEFAULT_VER 0xffffffffffffffff
+ #define MDSS_PANEL_UNKNOWN_NAME "unknown"
+@@ -915,6 +916,23 @@ end:
+ 	return 0;
+ }
+ 
++static void mdss_dsi_panel_off_in_prog_notify(struct mdss_panel_data *pdata,
++					struct mdss_panel_info *pinfo)
++{
++	struct fb_event event;
++	int blank;
++	struct fb_info *fbi;
++
++	if (!pinfo->blank_progress_notify_enabled)
++		return;
++
++	fbi = pdata->mfd->fbi;
++	blank = FB_BLANK_POWERDOWN;
++	event.info = fbi;
++	event.data = &blank;
++	fb_notifier_call_chain(FB_IN_PROGRESS_EVENT_BLANK, &event);
++}
++
+ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
+ {
+ 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+@@ -944,6 +962,8 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
+ 		mdss_dba_utils_hdcp_enable(pinfo->dba_data, false);
+ 	}
+ 
++	mdss_dsi_panel_off_in_prog_notify(pdata, pinfo);
++
+ end:
+ 	pr_debug("%s:-\n", __func__);
+ 	return 0;
+@@ -2530,6 +2550,9 @@ static int mdss_panel_parse_dt(struct device_node *np,
+ 	pinfo->is_dba_panel = of_property_read_bool(np,
+ 			"qcom,dba-panel");
+ 
++	pinfo->blank_progress_notify_enabled = of_property_read_bool(np,
++				"qcom,mdss-dsi-use-blank-in-progress-notifier");
++
+ 	return 0;
+ 
+ error:
+diff --git a/drivers/video/msm/mdss/mdss_fb.c b/drivers/video/msm/mdss/mdss_fb.c
+index e6a7c14d057..d4e48ea9fce 100644
+--- a/drivers/video/msm/mdss/mdss_fb.c
++++ b/drivers/video/msm/mdss/mdss_fb.c
+@@ -1039,6 +1039,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
+ 	}
+ 
+ 	mfd = (struct msm_fb_data_type *)fbi->par;
++	pdata->mfd = mfd;
+ 	mfd->key = MFD_KEY;
+ 	mfd->fbi = fbi;
+ 	mfd->panel_info = &pdata->panel_info;
+diff --git a/drivers/video/msm/mdss/mdss_panel.h b/drivers/video/msm/mdss/mdss_panel.h
+index db8fa08136a..1bf4d981b57 100644
+--- a/drivers/video/msm/mdss/mdss_panel.h
++++ b/drivers/video/msm/mdss/mdss_panel.h
+@@ -599,6 +599,7 @@ struct mdss_panel_info {
+ 	struct mdss_panel_debugfs_info *debugfs_info;
+ 
+ 	u32 disp_on_check_val;
++	bool blank_progress_notify_enabled;
+ };
+ 
+ struct mdss_panel_timing {
+@@ -658,6 +659,7 @@ struct mdss_panel_data {
+ 	bool active;
+ 
+ 	struct mdss_panel_data *next;
++	struct msm_fb_data_type *mfd;
+ };
+ 
+ struct mdss_panel_debugfs_info {
+diff --git a/include/linux/fb.h b/include/linux/fb.h
+index 42823e43efd..9c406b6c74e 100644
+--- a/include/linux/fb.h
++++ b/include/linux/fb.h
+@@ -161,6 +161,7 @@ struct fb_cursor_user {
+ #define FB_EARLY_EVENT_BLANK		0x10
+ /*      A hardware display blank revert early change occured */
+ #define FB_R_EARLY_EVENT_BLANK		0x11
++#define FB_IN_PROGRESS_EVENT_BLANK	0x12
+ 
+ struct fb_event {
+ 	struct fb_info *info;
+-- 
+2.11.0
+

@@ -1,0 +1,47 @@
+From 2b2ebe1d8bb1729c6d581fdaca3851c69093f264 Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Wed, 6 Jan 2016 22:50:14 -0600
+Subject: [PATCH 597/959] IKSWM-15860 ASoC: cs35l34: ignore AMP dapm suspend
+
+amplifier input/output soc dapm shouldn't be suspended.
+these soc dapm need to be up and running all the time
+for voice call case when screen goes off.
+
+Change-Id: I7e48cab1a402b9b4ed8715f36eb7e7aae9de2b83
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/811256
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Joseph Dwyer <josephdwyer@motorola.com>
+Reviewed-by: Jonathan Eklund <jeklund@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/codecs/cs35l34.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/sound/soc/codecs/cs35l34.c b/sound/soc/codecs/cs35l34.c
+index 722ef03de73..bffca27f149 100644
+--- a/sound/soc/codecs/cs35l34.c
++++ b/sound/soc/codecs/cs35l34.c
+@@ -608,6 +608,16 @@ static int cs35l34_probe(struct snd_soc_codec *codec)
+ 				   AMP_DRV_SEL_MASK,
+ 				cs35l34->pdata.amp_drv_sel <<
+ 				AMP_DRV_SEL_SHIFT);
++
++	snd_soc_dapm_ignore_suspend(&codec->dapm, "SDIN");
++	snd_soc_dapm_ignore_suspend(&codec->dapm, "SDOUT");
++	snd_soc_dapm_ignore_suspend(&codec->dapm, "SPK");
++	snd_soc_dapm_ignore_suspend(&codec->dapm, "VP");
++	snd_soc_dapm_ignore_suspend(&codec->dapm, "VPST");
++	snd_soc_dapm_ignore_suspend(&codec->dapm, "ISENSE");
++	snd_soc_dapm_ignore_suspend(&codec->dapm, "VSENSE");
++	snd_soc_dapm_ignore_suspend(&codec->dapm, "Main AMP");
++
+ 	return ret;
+ }
+ 
+-- 
+2.11.0
+

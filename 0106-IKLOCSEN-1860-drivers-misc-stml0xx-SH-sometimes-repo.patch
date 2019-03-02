@@ -1,0 +1,862 @@
+From 639cb5190eeb5bce61975d61b9c2037f2e53749d Mon Sep 17 00:00:00 2001
+From: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Date: Mon, 8 Dec 2014 16:37:41 -0600
+Subject: [PATCH 106/959] IKLOCSEN-1860 drivers:misc:stml0xx: SH sometimes
+ reports firmware ver of 0
+
+Querying for the SH firmware version immediately after a SH reset returned
+a value of 0 due to SPI data corruption. The SPI transfer function needs
+to be protected with its own mutex in order to prevent corruption of the
+SPI buffer.
+
+Change-Id: Ie3cee339f02613172623d81cd7bb4fc05fb87719
+Signed-off-by: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Reviewed-on: http://gerrit.mot.com/696072
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Philip Lee <pglee@motorola.com>
+Reviewed-by: Manasa Guntaka <mguntaka@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c     | 10 ++--
+ drivers/misc/stml0xx/stml0xx_flash.c    | 99 +++++++++++++++++----------------
+ drivers/misc/stml0xx/stml0xx_irq.c      | 61 +++++++++++---------
+ drivers/misc/stml0xx/stml0xx_reset.c    | 13 ++---
+ drivers/misc/stml0xx/stml0xx_spi.c      | 73 ++++++++++++------------
+ drivers/misc/stml0xx/stml0xx_wake_irq.c |  6 +-
+ include/linux/stml0xx.h                 | 23 ++++----
+ 7 files changed, 148 insertions(+), 137 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index f79ca38e5a1..db16b6fa628 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -80,8 +80,8 @@ unsigned char stat_string[LOG_MSG_SIZE + 1];
+ 
+ struct stml0xx_algo_requst_t stml0xx_g_algo_requst[STML0XX_NUM_ALGOS];
+ 
+-unsigned char *stml0xx_cmdbuff;
+-unsigned char *stml0xx_readbuff;
++unsigned char *stml0xx_boot_cmdbuff;
++unsigned char *stml0xx_boot_readbuff;
+ 
+ /* per algo config, request, and event registers */
+ const struct stml0xx_algo_info_t stml0xx_algo_info[STML0XX_NUM_ALGOS] = {
+@@ -754,8 +754,9 @@ static int stml0xx_probe(struct spi_device *spi)
+ 			goto err_nomem;
+ 	}
+ 
+-	stml0xx_cmdbuff = ps_stml0xx->spi_tx_buf;
+-	stml0xx_readbuff = ps_stml0xx->spi_rx_buf;
++	/* global buffers used exclusively in bootloader mode */
++	stml0xx_boot_cmdbuff = ps_stml0xx->spi_tx_buf;
++	stml0xx_boot_readbuff = ps_stml0xx->spi_rx_buf;
+ 
+ 	/* initialize regulators */
+ 	ps_stml0xx->regulator_1 = regulator_get(&spi->dev, "sensor1");
+@@ -809,6 +810,7 @@ static int stml0xx_probe(struct spi_device *spi)
+ 
+ 	mutex_init(&ps_stml0xx->lock);
+ 	mutex_init(&ps_stml0xx->sh_wakeup_lock);
++	mutex_init(&ps_stml0xx->spi_lock);
+ 
+ 	mutex_lock(&ps_stml0xx->lock);
+ 	wake_lock_init(&ps_stml0xx->wakelock, WAKE_LOCK_SUSPEND, "stml0xx");
+diff --git a/drivers/misc/stml0xx/stml0xx_flash.c b/drivers/misc/stml0xx/stml0xx_flash.c
+index 655eea08396..b39645a7494 100644
+--- a/drivers/misc/stml0xx/stml0xx_flash.c
++++ b/drivers/misc/stml0xx/stml0xx_flash.c
+@@ -81,8 +81,8 @@ static unsigned char stml0xx_bootloader_ver;
+ static int stml0xx_boot_spi_send_ack(void)
+ {
+ 	int rc = 0;
+-	stml0xx_cmdbuff[0] = ACK_BYTE;
+-	rc = stml0xx_spi_write_no_reset(stml0xx_cmdbuff, 1);
++	stml0xx_boot_cmdbuff[0] = ACK_BYTE;
++	rc = stml0xx_spi_write_no_reset(stml0xx_boot_cmdbuff, 1);
+ 	if (rc < 0)
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+ 			"Failed to send SPI ACK [%d]", rc);
+@@ -96,13 +96,13 @@ static int stml0xx_boot_spi_wait_for_ack(int num_polls, int poll_int_ms,
+ 	/* Poll for ACK */
+ 	int rc = 0;
+ 	while (num_polls--) {
+-		rc = stml0xx_spi_read_no_reset(stml0xx_readbuff, 1);
++		rc = stml0xx_spi_read_no_reset(stml0xx_boot_readbuff, 1);
+ 		if (rc < 0) {
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+ 				"Failed to read from SPI [%d]", rc);
+ 			return rc;
+ 		}
+-		if (stml0xx_readbuff[0] == ACK_BYTE) {
++		if (stml0xx_boot_readbuff[0] == ACK_BYTE) {
+ 			/* Received ACK */
+ 			if (send_ack) {
+ 				dev_dbg(&stml0xx_misc_data->spi->dev,
+@@ -125,19 +125,19 @@ static int stml0xx_boot_cmd_write(enum stm_command command, bool send_ack)
+ {
+ 	int rc = 0, index = 0;
+ 	/* Send command code with SOF and XOR checksum */
+-	stml0xx_cmdbuff[index++] = SOF_BYTE;
++	stml0xx_boot_cmdbuff[index++] = SOF_BYTE;
+ 	if (command == SPI_SYNC) {
+ 		/* No command, SOF only */
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending SPI sync byte [0x%02x]", SOF_BYTE);
+ 	} else {
+-		stml0xx_cmdbuff[index++] = command;
+-		stml0xx_cmdbuff[index++] = ~command;
++		stml0xx_boot_cmdbuff[index++] = command;
++		stml0xx_boot_cmdbuff[index++] = ~command;
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"STML0XX Sending command [0x%02x]", command);
+ 	}
+ 
+-	rc = stml0xx_spi_write_no_reset(stml0xx_cmdbuff, index);
++	rc = stml0xx_spi_write_no_reset(stml0xx_boot_cmdbuff, index);
+ 	if (rc < 0) {
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+ 			"Failed to send boot command [%d]", rc);
+@@ -172,16 +172,16 @@ static int stml0xx_get_boot_ver(void)
+ 			goto RETRY_GET_VERSION;
+ 
+ 		/* Read bootloader version */
+-		if ((stml0xx_spi_read_no_reset(stml0xx_readbuff, 3)) < 0)
++		if ((stml0xx_spi_read_no_reset(stml0xx_boot_readbuff, 3)) < 0)
+ 			goto RETRY_GET_VERSION;
+ 
+ 		/* Byte 1: ACK
+ 		   Byte 2: Bootloader version
+ 				( 0 < ver <= 255), eg. 0x10 = ver 1.0
+ 		   Byte 3: ACK */
+-		if ((stml0xx_readbuff[0] == ACK_BYTE) &&
+-		    (stml0xx_readbuff[2] == ACK_BYTE)) {
+-			stml0xx_bootloader_ver = stml0xx_readbuff[1];
++		if ((stml0xx_boot_readbuff[0] == ACK_BYTE) &&
++		    (stml0xx_boot_readbuff[2] == ACK_BYTE)) {
++			stml0xx_bootloader_ver = stml0xx_boot_readbuff[1];
+ 			dev_dbg(&stml0xx_misc_data->spi->dev,
+ 				"Bootloader version 0x%02x",
+ 				stml0xx_bootloader_ver);
+@@ -191,9 +191,9 @@ static int stml0xx_get_boot_ver(void)
+ 		} else {
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+ 				"Error reading GET_VERSION data 0x%02x 0x%02x 0x%02x",
+-				stml0xx_readbuff[0],
+-				stml0xx_readbuff[1],
+-				stml0xx_readbuff[2]);
++				stml0xx_boot_readbuff[0],
++				stml0xx_boot_readbuff[1],
++				stml0xx_boot_readbuff[2]);
+ 			goto RETRY_GET_VERSION;
+ 		}
+ RETRY_GET_VERSION:
+@@ -224,9 +224,9 @@ int stml0xx_boot_flash_erase(void)
+ 
+ 		/* Send number of pages + checksum
+ 		   (mass erase option unsupported on STM32L0XX) */
+-		stml0xx_cmdbuff[0] = ((NUM_PAGES - 1) >> 8) & 0xFF;
+-		stml0xx_cmdbuff[1] = (NUM_PAGES - 1) & 0xFF;
+-		if (stml0xx_boot_checksum_write(stml0xx_cmdbuff, 2) < 0)
++		stml0xx_boot_cmdbuff[0] = ((NUM_PAGES - 1) >> 8) & 0xFF;
++		stml0xx_boot_cmdbuff[1] = (NUM_PAGES - 1) & 0xFF;
++		if (stml0xx_boot_checksum_write(stml0xx_boot_cmdbuff, 2) < 0)
+ 			goto RETRY_ERASE;
+ 
+ 		/* Wait for ACK */
+@@ -236,13 +236,13 @@ int stml0xx_boot_flash_erase(void)
+ 
+ 		/* Populate 2-byte page numbers (MSB then LSB) */
+ 		for (i = 0; i < NUM_PAGES; i++) {
+-			stml0xx_cmdbuff[i * 2] = (i >> 8) & 0xFF;
+-			stml0xx_cmdbuff[(i * 2) + 1] = i & 0xFF;
++			stml0xx_boot_cmdbuff[i * 2] = (i >> 8) & 0xFF;
++			stml0xx_boot_cmdbuff[(i * 2) + 1] = i & 0xFF;
+ 		}
+ 
+ 		/* Add checksum byte */
+ 		if (stml0xx_boot_checksum_write
+-		    (stml0xx_cmdbuff, (NUM_PAGES * 2))
++		    (stml0xx_boot_cmdbuff, (NUM_PAGES * 2))
+ 		    < 0)
+ 			goto RETRY_ERASE;
+ 
+@@ -331,13 +331,14 @@ int switch_stml0xx_mode(enum stm_mode mode)
+ 			   Byte 3: PID (MSB)
+ 			   Byte 4: PID (LSB)
+ 			   Byte 5: ACK */
+-			if (stml0xx_spi_read_no_reset(stml0xx_readbuff, 5)
++			if (stml0xx_spi_read_no_reset(stml0xx_boot_readbuff, 5)
+ 				< 0)
+ 				goto RETRY_GET_ID;
+ 			/* Part ID read successfully */
+ 			dev_dbg(&stml0xx_misc_data->spi->dev,
+ 				"Part ID 0x%02x 0x%02x",
+-				stml0xx_readbuff[2], stml0xx_readbuff[3]);
++				stml0xx_boot_readbuff[2],
++				stml0xx_boot_readbuff[3]);
+ 			/* Send ACK */
+ 			return stml0xx_boot_spi_send_ack();
+ 
+@@ -353,7 +354,7 @@ RETRY_GET_ID:
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Switching to normal mode");
+ 
+-		stml0xx_reset(pdata, stml0xx_cmdbuff);
++		stml0xx_reset(pdata);
+ 	}
+ 	return rc;
+ }
+@@ -409,15 +410,15 @@ BEGIN_WRITE:
+ 				goto RETRY_WRITE;
+ 
+ 			/* Send start address */
+-			stml0xx_cmdbuff[0] =
++			stml0xx_boot_cmdbuff[0] =
+ 			    (stml0xx_misc_data->current_addr >> 24) & 0xFF;
+-			stml0xx_cmdbuff[1] =
++			stml0xx_boot_cmdbuff[1] =
+ 			    (stml0xx_misc_data->current_addr >> 16) & 0xFF;
+-			stml0xx_cmdbuff[2] =
++			stml0xx_boot_cmdbuff[2] =
+ 			    (stml0xx_misc_data->current_addr >> 8) & 0xFF;
+-			stml0xx_cmdbuff[3] =
++			stml0xx_boot_cmdbuff[3] =
+ 			    stml0xx_misc_data->current_addr & 0xFF;
+-			if (stml0xx_boot_checksum_write(stml0xx_cmdbuff, 4)
++			if (stml0xx_boot_checksum_write(stml0xx_boot_cmdbuff, 4)
+ 				< 0)
+ 				goto RETRY_WRITE;
+ 
+@@ -428,10 +429,11 @@ BEGIN_WRITE:
+ 				goto RETRY_WRITE;
+ 
+ 			/* Number of bytes to write (0-based) */
+-			stml0xx_cmdbuff[0] = count - 1;
++			stml0xx_boot_cmdbuff[0] = count - 1;
+ 
+ 			/* Copy payload */
+-			if (copy_from_user(&stml0xx_cmdbuff[1], buff, count)) {
++			if (copy_from_user(&stml0xx_boot_cmdbuff[1],
++				buff, count)) {
+ 				dev_err(&stml0xx_misc_data->spi->dev,
+ 					"Copy from user returned error");
+ 				err = -EINVAL;
+@@ -441,17 +443,17 @@ BEGIN_WRITE:
+ 			   Add 0xFF fillers if needed. */
+ 			fillers = (4 - (count % 4)) % 4;
+ 			if (fillers) {
+-				stml0xx_cmdbuff[0] += fillers;
+-				memset(&stml0xx_cmdbuff[count + 1], 0xFF,
++				stml0xx_boot_cmdbuff[0] += fillers;
++				memset(&stml0xx_boot_cmdbuff[count + 1], 0xFF,
+ 				       fillers);
+ 			}
+ 			/* Number of bytes + payload + checksum */
+-			err = stml0xx_boot_checksum_write(stml0xx_cmdbuff,
++			err = stml0xx_boot_checksum_write(stml0xx_boot_cmdbuff,
+ 							count + 1 + fillers);
+ 			if (err < 0) {
+ 				dev_err(&stml0xx_misc_data->spi->dev,
+ 				"Error sending MEMORY_WRITE data 0x%02x [%d]",
+-					stml0xx_readbuff[0], err);
++					stml0xx_boot_readbuff[0], err);
+ 				goto RETRY_WRITE;
+ 			}
+ 			/* Wait for ACK */
+@@ -482,15 +484,15 @@ RETRY_WRITE:
+ 				goto RETRY_READ;
+ 
+ 			/* Send read start address */
+-			stml0xx_cmdbuff[0]
++			stml0xx_boot_cmdbuff[0]
+ 			    = (stml0xx_misc_data->current_addr >> 24) & 0xFF;
+-			stml0xx_cmdbuff[1]
++			stml0xx_boot_cmdbuff[1]
+ 			    = (stml0xx_misc_data->current_addr >> 16) & 0xFF;
+-			stml0xx_cmdbuff[2]
++			stml0xx_boot_cmdbuff[2]
+ 			    = (stml0xx_misc_data->current_addr >> 8) & 0xFF;
+-			stml0xx_cmdbuff[3]
++			stml0xx_boot_cmdbuff[3]
+ 			    = stml0xx_misc_data->current_addr & 0xFF;
+-			if (stml0xx_boot_checksum_write(stml0xx_cmdbuff, 4)
++			if (stml0xx_boot_checksum_write(stml0xx_boot_cmdbuff, 4)
+ 				< 0)
+ 				goto RETRY_READ;
+ 
+@@ -501,10 +503,11 @@ RETRY_WRITE:
+ 				goto RETRY_READ;
+ 
+ 			/* Number of bytes to read (0-based) */
+-			stml0xx_cmdbuff[0] = count - 1;
++			stml0xx_boot_cmdbuff[0] = count - 1;
+ 			/* XOR checksum */
+-			stml0xx_cmdbuff[1] = ~(count - 1);
+-			if (stml0xx_spi_write_no_reset(stml0xx_cmdbuff, 2) < 0)
++			stml0xx_boot_cmdbuff[1] = ~(count - 1);
++			if (stml0xx_spi_write_no_reset(
++				stml0xx_boot_cmdbuff, 2) < 0)
+ 				goto RETRY_READ;
+ 
+ 			/* Wait for ACK */
+@@ -516,18 +519,18 @@ RETRY_WRITE:
+ 			/* Read memory (read 1 extra byte for
+ 			   extra ACK in the beginning) */
+ 			if (stml0xx_spi_read_no_reset
+-			    (stml0xx_readbuff, count + 1) < 0)
++			    (stml0xx_boot_readbuff, count + 1) < 0)
+ 				goto RETRY_READ;
+ 
+ 			/* Compare data */
+ 			for (index = 0; index < count; index++) {
+-				if (stml0xx_readbuff[index + 1]
++				if (stml0xx_boot_readbuff[index + 1]
+ 					!= buff[index]) {
+ 					dev_dbg(&stml0xx_misc_data->spi->dev,
+ 						"Error verifying write 0x%08x 0x%02x 0x%02x 0x%02x",
+ 						stml0xx_misc_data->current_addr,
+ 						index,
+-						stml0xx_readbuff[index + 1],
++						stml0xx_boot_readbuff[index+1],
+ 						buff[index]);
+ 					bad_byte_cnt++;
+ 				}
+@@ -560,7 +563,7 @@ RETRY_READ:
+ 		/* For normal mode */
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Normal mode write started");
+-		if (copy_from_user(stml0xx_cmdbuff, buff, count)) {
++		if (copy_from_user(stml0xx_boot_cmdbuff, buff, count)) {
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+ 				"Copy from user returned error");
+ 			err = -EINVAL;
+@@ -569,7 +572,7 @@ RETRY_READ:
+ 		if (err == 0) {
+ 			stml0xx_wake(stml0xx_misc_data);
+ 			err =
+-			    stml0xx_spi_write_no_reset(stml0xx_cmdbuff,
++			    stml0xx_spi_write_no_reset(stml0xx_boot_cmdbuff,
+ 						       (int)count);
+ 			stml0xx_sleep(stml0xx_misc_data);
+ 			err = count;
+diff --git a/drivers/misc/stml0xx/stml0xx_irq.c b/drivers/misc/stml0xx/stml0xx_irq.c
+index ac253525da5..ea025fa2330 100644
+--- a/drivers/misc/stml0xx/stml0xx_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_irq.c
+@@ -115,8 +115,9 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending acc(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(ACCEL_RD_X), STM16_TO_HOST(ACCEL_RD_Y),
+-			STM16_TO_HOST(ACCEL_RD_Z));
++			STM16_TO_HOST(ACCEL_RD_X, buf),
++			STM16_TO_HOST(ACCEL_RD_Y, buf),
++			STM16_TO_HOST(ACCEL_RD_Z, buf));
+ 	}
+ 	if (irq_status & M_ACCEL2) {
+ 		/* read 2nd accelerometer values from STML0XX */
+@@ -136,8 +137,9 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending acc2(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(ACCEL_RD_X), STM16_TO_HOST(ACCEL_RD_Y),
+-			STM16_TO_HOST(ACCEL_RD_Z));
++			STM16_TO_HOST(ACCEL_RD_X, buf),
++			STM16_TO_HOST(ACCEL_RD_Y, buf),
++			STM16_TO_HOST(ACCEL_RD_Z, buf));
+ 	}
+ 	if (irq_status & M_LIN_ACCEL) {
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+@@ -157,8 +159,9 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending lin_acc(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(ACCEL_RD_X), STM16_TO_HOST(ACCEL_RD_Y),
+-			STM16_TO_HOST(ACCEL_RD_Z));
++			STM16_TO_HOST(ACCEL_RD_X, buf),
++			STM16_TO_HOST(ACCEL_RD_Y, buf),
++			STM16_TO_HOST(ACCEL_RD_Z, buf));
+ 	}
+ 	if (irq_status & M_ECOMPASS) {
+ 		unsigned char status;
+@@ -175,16 +178,17 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending mag(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(MAG_X), STM16_TO_HOST(MAG_Y),
+-			STM16_TO_HOST(MAG_Z));
++			STM16_TO_HOST(MAG_X, buf), STM16_TO_HOST(MAG_Y, buf),
++			STM16_TO_HOST(MAG_Z, buf));
+ 
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_ORIENT,
+ 					     buf + 6, 6, status, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending orient(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(ORIENT_X), STM16_TO_HOST(ORIENT_Y),
+-			STM16_TO_HOST(ORIENT_Z));
++			STM16_TO_HOST(ORIENT_X, buf),
++			STM16_TO_HOST(ORIENT_Y, buf),
++			STM16_TO_HOST(ORIENT_Z, buf));
+ 	}
+ 	if (irq_status & M_GYRO) {
+ 		err = stml0xx_spi_send_read_reg(GYRO_X, buf, 6);
+@@ -203,8 +207,9 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending gyro(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(GYRO_RD_X), STM16_TO_HOST(GYRO_RD_Y),
+-			STM16_TO_HOST(GYRO_RD_Z));
++			STM16_TO_HOST(GYRO_RD_X, buf),
++			STM16_TO_HOST(GYRO_RD_Y, buf),
++			STM16_TO_HOST(GYRO_RD_Z, buf));
+ 	}
+ 	/*MODIFIED UNCALIBRATED GYRO */
+ 	if (irq_status & M_UNCALIB_GYRO) {
+@@ -219,11 +224,12 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending Gyro uncalib(x,y,z)values:%d,%d,%d;%d,%d,%d",
+-			STM16_TO_HOST(GYRO_RD_X), STM16_TO_HOST(GYRO_RD_Y),
+-			STM16_TO_HOST(GYRO_RD_Z),
+-			STM16_TO_HOST(GYRO_UNCALIB_X),
+-			STM16_TO_HOST(GYRO_UNCALIB_Y),
+-			STM16_TO_HOST(GYRO_UNCALIB_Z));
++			STM16_TO_HOST(GYRO_RD_X, buf),
++			STM16_TO_HOST(GYRO_RD_Y, buf),
++			STM16_TO_HOST(GYRO_RD_Z, buf),
++			STM16_TO_HOST(GYRO_UNCALIB_X, buf),
++			STM16_TO_HOST(GYRO_UNCALIB_Y, buf),
++			STM16_TO_HOST(GYRO_UNCALIB_Z, buf));
+ 	}
+ 	if (irq_status & M_UNCALIB_MAG) {
+ 		err = stml0xx_spi_send_read_reg(UNCALIB_MAG_X, buf, 12);
+@@ -238,10 +244,11 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending Gyro uncalib(x,y,z)values:%d,%d,%d;%d,%d,%d",
+-			STM16_TO_HOST(MAG_X), STM16_TO_HOST(MAG_Y),
+-			STM16_TO_HOST(MAG_Z), STM16_TO_HOST(MAG_UNCALIB_X),
+-			STM16_TO_HOST(MAG_UNCALIB_Y),
+-			STM16_TO_HOST(MAG_UNCALIB_Z));
++			STM16_TO_HOST(MAG_X, buf), STM16_TO_HOST(MAG_Y, buf),
++			STM16_TO_HOST(MAG_Z, buf),
++			STM16_TO_HOST(MAG_UNCALIB_X, buf),
++			STM16_TO_HOST(MAG_UNCALIB_Y, buf),
++			STM16_TO_HOST(MAG_UNCALIB_Z, buf));
+ 	}
+ 	if (irq_status & M_ALS) {
+ 		err = stml0xx_spi_send_read_reg(ALS_LUX, buf, 2);
+@@ -259,7 +266,7 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending ALS %d", STM16_TO_HOST(ALS_VALUE));
++			"Sending ALS %d", STM16_TO_HOST(ALS_VALUE, buf));
+ 	}
+ 	if (irq_status & M_TEMPERATURE) {
+ 		/* Read temperature value */
+@@ -278,7 +285,8 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 			stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending temp(x)value:%d", STM16_TO_HOST(TEMP_VALUE));
++			"Sending temp(x)value:%d",
++			STM16_TO_HOST(TEMP_VALUE, buf));
+ 	}
+ 	if (irq_status & M_PRESSURE) {
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+@@ -295,7 +303,8 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 					     buf, 4, 0, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending pressure %d", STM32_TO_HOST(PRESSURE_VALUE));
++			"Sending pressure %d",
++			STM32_TO_HOST(PRESSURE_VALUE, buf));
+ 	}
+ 	if (irq_status & M_GRAVITY) {
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+@@ -320,8 +329,8 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Sending gravity(x,y,z)values:x=%d,y=%d,z=%d",
+-			STM16_TO_HOST(GRAV_X), STM16_TO_HOST(GRAV_Y),
+-			STM16_TO_HOST(GRAV_Z));
++			STM16_TO_HOST(GRAV_X, buf), STM16_TO_HOST(GRAV_Y, buf),
++			STM16_TO_HOST(GRAV_Z, buf));
+ 	}
+ 	if (irq_status & M_DISP_ROTATE) {
+ 		/* Read Display Rotate value */
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index a6c8d7eb4ad..164a7c52339 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -43,7 +43,7 @@
+ 
+ #include <linux/stml0xx.h>
+ 
+-void stml0xx_reset(struct stml0xx_platform_data *pdata, unsigned char *cmdbuff)
++void stml0xx_reset(struct stml0xx_platform_data *pdata)
+ {
+ 	dev_err(&stml0xx_misc_data->spi->dev, "stml0xx_reset");
+ 	stml0xx_g_booted = 0;
+@@ -60,17 +60,12 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 		struct stml0xx_data, initialize_work);
+ 
+ 	struct stml0xx_platform_data *pdata;
+-	unsigned char *rst_cmdbuff;
+ 	unsigned char buf[SPI_MSG_SIZE];
+ 	unsigned int i;
+ 	int err;
+ 	int ret_err = 0;
+ 
+ 	pdata = ps_stml0xx->pdata;
+-	rst_cmdbuff = ps_stml0xx->spi_tx_buf;
+-
+-	if (rst_cmdbuff == NULL)
+-		return;
+ 
+ 	wake_lock(&ps_stml0xx->reset_wakelock);
+ 
+@@ -88,7 +83,7 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 				2, RESET_NOT_ALLOWED);
+ 		if (err < 0) {
+ 			dev_err(&ps_stml0xx->spi->dev,
+-				"Unable to wrie accel orientation value");
++				"Unable to write accel orientation value");
+ 			ret_err = err;
+ 		}
+ 	}
+@@ -201,7 +196,7 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 			1, RESET_NOT_ALLOWED);
+ 		if (err < 0) {
+ 			dev_err(&ps_stml0xx->spi->dev,
+-				"Unable to wrie headset hw version");
++				"Unable to write headset hw version");
+ 			ret_err = err;
+ 		}
+ 	}
+@@ -211,7 +206,7 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 			1, RESET_NOT_ALLOWED);
+ 		if (err < 0) {
+ 			dev_err(&ps_stml0xx->spi->dev,
+-				"Unable to wrie headset detect enable");
++				"Unable to write headset detect enable");
+ 			ret_err = err;
+ 		}
+ 	}
+diff --git a/drivers/misc/stml0xx/stml0xx_spi.c b/drivers/misc/stml0xx/stml0xx_spi.c
+index b2de17e336b..98d362099cd 100644
+--- a/drivers/misc/stml0xx/stml0xx_spi.c
++++ b/drivers/misc/stml0xx/stml0xx_spi.c
+@@ -81,6 +81,8 @@ int stml0xx_spi_transfer(unsigned char *tx_buf, unsigned char *rx_buf, int len)
+ 	if ((!tx_buf && !rx_buf) || len == 0)
+ 		return -EFAULT;
+ 
++	mutex_lock(&stml0xx_misc_data->spi_lock);
++
+ 	if (!rx_buf)
+ 		rx_buf = stml0xx_misc_data->spi_rx_buf;
+ 
+@@ -154,6 +156,7 @@ int stml0xx_spi_transfer(unsigned char *tx_buf, unsigned char *rx_buf, int len)
+ 		goto EXIT;
+ 	}
+ EXIT:
++	mutex_unlock(&stml0xx_misc_data->spi_lock);
+ 	return rc;
+ }
+ 
+@@ -287,8 +290,7 @@ int stml0xx_spi_write_read(unsigned char *tx_buf, int tx_len,
+ 		}
+ 
+ 		if (ret < 0) {
+-			stml0xx_reset(stml0xx_misc_data->pdata,
+-				stml0xx_cmdbuff);
++			stml0xx_reset(stml0xx_misc_data->pdata);
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+ 				"stml0xx_spi_write_read SPI transfer error [%d], retries left [%d]",
+ 				ret, reset_retries);
+@@ -342,8 +344,7 @@ int stml0xx_spi_read(unsigned char *buf, int len)
+ 			ret = stml0xx_spi_read_no_retries(buf, len);
+ 
+ 		if (ret < 0) {
+-			stml0xx_reset(stml0xx_misc_data->pdata,
+-				stml0xx_cmdbuff);
++			stml0xx_reset(stml0xx_misc_data->pdata);
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+ 				"stml0xx_spi_read SPI transfer error [%d], retries left [%d]",
+ 				ret, reset_retries);
+@@ -392,8 +393,7 @@ int stml0xx_spi_write(unsigned char *buf, int len)
+ 			ret = stml0xx_spi_write_no_retries(buf, len);
+ 
+ 		if (ret < 0) {
+-			stml0xx_reset(stml0xx_misc_data->pdata,
+-				stml0xx_cmdbuff);
++			stml0xx_reset(stml0xx_misc_data->pdata);
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+ 				"stml0xx_spi_write SPI transfer error [%d], retries left [%d]",
+ 				ret, reset_retries);
+@@ -416,6 +416,7 @@ static int stml0xx_spi_send_write_reg_no_retries(unsigned char reg_type,
+ 	int data_offset = 0, data_size;
+ 	int remaining_data_size = reg_size;
+ 	int ret = 0;
++	unsigned char cmd_buff[SPI_MSG_SIZE];
+ 
+ 	if (!reg_data || reg_size <= 0 ||
+ 	    reg_size > STML0XX_MAX_REG_LEN) {
+@@ -427,37 +428,37 @@ static int stml0xx_spi_send_write_reg_no_retries(unsigned char reg_type,
+ 
+ 	while (remaining_data_size > 0) {
+ 		/* Clear buffer */
+-		memset(stml0xx_cmdbuff, 0, SPI_MSG_SIZE);
++		memset(cmd_buff, 0, SPI_MSG_SIZE);
+ 
+ 		/* Populate header */
+-		stml0xx_cmdbuff[0] = SPI_BARKER_1;
+-		stml0xx_cmdbuff[1] = SPI_BARKER_2;
+-		stml0xx_cmdbuff[2] = SPI_MSG_TYPE_WRITE_REG;
+-		stml0xx_cmdbuff[3] = reg_type;
++		cmd_buff[0] = SPI_BARKER_1;
++		cmd_buff[1] = SPI_BARKER_2;
++		cmd_buff[2] = SPI_MSG_TYPE_WRITE_REG;
++		cmd_buff[3] = reg_type;
+ 
+ 		/* Payload data offset */
+-		stml0xx_cmdbuff[4] = data_offset;
++		cmd_buff[4] = data_offset;
+ 		data_size = (remaining_data_size < SPI_MAX_PAYLOAD_LEN) ?
+ 		    remaining_data_size : SPI_MAX_PAYLOAD_LEN;
+-		stml0xx_cmdbuff[5] = data_size;
++		cmd_buff[5] = data_size;
+ 
+ 		/* Copy data and update data parameters */
+-		memcpy(&stml0xx_cmdbuff[SPI_WRITE_REG_HDR_SIZE],
++		memcpy(&cmd_buff[SPI_WRITE_REG_HDR_SIZE],
+ 		       reg_data + data_offset, data_size);
+ 		remaining_data_size -= data_size;
+ 		data_offset += data_size;
+ 
+ 		/* Swap all bytes */
+-		stml0xx_spi_swap_bytes(stml0xx_cmdbuff,
++		stml0xx_spi_swap_bytes(cmd_buff,
+ 				       SPI_MSG_SIZE - SPI_CRC_LEN);
+ 
+ 		/* Append 2-byte CRC (unswapped) */
+-		stml0xx_spi_append_crc(stml0xx_cmdbuff,
++		stml0xx_spi_append_crc(cmd_buff,
+ 				       SPI_MSG_SIZE - SPI_CRC_LEN);
+ 
+ 		/* Write write request to SPI */
+ 		ret =
+-		    stml0xx_spi_write_no_reset_no_retries(stml0xx_cmdbuff,
++		    stml0xx_spi_write_no_reset_no_retries(cmd_buff,
+ 							  SPI_MSG_SIZE);
+ 		if (ret < 0)
+ 			goto EXIT;
+@@ -504,8 +505,7 @@ int stml0xx_spi_send_write_reg_reset(unsigned char reg_type,
+ 				"stml0xx_spi_send_write_reg_reset SPI transfer error [%d], retries left [%d]",
+ 				ret, reset_retries);
+ 			if (reset_allowed)
+-				stml0xx_reset(stml0xx_misc_data->pdata,
+-					stml0xx_cmdbuff);
++				stml0xx_reset(stml0xx_misc_data->pdata);
+ 			else
+ 				break;
+ 		}
+@@ -527,6 +527,8 @@ static int stml0xx_spi_send_read_reg_no_retries(unsigned char reg_type,
+ 	int remaining_data_size = reg_size;
+ 	unsigned short recv_crc, calc_crc;
+ 	int ret = 0;
++	unsigned char cmd_buff[SPI_MSG_SIZE];
++	unsigned char read_buff[SPI_MSG_SIZE];
+ 
+ 	if (!reg_data || reg_size <= 0 ||
+ 	    reg_size > STML0XX_MAX_REG_LEN) {
+@@ -538,43 +540,43 @@ static int stml0xx_spi_send_read_reg_no_retries(unsigned char reg_type,
+ 
+ 	while (remaining_data_size > 0) {
+ 		/* Clear buffer */
+-		memset(stml0xx_cmdbuff, 0, SPI_MSG_SIZE);
++		memset(cmd_buff, 0, SPI_MSG_SIZE);
+ 
+ 		/* Populate header */
+-		stml0xx_cmdbuff[0] = SPI_BARKER_1;
+-		stml0xx_cmdbuff[1] = SPI_BARKER_2;
+-		stml0xx_cmdbuff[2] = SPI_MSG_TYPE_READ_REG;
+-		stml0xx_cmdbuff[3] = reg_type;
++		cmd_buff[0] = SPI_BARKER_1;
++		cmd_buff[1] = SPI_BARKER_2;
++		cmd_buff[2] = SPI_MSG_TYPE_READ_REG;
++		cmd_buff[3] = reg_type;
+ 
+ 		/* Payload data offset */
+-		stml0xx_cmdbuff[4] = data_offset;
++		cmd_buff[4] = data_offset;
+ 		data_size = (remaining_data_size < SPI_MAX_PAYLOAD_LEN) ?
+ 		    remaining_data_size : SPI_MAX_PAYLOAD_LEN;
+-		stml0xx_cmdbuff[5] = data_size;
++		cmd_buff[5] = data_size;
+ 
+ 		/* Swap all bytes */
+-		stml0xx_spi_swap_bytes(stml0xx_cmdbuff,
++		stml0xx_spi_swap_bytes(cmd_buff,
+ 			SPI_MSG_SIZE - SPI_CRC_LEN);
+ 
+ 		/* Append 2-byte CRC (unswapped) */
+-		stml0xx_spi_append_crc(stml0xx_cmdbuff,
++		stml0xx_spi_append_crc(cmd_buff,
+ 			SPI_MSG_SIZE - SPI_CRC_LEN);
+ 
+ 		/* Write read request to SPI */
+-		ret = stml0xx_spi_write_no_reset_no_retries(stml0xx_cmdbuff,
++		ret = stml0xx_spi_write_no_reset_no_retries(cmd_buff,
+ 							  SPI_MSG_SIZE);
+ 		if (ret < 0)
+ 			goto EXIT;
+ 
+-		ret = stml0xx_spi_read_no_reset_no_retries(stml0xx_readbuff,
++		ret = stml0xx_spi_read_no_reset_no_retries(read_buff,
+ 							 SPI_MSG_SIZE);
+ 
+ 		if (ret < 0)
+ 			goto EXIT;
+ 
+ 		/* Validate CRC */
+-		recv_crc = (stml0xx_readbuff[30] << 8) | stml0xx_readbuff[31];
+-		calc_crc = stml0xx_spi_calculate_crc(stml0xx_readbuff,
++		recv_crc = (read_buff[30] << 8) | read_buff[31];
++		calc_crc = stml0xx_spi_calculate_crc(read_buff,
+ 						     SPI_MSG_SIZE -
+ 						     SPI_CRC_LEN);
+ 		if (recv_crc != calc_crc) {
+@@ -586,11 +588,11 @@ static int stml0xx_spi_send_read_reg_no_retries(unsigned char reg_type,
+ 		}
+ 
+ 		/* Swap bytes before extracting data */
+-		stml0xx_spi_swap_bytes(stml0xx_readbuff,
++		stml0xx_spi_swap_bytes(read_buff,
+ 				       SPI_MSG_SIZE - SPI_CRC_LEN);
+ 
+ 		/* Extract payload */
+-		memcpy(reg_data + data_offset, stml0xx_readbuff, data_size);
++		memcpy(reg_data + data_offset, read_buff, data_size);
+ 		remaining_data_size -= data_size;
+ 		data_offset += data_size;
+ 	}
+@@ -635,8 +637,7 @@ int stml0xx_spi_send_read_reg_reset(unsigned char reg_type,
+ 				"stml0xx_spi_send_read_reg_reset SPI transfer error [%d], retries left [%d]",
+ 				ret, reset_retries);
+ 			if (reset_allowed)
+-				stml0xx_reset(stml0xx_misc_data->pdata,
+-					stml0xx_cmdbuff);
++				stml0xx_reset(stml0xx_misc_data->pdata);
+ 			else
+ 				break;
+ 		}
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index a2d00569c35..7acdedff1d3 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -165,7 +165,7 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_RESET, &status, 1,
+ 					     0, stm_ws->ts_ns);
+ 
+-		stml0xx_reset(stml0xx_misc_data->pdata, stml0xx_cmdbuff);
++		stml0xx_reset(stml0xx_misc_data->pdata);
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+ 			"STML0XX requested a reset");
+ 		goto EXIT;
+@@ -445,7 +445,7 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 					     buf, 2, 0, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending Camera: %d", STM16_TO_HOST(CAMERA_VALUE));
++			"Sending Camera: %d", STM16_TO_HOST(CAMERA_VALUE, buf));
+ 
+ 		input_report_key(ps_stml0xx->input_dev, KEY_CAMERA, 1);
+ 		input_report_key(ps_stml0xx->input_dev, KEY_CAMERA, 0);
+@@ -490,7 +490,7 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 		stml0xx_g_wake_sensor_state &= (~M_SIM);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"Sending SIM Value=%d", STM16_TO_HOST(SIM_DATA));
++			"Sending SIM Value=%d", STM16_TO_HOST(SIM_DATA, buf));
+ 	}
+ 	if (irq2_status & M_MMOVEME) {
+ 		unsigned char status;
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index c5b3e213886..809e4e41b1a 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -29,7 +29,7 @@
+ #endif
+ 
+ /* Log macros */
+-#define ENABLE_VERBOSE_LOGGING 1
++#define ENABLE_VERBOSE_LOGGING 0
+ 
+ /* SPI */
+ #define SPI_DMA_ENABLED         true
+@@ -533,10 +533,10 @@ struct stm_response {
+ 
+ /* The following macros are intended to be called with the stm IRQ handlers */
+ /* only and refer to local variables in those functions. */
+-#define STM16_TO_HOST(x) ((short) be16_to_cpu( \
+-		*((u16 *) (stml0xx_readbuff+(x)))))
+-#define STM32_TO_HOST(x) ((short) be32_to_cpu( \
+-		*((u32 *) (stml0xx_readbuff+(x)))))
++#define STM16_TO_HOST(x, buf) ((short) be16_to_cpu( \
++		*((u16 *) (buf+(x)))))
++#define STM32_TO_HOST(x, buf) ((short) be32_to_cpu( \
++		*((u32 *) (buf+(x)))))
+ 
+ #define STML0XX_HALL_SOUTH 1
+ #define STML0XX_HALL_NORTH 2
+@@ -580,9 +580,7 @@ struct stml0xx_platform_data {
+ };
+ 
+ struct stml0xx_data {
+-	struct spi_device *spi;
+ 	struct stml0xx_platform_data *pdata;
+-	/* to avoid two spi communications at the same time */
+ 	struct mutex lock;
+ 	struct work_struct clear_interrupt_status_work;
+ 	struct work_struct initialize_work;
+@@ -598,7 +596,9 @@ struct stml0xx_data {
+ 
+ 	int hw_initialized;
+ 
+-	/* SPI DMA */
++	/* SPI */
++	struct spi_device *spi;
++	struct mutex spi_lock;
+ 	bool spi_dma_enabled;
+ 	unsigned char *spi_tx_buf;
+ 	unsigned char *spi_rx_buf;
+@@ -678,7 +678,7 @@ void stml0xx_irq_wake_work_func(struct work_struct *work);
+ 
+ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+ 
+-void stml0xx_reset(struct stml0xx_platform_data *pdata, unsigned char *cmdbuff);
++void stml0xx_reset(struct stml0xx_platform_data *pdata);
+ void stml0xx_initialize_work_func(struct work_struct *work);
+ 
+ 
+@@ -762,8 +762,9 @@ extern unsigned char stml0xx_g_mag_cal[STML0XX_MAG_CAL_SIZE];
+ extern unsigned short stml0xx_g_control_reg_restore;
+ extern bool stml0xx_g_booted;
+ 
+-extern unsigned char *stml0xx_cmdbuff;
+-extern unsigned char *stml0xx_readbuff;
++/* global buffers used exclusively in bootloader mode */
++extern unsigned char *stml0xx_boot_cmdbuff;
++extern unsigned char *stml0xx_boot_readbuff;
+ 
+ extern unsigned short stml0xx_spi_retry_delay;
+ 
+-- 
+2.11.0
+

@@ -1,0 +1,45 @@
+From e73878f66e4fbec848d3dfe0881b9eb42773b592 Mon Sep 17 00:00:00 2001
+From: mahj2 <mahj2@motorola.com>
+Date: Tue, 8 Mar 2016 12:49:38 +0800
+Subject: [PATCH 793/959] IKSWM-24098: fixed without charging,still shows
+ charging icon
+
+Fixed the issue that without charging cable, still shows charging
+icon. Insert Turbo charger and after 2 seconds and 3 seconds
+remove the Turbo charger, the phone will shows charging icon.
+
+Change-Id: If358fd35adb6fae378b7589404c69f95522ba289
+Signed-off-by: mahj2 <mahj2@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830195
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Huosheng Liao <liaohs@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 74a4b418406..992ddd0e1f5 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -4467,9 +4467,11 @@ static void smbchg_hvdcp_det_work(struct work_struct *work)
+ 				pr_err("couldn't 9V HVDCP continuing rc=%d\n",
+ 						rc);
+ 		}
+-		power_supply_set_supply_type(chip->usb_psy,
+-				POWER_SUPPLY_TYPE_USB_HVDCP);
+-		smbchg_aicl_deglitch_wa_check(chip);
++		if (is_usb_present(chip)) {
++			power_supply_set_supply_type(chip->usb_psy,
++					POWER_SUPPLY_TYPE_USB_HVDCP);
++			smbchg_aicl_deglitch_wa_check(chip);
++		}
+ 	}
+ 	smbchg_stay_awake(chip, PM_HEARTBEAT);
+ 	cancel_delayed_work(&chip->heartbeat_work);
+-- 
+2.11.0
+

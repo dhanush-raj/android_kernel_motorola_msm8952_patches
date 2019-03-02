@@ -1,0 +1,98 @@
+From 01609b0cac2cc300d21049b3fe417338a1a60470 Mon Sep 17 00:00:00 2001
+From: Jared Suttles <jsuttles@motorola.com>
+Date: Thu, 22 Jan 2015 16:01:15 -0600
+Subject: [PATCH 169/959] IKKRNBSP-3414 msm: mdss: recover a dead panel on
+ unblank
+
+If the panel is found to be dead after turning it on, execute dead panel
+recovery immediately instead of waiting for check_status to do it later.
+
+Port of 6bfb091 from 8996.
+
+Change-Id: Iff50264f9de48afeae5a6cd16eab6c234defb2d5
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/785878
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_panel.c |  8 +++++++-
+ drivers/video/msm/mdss/mdss_fb.c        | 17 +++++++++++++++--
+ 2 files changed, 22 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index 68609cd24b8..76c4f94857f 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -824,9 +824,15 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
+ 		mdss_dba_utils_video_on(pinfo->dba_data, pinfo);
+ 
+ 	mdss_dsi_get_pwr_mode(pdata, &pwr_mode, false);
+-	if (pinfo->disp_on_check_val != pwr_mode)
++	if (pinfo->disp_on_check_val != pwr_mode) {
+ 		pr_err("%s: Display failure: read = 0x%x, expected = 0x%x\n",
+ 			__func__, pwr_mode, pinfo->disp_on_check_val);
++
++		if (pdata->panel_info.panel_dead)
++			pr_err("%s: Panel recovery FAILED!!\n", __func__);
++
++		pdata->panel_info.panel_dead = true;
++	}
+ end:
+ 	if (!ctrl->ndx)
+ 		pr_info("%s[%d]-. Pwr_mode(0x0A) = 0x%x\n", __func__,
+diff --git a/drivers/video/msm/mdss/mdss_fb.c b/drivers/video/msm/mdss/mdss_fb.c
+index 18e93ead293..19a7fec7e7b 100644
+--- a/drivers/video/msm/mdss/mdss_fb.c
++++ b/drivers/video/msm/mdss/mdss_fb.c
+@@ -1580,6 +1580,7 @@ static int mdss_fb_blank_unblank(struct msm_fb_data_type *mfd)
+ 	}
+ 
+ 	if (mfd->mdp.on_fnc) {
++		int panel_dead = mfd->panel_info->panel_dead;
+ 		ret = mfd->mdp.on_fnc(mfd);
+ 		if (ret) {
+ 			mdss_fb_stop_disp_thread(mfd);
+@@ -1587,7 +1588,8 @@ static int mdss_fb_blank_unblank(struct msm_fb_data_type *mfd)
+ 		}
+ 
+ 		mfd->panel_power_state = MDSS_PANEL_POWER_ON;
+-		mfd->panel_info->panel_dead = false;
++		if (panel_dead)
++			mfd->panel_info->panel_dead = false;
+ 
+ 		/* Start the work thread to signal idle time */
+ 		if (mfd->idle_time)
+@@ -1732,6 +1734,7 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
+ 	int ret;
+ 	struct mdss_panel_data *pdata;
+ 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
++	int panel_dead = mfd->panel_info->panel_dead;
+ 
+ 	ret = mdss_fb_pan_idle(mfd);
+ 	if (ret) {
+@@ -1763,7 +1766,17 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
+ 		pdata->panel_info.is_lpm_mode = false;
+ 	}
+ 
+-	return mdss_fb_blank_sub(blank_mode, info, mfd->op_enable);
++	ret = mdss_fb_blank_sub(blank_mode, info, mfd->op_enable);
++
++	if (blank_mode == FB_BLANK_UNBLANK && !panel_dead &&
++		mfd->panel_info->panel_dead) {
++		pr_err("%s: Panel is dead, attempt recovery\n", __func__);
++		mdss_fb_blank_sub(FB_BLANK_POWERDOWN, info, 1);
++		usleep_range(225 * 1000, 225 * 1000);
++		mdss_fb_blank_sub(FB_BLANK_UNBLANK, info, 1);
++	}
++
++	return ret;
+ }
+ 
+ static inline int mdss_fb_create_ion_client(struct msm_fb_data_type *mfd)
+-- 
+2.11.0
+

@@ -1,0 +1,147 @@
+From fcad4a14479079930d9d7f2bc48bf1ebbb1fc766 Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Thu, 16 Jun 2016 17:02:06 -0500
+Subject: [PATCH 909/959] sys: set reboot triggered on real reboot
+
+Not all the reboot command will do a real reboot, and only
+RESTART, HALT and POWER_OFF need to set it. Set it for any
+other cmd will cause it wrongly set and can not reboot or
+shutdown anymore.
+
+Let's set the reboot_triggered in the kernel_[restart,halt
+,power_off] function, and remove the reboot_in_progress API.
+
+The atomic reboot_triggered variable need to be initialized
+also.
+
+Mot-CRs-fixed: IKSWM-45502
+Change-Id: Ifdbbbbfe3f9cb3ce7247a907759253f20b6c193d
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/868052
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Reviewed-by: Hong-Mei Li <a21834@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c |  2 +-
+ include/linux/reboot.h              |  1 -
+ kernel/sys.c                        | 33 ++++++++++++++++++++-------------
+ 3 files changed, 21 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index d0f9058ce7d..3983c08713a 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -4671,7 +4671,7 @@ static void handle_usb_removal(struct smbchg_chip *chip)
+ 	chip->hvdcp_det_done = false;
+ 
+ 	if (chip->factory_cable) {
+-		if (!factory_kill_disable && !reboot_in_progress()) {
++		if (!factory_kill_disable) {
+ 			pr_err("SMB - Factory Cable removed, power-off\n");
+ 			kernel_power_off();
+ 		} else
+diff --git a/include/linux/reboot.h b/include/linux/reboot.h
+index a5e18af6548..a883888bec9 100644
+--- a/include/linux/reboot.h
++++ b/include/linux/reboot.h
+@@ -42,7 +42,6 @@ extern void kernel_restart_prepare(char *cmd);
+ extern void kernel_restart(char *cmd);
+ extern void kernel_halt(void);
+ extern void kernel_power_off(void);
+-extern int reboot_in_progress(void);
+ 
+ extern int C_A_D; /* for sysctl */
+ void ctrl_alt_del(void);
+diff --git a/kernel/sys.c b/kernel/sys.c
+index 9bdfd5e241e..60eb8d9dee4 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -126,7 +126,7 @@ int C_A_D = 1;
+ struct pid *cad_pid;
+ EXPORT_SYMBOL(cad_pid);
+ 
+-atomic_t reboot_triggered;
++static atomic_t reboot_triggered = ATOMIC_INIT(0);
+ /*
+  * If set, this is used for preparing the system to power off.
+  */
+@@ -371,6 +371,16 @@ EXPORT_SYMBOL(unregister_reboot_notifier);
+ #define PF_NO_SETAFFINITY		PF_THREAD_BOUND
+ #endif
+ 
++static int reboot_in_progress(void)
++{
++	int ret = atomic_cmpxchg(&reboot_triggered, 0, 1);
++
++	if (ret)
++		pr_err("Reboot in progress\n");
++
++	return ret;
++}
++
+ static void migrate_to_reboot_cpu(void)
+ {
+ 	/* The boot cpu is always logical cpu 0 */
+@@ -399,6 +409,9 @@ static void migrate_to_reboot_cpu(void)
+  */
+ void kernel_restart(char *cmd)
+ {
++	if (reboot_in_progress())
++		return;
++
+ 	kernel_restart_prepare(cmd);
+ 	migrate_to_reboot_cpu();
+ 	syscore_shutdown();
+@@ -430,6 +443,9 @@ static void kernel_shutdown_prepare(enum system_states state)
+  */
+ void kernel_halt(void)
+ {
++	if (reboot_in_progress())
++		return;
++
+ 	kernel_shutdown_prepare(SYSTEM_HALT);
+ 	migrate_to_reboot_cpu();
+ 	syscore_shutdown();
+@@ -447,6 +463,9 @@ EXPORT_SYMBOL_GPL(kernel_halt);
+  */
+ void kernel_power_off(void)
+ {
++	if (reboot_in_progress())
++		return;
++
+ 	kernel_shutdown_prepare(SYSTEM_POWER_OFF);
+ 	if (pm_power_off_prepare)
+ 		pm_power_off_prepare();
+@@ -462,12 +481,6 @@ void kernel_power_off(void)
+ }
+ EXPORT_SYMBOL_GPL(kernel_power_off);
+ 
+-int reboot_in_progress(void)
+-{
+-	return atomic_cmpxchg(&reboot_triggered, 0, 1);
+-}
+-EXPORT_SYMBOL_GPL(reboot_in_progress);
+-
+ static DEFINE_MUTEX(reboot_mutex);
+ 
+ /*
+@@ -506,12 +519,6 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
+ 	if (ret)
+ 		return ret;
+ 
+-	/* return if reboot is already triggered */
+-	if (atomic_cmpxchg(&reboot_triggered, 0, 1)) {
+-		pr_err("Reboot already triggered\n");
+-		return ret;
+-	}
+-
+ 	/* Instead of trying to make the power_off code look like
+ 	 * halt when pm_power_off is not set do it the easy way.
+ 	 */
+-- 
+2.11.0
+

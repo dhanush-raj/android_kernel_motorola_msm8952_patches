@@ -1,0 +1,53 @@
+From d8808890f951255fe70a73dd459501fc308a2b55 Mon Sep 17 00:00:00 2001
+From: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Date: Thu, 28 Feb 2013 13:29:23 -0600
+Subject: [PATCH 005/959] IKKRNBSP-1406 vermagic: don't include SCM information
+ in version string
+
+With the aim of producing consistent kernel module binaries across build
+systems, strip the SCM information out of the version string used when
+building and loading kenrel modules.
+
+Change-Id: Idc77b9a7424734e84fb3be05a36a536984b86e11
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/521679
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <qcf001@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+(cherry picked from commit 24d4161ce981f53d1605b3ac0ec13ddfc436d10c)
+(cherry picked from commit 67679727fb441d07c188ccdbdb7656cd5fe30200)
+---
+ Makefile                 | 3 ++-
+ include/linux/vermagic.h | 2 +-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 9e441e18a08..35d5e30564e 100644
+--- a/Makefile
++++ b/Makefile
+@@ -884,7 +884,8 @@ define filechk_utsrelease.h
+ 	  echo '"$(KERNELRELEASE)" exceeds $(uts_len) characters' >&2;    \
+ 	  exit 1;                                                         \
+ 	fi;                                                               \
+-	(echo \#define UTS_RELEASE \"$(KERNELRELEASE)\";)
++	(echo \#define UTS_RELEASE \"$(KERNELRELEASE)\";                  \
++	echo \#define SHORT_UTS_RELEASE \"$(KERNELVERSION)$(CONFIG_LOCALVERSION)\";)
+ endef
+ 
+ define filechk_version.h
+diff --git a/include/linux/vermagic.h b/include/linux/vermagic.h
+index 6f8fbcf10df..b8fd0ebb220 100644
+--- a/include/linux/vermagic.h
++++ b/include/linux/vermagic.h
+@@ -26,7 +26,7 @@
+ #endif
+ 
+ #define VERMAGIC_STRING 						\
+-	UTS_RELEASE " "							\
++	SHORT_UTS_RELEASE " "						\
+ 	MODULE_VERMAGIC_SMP MODULE_VERMAGIC_PREEMPT 			\
+ 	MODULE_VERMAGIC_MODULE_UNLOAD MODULE_VERMAGIC_MODVERSIONS	\
+ 	MODULE_ARCH_VERMAGIC
+-- 
+2.11.0
+

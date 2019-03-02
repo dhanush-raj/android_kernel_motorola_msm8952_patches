@@ -1,0 +1,121 @@
+From 4b8ad9b775c6d6611f0fde9b7602213de266aad1 Mon Sep 17 00:00:00 2001
+From: Binesh B <binesh@motorola.com>
+Date: Fri, 8 Apr 2016 15:40:56 -0500
+Subject: [PATCH 850/959] IKSWM-20902 wcnss: programming of region specific nv
+ for wlan
+
+Allow the wcnss driver to be programmed with region specific
+nv based on the ro.carrier settings. The user space service
+performs the actual programming.
+
+Change-Id: I80914a4d4515e4b82eb5baf69b88649f02b475a1
+Signed-off-by: Thai Leav <w18918@motorola.com>
+Reviewed-on: http://gerrit.mot.com/842801
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/net/wireless/wcnss/wcnss_wlan.c | 32 ++++++++++++++++++++++++++++++++
+ include/linux/wcnss_wlan.h              |  2 ++
+ 2 files changed, 34 insertions(+)
+
+diff --git a/drivers/net/wireless/wcnss/wcnss_wlan.c b/drivers/net/wireless/wcnss/wcnss_wlan.c
+index 13bbea9319f..0771ae0d3b5 100644
+--- a/drivers/net/wireless/wcnss/wcnss_wlan.c
++++ b/drivers/net/wireless/wcnss/wcnss_wlan.c
+@@ -186,6 +186,7 @@ static DEFINE_SPINLOCK(reg_spinlock);
+ #define WCNSS_USR_SERIAL_NUM      (WCNSS_USR_CTRL_MSG_START + 1)
+ #define WCNSS_USR_HAS_CAL_DATA    (WCNSS_USR_CTRL_MSG_START + 2)
+ #define WCNSS_USR_WLAN_MAC_ADDR   (WCNSS_USR_CTRL_MSG_START + 3)
++#define WCNSS_USR_WLAN_NV_NAME    (WCNSS_USR_CTRL_MSG_START + 4)
+ 
+ #define MAC_ADDRESS_STR "%02x:%02x:%02x:%02x:%02x:%02x"
+ 
+@@ -426,6 +427,7 @@ static struct {
+ 	int pc_disabled;
+ 	struct delayed_work wcnss_pm_qos_del_req;
+ 	struct mutex pm_qos_mutex;
++	char wcnss_nv_name[WLAN_NV_NAME_SIZE];
+ } *penv = NULL;
+ 
+ static ssize_t wcnss_wlan_macaddr_store(struct device *dev,
+@@ -2606,10 +2608,25 @@ static int wcnss_ctrl_open(struct inode *inode, struct file *file)
+ 	return rc;
+ }
+ 
++int wcnss_get_wlan_nv_name(char *nv_name)
++{
++	if (!penv)
++		return -ENODEV;
++	if (penv->wcnss_nv_name[0] != 0) {
++		memcpy(nv_name, penv->wcnss_nv_name, WLAN_NV_NAME_SIZE);
++		pr_debug("%s: Get NV name: %s" "\n", __func__,
++			penv->wcnss_nv_name);
++		return 0;
++	}
++	pr_err("%s: No NV name\n", __func__);
++	return 1;
++}
++EXPORT_SYMBOL(wcnss_get_wlan_nv_name);
+ 
+ void process_usr_ctrl_cmd(u8 *buf, size_t len)
+ {
+ 	u16 cmd = buf[0] << 8 | buf[1];
++	s8 fname_length;
+ 
+ 	switch (cmd) {
+ 
+@@ -2638,6 +2655,20 @@ void process_usr_ctrl_cmd(u8 *buf, size_t len)
+ 			penv->wlan_nv_macAddr[2], penv->wlan_nv_macAddr[3],
+ 			penv->wlan_nv_macAddr[4], penv->wlan_nv_macAddr[5]);
+ 		break;
++	case WCNSS_USR_WLAN_NV_NAME:
++		fname_length = (buf[2] < WLAN_NV_NAME_SIZE) ?
++				buf[2]:WLAN_NV_NAME_SIZE-1;
++
++		if (fname_length < 0)
++			pr_debug("%s: Invalid filename length for filename %d\n",
++				 __func__, fname_length);
++		pr_debug("%s: fname length was %d",
++			 __func__, fname_length);
++		memcpy(penv->wcnss_nv_name, &buf[3], fname_length);
++		penv->wcnss_nv_name[WLAN_NV_NAME_SIZE-1] = 0;
++		pr_err("%s: user nv set to %s, fname length was %d",
++			__func__, penv->wcnss_nv_name, fname_length);
++		break;
+ 
+ 	default:
+ 		pr_err("%s: Invalid command %d\n", __func__, cmd);
+@@ -3474,6 +3505,7 @@ wcnss_wlan_probe(struct platform_device *pdev)
+ 		return -ENOMEM;
+ 	}
+ 	penv->pdev = pdev;
++	penv->wcnss_nv_name[0] = 0;
+ 
+ 	penv->user_cal_data =
+ 		devm_kzalloc(&pdev->dev, MAX_CALIBRATED_DATA_SIZE, GFP_KERNEL);
+diff --git a/include/linux/wcnss_wlan.h b/include/linux/wcnss_wlan.h
+index 64892605bb7..40f90c6b693 100644
+--- a/include/linux/wcnss_wlan.h
++++ b/include/linux/wcnss_wlan.h
+@@ -90,6 +90,7 @@ enum {
+ #define WLAN_RF_DATA2_SHIFT		2
+ #define PRONTO_PMU_OFFSET       0x1004
+ #define WCNSS_PMU_CFG_GC_BUS_MUX_SEL_TOP   BIT(5)
++#define WLAN_NV_NAME_SIZE  50
+ 
+ struct device *wcnss_wlan_get_device(void);
+ void wcnss_get_monotonic_boottime(struct timespec *ts);
+@@ -115,6 +116,7 @@ int wcnss_req_power_on_lock(char *driver_name);
+ int wcnss_free_power_on_lock(char *driver_name);
+ unsigned int wcnss_get_serial_number(void);
+ int wcnss_get_wlan_mac_address(char mac_addr[WLAN_MAC_ADDR_SIZE]);
++int wcnss_get_wlan_nv_name(char nv_name[WLAN_NV_NAME_SIZE]);
+ void wcnss_allow_suspend(void);
+ void wcnss_prevent_suspend(void);
+ int wcnss_hardware_type(void);
+-- 
+2.11.0
+

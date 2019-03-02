@@ -1,0 +1,42 @@
+From 286404c173e508b4bad85d5e179609aa8cb5275e Mon Sep 17 00:00:00 2001
+From: mahj2 <mahj2@motorola.com>
+Date: Thu, 3 Mar 2016 15:40:23 +0800
+Subject: [PATCH 728/959] IKSWM-17204: fix qpnp_fg_cap_learning wake lock no
+ release
+
+The phone is charged from capacity below 15% to 100%
+in low or high temperature environment.The fg will run
+fg_cap_learning_work and when temp of battery out of
+range [15,45], it will go to fail and no release wake lock.
+So add release wake lock before return.
+
+Change-Id: Ib0bb12f89a314a75ba7a72ae64ef9425b87e3f65
+Signed-off-by: mahj2 <mahj2@motorola.com>
+Reviewed-on: http://gerrit.mot.com/828695
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jian-Jun Fan <stevenfan@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-fg.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/power/qpnp-fg.c b/drivers/power/qpnp-fg.c
+index a7e0ed87c80..f4fb38e21ba 100644
+--- a/drivers/power/qpnp-fg.c
++++ b/drivers/power/qpnp-fg.c
+@@ -3368,6 +3368,8 @@ fail:
+ 	if (chip->wa_flag & USE_CC_SOC_REG)
+ 		fg_relax(&chip->capacity_learning_wakeup_source);
+ 	mutex_unlock(&chip->learning_data.learning_lock);
++	if (chip->wa_flag & USE_CC_SOC_REG)
++		fg_relax(&chip->capacity_learning_wakeup_source);
+ 	return;
+ 
+ }
+-- 
+2.11.0
+

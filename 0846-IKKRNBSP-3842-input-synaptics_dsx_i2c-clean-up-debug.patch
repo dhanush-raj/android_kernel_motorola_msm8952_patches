@@ -1,0 +1,36 @@
+From c1fe5130fcd9b5334157ffbbc7d13037231a25b9 Mon Sep 17 00:00:00 2001
+From: Alexander Filonenko <alexf@motorola.com>
+Date: Fri, 8 Apr 2016 17:16:18 -0500
+Subject: [PATCH 846/959] IKKRNBSP-3842 input: synaptics_dsx_i2c: clean up
+ debug output
+
+Clean up debug output from touch driver.
+
+Change-Id: I87d1b54b660b197794f6cf182300e170f9e4bd74
+Signed-off-by: Alexander Filonenko <alexf@motorola.com>
+Reviewed-on: http://gerrit.mot.com/842894
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/touchscreen/synaptics_dsx_i2c.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.c b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+index f38f37fc84b..01031b6f703 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.c
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+@@ -7279,7 +7279,7 @@ static int fps_notifier_callback(struct notifier_block *self,
+ 			rmi4_data->clipa = NULL;
+ 			cm->effective = false;
+ 		}
+-		pr_info("FPS: clipping is %s\n",
++		dev_dbg(&rmi4_data->i2c_client->dev, "FPS: clipping is %s\n",
+ 			rmi4_data->clipping_on ? "ON" : "OFF");
+ 	}
+ done:
+-- 
+2.11.0
+

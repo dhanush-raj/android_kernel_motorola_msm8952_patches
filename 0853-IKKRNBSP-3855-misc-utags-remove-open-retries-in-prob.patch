@@ -1,0 +1,102 @@
+From a94951b029ca534b60f14f419301f16d8827f69a Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Thu, 14 Apr 2016 07:08:45 -0500
+Subject: [PATCH 853/959] IKKRNBSP-3855 misc: utags: remove open retries in
+ probe
+
+Block device is not available in 90% of cases by the time probe
+runs. Deferrals also do not help to wait for it. Log process name
+and pid for open requests.
+
+Change-Id: I6567737e714055a988919b0c5d6e32d39f4d1492
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/844461
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Konstantin Makariev <kmakariev@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/utag/utags.c | 23 ++++-------------------
+ 1 file changed, 4 insertions(+), 19 deletions(-)
+
+diff --git a/drivers/misc/utag/utags.c b/drivers/misc/utag/utags.c
+index 9d7ac85089b..f9c50dfbdca 100644
+--- a/drivers/misc/utag/utags.c
++++ b/drivers/misc/utag/utags.c
+@@ -33,6 +33,7 @@
+ #include <linux/vmalloc.h>
+ #include <linux/of.h>
+ #include <linux/mutex.h>
++#include <linux/sched.h>
+ 
+ #define MAX_UTAG_SIZE 1024
+ #define MAX_UTAG_NAME 32
+@@ -41,7 +42,6 @@
+ #define UTAG_TAIL  "__UTAG_TAIL__"
+ #define ROUNDUP(a, b) (((a) + ((b)-1)) & ~((b)-1))
+ #define TO_SECT_SIZE(n)     (((n) + 511) & ~511)
+-#define UTAGS_MAX_DEFERRALS 5
+ #define DRVNAME "utags"
+ #define DEFAULT_ROOT "config"
+ #define HW_ROOT "hw"
+@@ -332,7 +332,8 @@ static int open_utags(struct blkdev *cb)
+ 	}
+ 
+ 	cb->size = i_size_read(inode->i_bdev->bd_inode);
+-	pr_debug("opening (%s) success\n", cb->name);
++	pr_info("[%s] (pid %i) open (%s) success\n",
++		current->comm, current->pid, cb->name);
+ 	return 0;
+ }
+ 
+@@ -1703,7 +1704,7 @@ static int utags_dt_init(struct platform_device *pdev)
+ 	rc = of_property_read_string(node, "mmi,backup-utags",
+ 		&ctrl->backup.name);
+ 	if (rc)
+-		pr_err("backup storage path not provided\n");
++		pr_debug("backup storage path not provided\n");
+ 
+ 	ctrl->dir_name = DEFAULT_ROOT;
+ 	rc = of_property_read_string(node, "mmi,dir-name", &ctrl->dir_name);
+@@ -1750,7 +1751,6 @@ static void clear_utags_directory(struct ctrl *ctrl)
+ static int utags_probe(struct platform_device *pdev)
+ {
+ 	int rc;
+-	static int retry;
+ 	struct ctrl *ctrl;
+ 
+ 	ctrl = devm_kzalloc(&pdev->dev, sizeof(struct ctrl), GFP_KERNEL);
+@@ -1768,17 +1768,6 @@ static int utags_probe(struct platform_device *pdev)
+ 	if (rc)
+ 		return -EIO;
+ 
+-	rc = open_utags(&ctrl->main);
+-	if ((rc == -ENOENT) && (++retry < UTAGS_MAX_DEFERRALS))
+-		return -EPROBE_DEFER;
+-	else if (rc)
+-		pr_debug("failed to open, try reload later\n");
+-
+-	if (!ctrl->backup.name)
+-		pr_debug("backup storage path not provided\n");
+-	else
+-		open_utags(&ctrl->backup);
+-
+ 	ctrl->root = proc_mkdir(ctrl->dir_name, NULL);
+ 	if (!ctrl->root) {
+ 		pr_err("Failed to create dir entry\n");
+@@ -1788,10 +1777,6 @@ static int utags_probe(struct platform_device *pdev)
+ 	if (!strncmp(ctrl->dir_name, HW_ROOT, sizeof(HW_ROOT)))
+ 		ctrl->hwtag = 1;
+ 
+-	/* if we were able to open file descriptor, build utags */
+-	if (ctrl->main.filep)
+-		rebuild_utags_directory(ctrl);
+-
+ 	if (!proc_create_data("reload", 0600, ctrl->root, &reload_fops, ctrl)) {
+ 		pr_err("Failed to create reload entry\n");
+ 		remove_proc_subtree(ctrl->dir_name, NULL);
+-- 
+2.11.0
+

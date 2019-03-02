@@ -1,0 +1,38 @@
+From d4ee37303e4458cd83172d4da8554876d1f21e68 Mon Sep 17 00:00:00 2001
+From: Ashay Jaiswal <ashayj@codeaurora.org>
+Date: Wed, 17 Jun 2015 12:09:22 +0530
+Subject: [PATCH 298/959] power: qpnp-smbcharger-mmi: fix aicl level reporting
+ logic
+
+smbchg_get_aicl_level_ma function can never report AICL_SUSPEND
+status as the status bit is reset before AICL_SUSPEND check.
+Fix this by checking AICL_SUSPEND bit status before resetting the
+bit.
+
+CRs-Fixed: 851902
+Change-Id: I8bb9bf60ab13a0665ce4e178ebf25d6d384b9d7a
+Signed-off-by: Ashay Jaiswal <ashayj@codeaurora.org>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 92f4f1edbbd..fb718aa777f 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -2095,11 +2095,11 @@ static int smbchg_get_aicl_level_ma(struct smbchg_chip *chip)
+ 		dev_err(chip->dev, "Could not read usb icl sts 1: %d\n", rc);
+ 		return 0;
+ 	}
+-	reg &= ICL_STS_MASK;
+ 	if (reg & AICL_SUSP_BIT) {
+ 		pr_warn("AICL suspended: %02x\n", reg);
+ 		return 0;
+ 	}
++	reg &= ICL_STS_MASK;
+ 	if (reg >= ARRAY_SIZE(usb_current_table)) {
+ 		pr_warn("invalid AICL value: %02x\n", reg);
+ 		return 0;
+-- 
+2.11.0
+

@@ -1,0 +1,77 @@
+From 5fa7a1dbb24afae71cbb3e131277954f3d7689c0 Mon Sep 17 00:00:00 2001
+From: "Russ W. Knize" <Russ.Knize@motorola.com>
+Date: Thu, 21 May 2015 08:44:10 -0500
+Subject: [PATCH 689/959] IKSWL-17375: exfat: don't lookup dos name entries for
+ exfat
+
+From upstream: https://github.com/dorimanx/exfat-nofuse
+
+We can't use get_uni_name_from_dos_entry() on EXFAT because later in
+nls_dosname_to_uniname() we'd access the EXFAT_SB(sb)->nls_disk which is only
+valid for FAT16/32 filesystems, and finally in convert_ch_to_uni()
+nls->char2uni() throws a null pointer exception.
+
+Change-Id: Ie17188c8dd8367b25f3117368270c96a454c76ca
+Signed-off-by: Russ Knize <Russ.Knize@motorola.com>
+Reviewed-on: http://gerrit.mot.com/756880
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ fs/exfat/Makefile      | 1 -
+ fs/exfat/exfat_core.c  | 4 ++--
+ fs/exfat/exfat_super.c | 2 +-
+ 3 files changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/fs/exfat/Makefile b/fs/exfat/Makefile
+index 24e36542d89..fb2be9dc5a9 100644
+--- a/fs/exfat/Makefile
++++ b/fs/exfat/Makefile
+@@ -28,7 +28,6 @@ KDIR	:= /lib/modules/$(shell uname -r)/build
+ MDIR	:= /lib/modules/$(shell uname -r)
+ PWD	:= $(shell pwd)
+ KREL	:= $(shell cd ${KDIR} && make -s kernelrelease)
+-MDIR	:= /lib/modules/${KREL}
+ PWD	:= $(shell pwd)
+ 
+ export CONFIG_EXFAT_FS := m
+diff --git a/fs/exfat/exfat_core.c b/fs/exfat/exfat_core.c
+index f6ea43e89e1..d48514189f5 100644
+--- a/fs/exfat/exfat_core.c
++++ b/fs/exfat/exfat_core.c
+@@ -1171,7 +1171,7 @@ s32 ffsGetStat(struct inode *inode, DIR_ENTRY_T *info)
+ 	/* XXX this is very bad for exfat cuz name is already included in es.
+ 	 API should be revised */
+ 	p_fs->fs_func->get_uni_name_from_ext_entry(sb, &(fid->dir), fid->entry, uni_name.name);
+-	if (*(uni_name.name) == 0x0)
++	if (*(uni_name.name) == 0x0 && p_fs->vol_type != EXFAT)
+ 		get_uni_name_from_dos_entry(sb, (DOS_DENTRY_T *) ep, &uni_name, 0x1);
+ 	nls_uniname_to_cstring(sb, info->Name, &uni_name);
+ 
+@@ -1556,7 +1556,7 @@ s32 ffsReadDir(struct inode *inode, DIR_ENTRY_T *dir_entry)
+ 
+ 			*(uni_name.name) = 0x0;
+ 			p_fs->fs_func->get_uni_name_from_ext_entry(sb, &dir, dentry, uni_name.name);
+-			if (*(uni_name.name) == 0x0)
++			if (*(uni_name.name) == 0x0 && p_fs->vol_type != EXFAT)
+ 				get_uni_name_from_dos_entry(sb, (DOS_DENTRY_T *) ep, &uni_name, 0x1);
+ 			nls_uniname_to_cstring(sb, dir_entry->Name, &uni_name);
+ 			buf_unlock(sb, sector);
+diff --git a/fs/exfat/exfat_super.c b/fs/exfat/exfat_super.c
+index a8283fab030..68b2f5eeebd 100644
+--- a/fs/exfat/exfat_super.c
++++ b/fs/exfat/exfat_super.c
+@@ -386,7 +386,7 @@ static int exfat_cmpi(const struct dentry *parent, const struct inode *pinode,
+ 	blen = __exfat_striptail_len(len, str);
+ 	if (alen == blen) {
+ 		if (t == NULL) {
+-			if (strnicmp(name->name, str, alen) == 0)
++			if (strncasecmp(name->name, str, alen) == 0)
+ 				return 0;
+ 		} else if (nls_strnicmp(t, name->name, str, alen) == 0)
+ 			return 0;
+-- 
+2.11.0
+

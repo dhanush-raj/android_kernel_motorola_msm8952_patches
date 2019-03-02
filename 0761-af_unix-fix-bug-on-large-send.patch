@@ -1,0 +1,47 @@
+From 3424ba2a735b61e0fa6d6e6a6595450da47d3ed2 Mon Sep 17 00:00:00 2001
+From: Eric Dumazet <edumazet@google.com>
+Date: Sun, 11 Aug 2013 21:54:48 -0700
+Subject: [PATCH 761/959] af_unix: fix bug on large send()
+
+commit e370a723632 ("af_unix: improve STREAM behavior with fragmented
+memory") added a bug on large send() because the
+skb_copy_datagram_from_iovec() call always start from the beginning
+of iovec.
+
+We must instead use the @sent variable to properly skip the
+already processed part.
+
+Reported-by: Hannes Frederic Sowa <hannes@stressinduktion.org>
+Signed-off-by: Eric Dumazet <edumazet@google.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+(cherry picked from commit f3dfd20860db3d0c400dd83a378176a28d3662db)
+Change-Id: Id745ad1d3b43a854f4feef341db8e7c7f72dc68a
+Reviewed-on: http://gerrit.mot.com/750525
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830371
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ net/unix/af_unix.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/net/unix/af_unix.c b/net/unix/af_unix.c
+index 4bae16cf343..231b8167c65 100644
+--- a/net/unix/af_unix.c
++++ b/net/unix/af_unix.c
+@@ -1834,7 +1834,8 @@ static int unix_stream_sendmsg(struct kiocb *kiocb, struct socket *sock,
+ 		skb_put(skb, size - data_len);
+ 		skb->data_len = data_len;
+ 		skb->len = size;
+-		err = skb_copy_datagram_from_iovec(skb, 0, msg->msg_iov, 0, size);
++		err = skb_copy_datagram_from_iovec(skb, 0, msg->msg_iov,
++						   sent, size);
+ 		if (err) {
+ 			kfree_skb(skb);
+ 			goto out_err;
+-- 
+2.11.0
+

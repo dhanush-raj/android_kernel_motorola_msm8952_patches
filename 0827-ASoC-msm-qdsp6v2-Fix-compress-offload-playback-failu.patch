@@ -1,0 +1,62 @@
+From 96deb3b8730b5d29bfbbe850e681f187a0682b55 Mon Sep 17 00:00:00 2001
+From: Venkata Narendra Kumar Gutta <vgutta@codeaurora.org>
+Date: Thu, 24 Mar 2016 14:53:36 -0500
+Subject: [PATCH 827/959] ASoC: msm: qdsp6v2: Fix compress offload playback
+ failures during SSR
+
+Compress offload playback failures observed if SSR is triggered
+during playback. Compress_write is blocked as there are no bytes
+consumed by the DSP. During SSR, based on the reset events,
+driver has to update the bytes copied by the DSP so that write
+gets unblocked.
+
+CRs-Fixed: 966659
+
+Change-Id: I6c8822916666456aa34ede32aca18aa2a90006aa
+Signed-off-by: Rajasekhar Goparaju <chb764@motorola.com>
+Mot-CRs-fixed: IKSWM-26086: WDT reset in sound driver after adsp fatal error
+Reviewed-on: http://gerrit.mot.com/837519
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/msm/qdsp6v2/msm-compress-q6-v2.c | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/sound/soc/msm/qdsp6v2/msm-compress-q6-v2.c b/sound/soc/msm/qdsp6v2/msm-compress-q6-v2.c
+index c1da2b78e0b..baa9e0f0516 100644
+--- a/sound/soc/msm/qdsp6v2/msm-compress-q6-v2.c
++++ b/sound/soc/msm/qdsp6v2/msm-compress-q6-v2.c
+@@ -611,8 +611,12 @@ static void compr_event_handler(uint32_t opcode,
+ 		pr_err("%s: Received reset events CB, move to error state",
+ 			__func__);
+ 		spin_lock_irqsave(&prtd->lock, flags);
+-		snd_compr_fragment_elapsed(cstream);
++		/*
++		 * Since ADSP is down, let this driver pretend that it copied
++		 * all the bytes received, so that next write will be triggered
++		 */
+ 		prtd->copied_total = prtd->bytes_received;
++		snd_compr_fragment_elapsed(cstream);
+ 		atomic_set(&prtd->error, 1);
+ 		wake_up(&prtd->drain_wait);
+ 		if (atomic_cmpxchg(&prtd->eos, 1, 0)) {
+@@ -1957,8 +1961,12 @@ static int msm_compr_pointer(struct snd_compr_stream *cstream,
+ 	tstamp.copied_total = prtd->copied_total;
+ 	first_buffer = prtd->first_buffer;
+ 	if (atomic_read(&prtd->error)) {
+-		pr_err("%s Got RESET EVENTS notification, return error",
++		pr_err("%s Got RESET EVENTS notification, return error\n",
+ 			__func__);
++		if (cstream->direction == SND_COMPRESS_PLAYBACK)
++			runtime->total_bytes_transferred = tstamp.copied_total;
++		else
++			runtime->total_bytes_available = tstamp.copied_total;
+ 		tstamp.pcm_io_frames = 0;
+ 		memcpy(arg, &tstamp, sizeof(struct snd_compr_tstamp));
+ 		spin_unlock_irqrestore(&prtd->lock, flags);
+-- 
+2.11.0
+

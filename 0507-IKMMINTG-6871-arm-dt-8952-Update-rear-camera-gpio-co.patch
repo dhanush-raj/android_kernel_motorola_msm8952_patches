@@ -1,0 +1,76 @@
+From b1f7aaa8a9df30ecbc878f908f91eb856ce4dc8e Mon Sep 17 00:00:00 2001
+From: Sumit Jamadar <xkbr38@motorola.com>
+Date: Mon, 23 Nov 2015 11:47:59 -0600
+Subject: [PATCH 507/959] IKMMINTG-6871: arm/dt: 8952: Update rear camera gpio
+ config
+
+Updating gpio pad configs for rear camera.
+
+Change-Id: Icd56a2b9e9c6e8b6f2da535173a32f05c0efa2b1
+Signed-off-by: Sumit Jamadar <xkbr38@motorola.com>
+Reviewed-on: http://gerrit.mot.com/802292
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Satya Prasad Kottisa <fvgm76@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ .../boot/dts/qcom/msm8952-camera-sensor-moto.dtsi  | 32 ++++++++++++++++++++--
+ 1 file changed, 30 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi b/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
+index 68673091e77..576e2a3c25e 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-camera-sensor-moto.dtsi
+@@ -112,9 +112,37 @@
+ 
+ &soc {
+ 	tlmm_pinmux: pinctrl@1000000 {
++		/delete-node/ cam_sensor_rear_default;
++		/delete-node/ cam_sensor_rear_sleep;
++
++		cam_sensor_rear_default {
++			/* VDIG, RESET */
++			qcom,pins = <&gp 113>, <&gp 36>;
++			qcom,num-grp-pins = <2>;
++			qcom,pin-func = <0 0>;
++			label = "cam_sensor_rear_default";
++			/* active state */
++			cam_sensor_rear_default: cam_sensor_rear_default {
++				drive-strength = <2>; /* 2 MA */
++				bias-disable; /* No PULL */
++			};
++		};
++
++		cam_sensor_rear_sleep {
++			/* VDIG, RESET */
++			qcom,pins = <&gp 113>, <&gp 36>;
++			qcom,num-grp-pins = <2>;
++			qcom,pin-func = <0 0>;
++			label = "cam_sensor_rear_sleep";
++			/* active state */
++			cam_sensor_rear_sleep: cam_sensor_rear_sleep {
++				drive-strength = <2>; /* 2 MA */
++				bias-disable; /* No PULL */
++			};
++		};
+ 
+ 		cam_sensor_front1_default {
+-			/* RESET, STANDBY */
++			/* RESET */
+ 			qcom,pins = <&gp 40>;
+ 			qcom,num-grp-pins = <1>;
+ 			label = "cam_sensor_front1_default";
+@@ -126,7 +154,7 @@
+ 		};
+ 
+ 		cam_sensor_front1_sleep {
+-			/* RESET, STANDBY */
++			/* RESET */
+ 			qcom,pins = <&gp 40>;
+ 			qcom,num-grp-pins = <1>;
+ 			label = "cam_sensor_front1_sleep";
+-- 
+2.11.0
+

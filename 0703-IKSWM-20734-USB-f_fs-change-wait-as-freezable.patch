@@ -1,0 +1,44 @@
+From c7aedf49f3ae4883bb447bd5b321fecdd3cc8088 Mon Sep 17 00:00:00 2001
+From: Xuehui Ye <yexh1@motorola.com>
+Date: Wed, 24 Feb 2016 11:04:48 +0800
+Subject: [PATCH 703/959] IKSWM-20734 USB: f_fs: change wait as freezable
+
+Change task to wait on wait_event_freezable so that
+it does not need to return a error on every suspend time.
+
+Change-Id: Ib21d3315288cd16c77f5bc666dd78bb6f999aef1
+Signed-off-by: Xuehui Ye <yexh1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/825257
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/usb/gadget/f_fs.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/usb/gadget/f_fs.c b/drivers/usb/gadget/f_fs.c
+index e158b2a4a41..a8c64d57d38 100644
+--- a/drivers/usb/gadget/f_fs.c
++++ b/drivers/usb/gadget/f_fs.c
+@@ -22,6 +22,7 @@
+ #include <linux/pagemap.h>
+ #include <linux/export.h>
+ #include <linux/hid.h>
++#include <linux/freezer.h>
+ #include <asm/unaligned.h>
+ 
+ #include <linux/usb/composite.h>
+@@ -821,7 +822,7 @@ first_try:
+ 			 * and wait for next epfile open to happen
+ 			 */
+ 			if (!atomic_read(&epfile->error)) {
+-				ret = wait_event_interruptible(epfile->wait,
++				ret = wait_event_freezable(epfile->wait,
+ 					(ep = epfile->ep));
+ 				if (ret < 0)
+ 					goto error;
+-- 
+2.11.0
+

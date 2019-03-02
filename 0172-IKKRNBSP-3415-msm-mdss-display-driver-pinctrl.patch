@@ -1,0 +1,127 @@
+From cfc65940c6c6ed3442bd2c9b8ea9645f34104192 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Tue, 17 Jun 2014 14:13:36 -0500
+Subject: [PATCH 172/959] IKKRNBSP-3415 msm: mdss: display driver pinctrl
+
+Application of the pinctrl state should be done right
+before gpio_request and after gpio_free for the affected
+pin group. It is better to put this calls in the function
+that does all gpio handling.
+
+Port of b03f742 from 8996.
+
+Change-Id: Ic89b002a295851fe6a234a897a98a0ad2aa1ccb4
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/786045
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi.c       | 13 +------------
+ drivers/video/msm/mdss/mdss_dsi.h       |  3 +++
+ drivers/video/msm/mdss/mdss_dsi_panel.c | 12 +++++++++++-
+ 3 files changed, 15 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi.c b/drivers/video/msm/mdss/mdss_dsi.c
+index 7a0e02ea9f8..25886ce7e8d 100644
+--- a/drivers/video/msm/mdss/mdss_dsi.c
++++ b/drivers/video/msm/mdss/mdss_dsi.c
+@@ -91,9 +91,6 @@ static void mdss_dsi_pm_qos_update_request(int val)
+ 	pm_qos_update_request(&mdss_dsi_pm_qos_request, val);
+ }
+ 
+-static int mdss_dsi_pinctrl_set_state(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
+-					bool active);
+-
+ static struct mdss_dsi_ctrl_pdata *mdss_dsi_get_ctrl(u32 ctrl_id)
+ {
+ 	if (ctrl_id >= DSI_CTRL_MAX || !mdss_dsi_res)
+@@ -280,9 +277,6 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
+ 		ret = 0;
+ 	}
+ 
+-	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
+-		pr_debug("reset disable: pinctrl not enabled\n");
+-
+ 	ret = msm_dss_enable_vreg(
+ 		ctrl_pdata->panel_power_data.vreg_config,
+ 		ctrl_pdata->panel_power_data.num_vreg, 0);
+@@ -324,9 +318,6 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
+ 	 */
+ 	if (pdata->panel_info.cont_splash_enabled ||
+ 		!pdata->panel_info.mipi.lp11_init) {
+-		if (mdss_dsi_pinctrl_set_state(ctrl_pdata, true))
+-			pr_debug("reset enable: pinctrl not enabled\n");
+-
+ 		ret = mdss_dsi_panel_reset(pdata, 1);
+ 		if (ret)
+ 			pr_err("%s: Panel reset failed. rc=%d\n",
+@@ -1344,8 +1335,6 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
+ 	 * data lanes for LP11 init
+ 	 */
+ 	if (mipi->lp11_init) {
+-		if (mdss_dsi_pinctrl_set_state(ctrl_pdata, true))
+-			pr_debug("reset enable: pinctrl not enabled\n");
+ 		mdss_dsi_panel_reset(pdata, 1);
+ 	}
+ 
+@@ -1369,7 +1358,7 @@ end:
+ 	return ret;
+ }
+ 
+-static int mdss_dsi_pinctrl_set_state(
++int mdss_dsi_pinctrl_set_state(
+ 	struct mdss_dsi_ctrl_pdata *ctrl_pdata,
+ 	bool active)
+ {
+diff --git a/drivers/video/msm/mdss/mdss_dsi.h b/drivers/video/msm/mdss/mdss_dsi.h
+index 18502881ee1..62bef74038a 100644
+--- a/drivers/video/msm/mdss/mdss_dsi.h
++++ b/drivers/video/msm/mdss/mdss_dsi.h
+@@ -609,6 +609,9 @@ int mdss_dsi_panel_ioctl_handler(struct mdss_panel_data *pdata,
+ 					u32 cmd, void *arg);
+ int mdss_panel_parse_panel_config_dt(struct mdss_dsi_ctrl_pdata *ctrl_pdata);
+ 
++int mdss_dsi_pinctrl_set_state(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
++								bool active);
++
+ static inline const char *__mdss_dsi_pm_name(enum dsi_pm_type module)
+ {
+ 	switch (module) {
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index d1401e2da8a..b9a18f40a4a 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -306,6 +306,12 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
+ 	pr_debug("%s: enable = %d\n", __func__, enable);
+ 
+ 	if (enable) {
++		rc = mdss_dsi_pinctrl_set_state(ctrl_pdata, true);
++		if (rc) {
++			pr_err("pinctrl set state active failed %d\n", rc);
++			return rc;
++		}
++
+ 		rc = mdss_dsi_request_gpios(ctrl_pdata);
+ 		if (rc) {
+ 			pr_err("gpio request failed\n");
+@@ -381,8 +387,12 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
+ 		gpio_free(ctrl_pdata->rst_gpio);
+ 		if (gpio_is_valid(ctrl_pdata->lcd_mode_sel_gpio))
+ 			gpio_free(ctrl_pdata->lcd_mode_sel_gpio);
++
++		rc = mdss_dsi_pinctrl_set_state(ctrl_pdata, false);
++		if (rc)
++			pr_err("pinctrl set suspend state failed %d\n", rc);
+ 	}
+-	return 0;
++	return rc;
+ gpio_err:
+ 	if (gpio_is_valid(ctrl_pdata->lcd_mode_sel_gpio))
+ 		gpio_free(ctrl_pdata->lcd_mode_sel_gpio);
+-- 
+2.11.0
+

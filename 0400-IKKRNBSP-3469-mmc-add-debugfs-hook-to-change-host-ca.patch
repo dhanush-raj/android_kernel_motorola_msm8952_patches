@@ -1,0 +1,78 @@
+From 23f97b38281e6693f8d1cfe5ca7ceaca95169eb1 Mon Sep 17 00:00:00 2001
+From: "Russ W. Knize" <Russ.Knize@motorola.com>
+Date: Fri, 27 Feb 2015 16:18:43 -0600
+Subject: [PATCH 400/959] IKKRNBSP-3469: mmc: add debugfs hook to change host
+ capabilities
+
+This commit exposes the capability flags for a given host so that
+flags can be changed at run time.  This is especially useful when
+tuning a hardware bus so that specific modes and speeds can be locked
+in.
+
+Signed-off-by: Russ Knize <Russ.Knize@motorola.com>
+Change-Id: I7ac5ab67ba7f7d8dd7c497b41f752c2643b0d586
+Reviewed-on: http://gerrit.mot.com/720414
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Hrycay <jason.hrycay@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Signed-off-by: haojl2 <haojl2@motorola.com>
+Reviewed-on: http://gerrit.mot.com/793563
+SME-Granted: SME Approvals Granted
+Reviewed-by: Jiang-Li Yuan <jlyuan@motorola.com>
+Reviewed-by: Russell Knize <rknize@motorola.com>
+---
+ drivers/mmc/core/debugfs.c | 30 ++++++++++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/drivers/mmc/core/debugfs.c b/drivers/mmc/core/debugfs.c
+index 4bce47485b5..dff5870fade 100644
+--- a/drivers/mmc/core/debugfs.c
++++ b/drivers/mmc/core/debugfs.c
+@@ -251,6 +251,32 @@ out:
+ DEFINE_SIMPLE_ATTRIBUTE(mmc_max_clock_fops, mmc_max_clock_get,
+ 		mmc_max_clock_set, "%llu\n");
+ 
++static int mmc_host_caps_get(void *data, u64 *val)
++{
++	struct mmc_host *host = data;
++
++	*val = ((u64)host->caps2 << 32) | host->caps;
++
++	return 0;
++}
++
++static int mmc_host_caps_set(void *data, u64 val)
++{
++	struct mmc_host *host = data;
++
++	mmc_rpm_hold(host, &host->class_dev);
++	mmc_claim_host(host);
++	host->caps = (u32)val;
++	host->caps2 = (u32)(val >> 32);
++	mmc_release_host(host);
++	mmc_rpm_release(host, &host->class_dev);
++
++	return 0;
++}
++
++DEFINE_SIMPLE_ATTRIBUTE(mmc_host_caps_fops, mmc_host_caps_get,
++			mmc_host_caps_set, "0x%016llx\n");
++
+ void mmc_add_host_debugfs(struct mmc_host *host)
+ {
+ 	struct dentry *root;
+@@ -277,6 +303,10 @@ void mmc_add_host_debugfs(struct mmc_host *host)
+ 		&mmc_max_clock_fops))
+ 		goto err_node;
+ 
++	if (!debugfs_create_file("caps", S_IRUSR | S_IWUSR, root, host,
++			&mmc_host_caps_fops))
++		goto err_node;
++
+ #ifdef CONFIG_MMC_CLKGATE
+ 	if (!debugfs_create_u32("clk_delay", (S_IRUSR | S_IWUSR),
+ 				root, &host->clk_delay))
+-- 
+2.11.0
+

@@ -1,0 +1,35 @@
+From 74a4630a8197706a2f2bebed3ffdd5a95c7bdf1d Mon Sep 17 00:00:00 2001
+From: caoyi1 <caoyi1@lenovo.com>
+Date: Wed, 9 Dec 2015 18:18:02 +0800
+Subject: [PATCH 536/959] IKQCOMSD1-3095:input misc epl8802,open dynamic
+ calibration function
+
+Change-Id: I4f796cdf1f70e419e78512718bea9784caac1aae
+Signed-off-by: caoyi1 <caoyi1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/805925
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/epl8802.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/input/misc/epl8802.c b/drivers/input/misc/epl8802.c
+index f2542a3c016..81277ac8f99 100644
+--- a/drivers/input/misc/epl8802.c
++++ b/drivers/input/misc/epl8802.c
+@@ -69,7 +69,7 @@
+ /******************************************************************************
+  *  ALS / PS function define
+  ******************************************************************************/
+-#define PS_DYN_K_ONE    0       // PS DYN K ONE
++#define PS_DYN_K_ONE	1	/*PS DYN K ONE*/
+ #define ALS_DYN_INTT    1       // ALS Auto INTT
+ #define PS_FIRST_REPORT 1       // enable ps, report Far or NEAR
+ #define ALS_DYN_INTT_REPORT    1
+-- 
+2.11.0
+

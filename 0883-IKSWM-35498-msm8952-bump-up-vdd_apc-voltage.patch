@@ -1,0 +1,48 @@
+From 11d644866afb0ddd5f3edecde188609d91328e21 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Tue, 10 May 2016 13:57:46 -0700
+Subject: [PATCH 883/959] IKSWM-35498: msm8952: bump up vdd_apc voltage
+
+  We have seen several cpu cache out of sync issues. Bump up VDD_APC
+  voltage(50mV) on corners 4 and 5 to make cpu more stable.
+
+Change-Id: I2f30de7495f4a74f09e1f856cc69a934a034e7ac
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/854838
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: David Ding <dding@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-regulator.dtsi | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-regulator.dtsi b/arch/arm/boot/dts/qcom/msm8952-regulator.dtsi
+index 3202404ea25..47fce053f8e 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-regulator.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-regulator.dtsi
+@@ -439,6 +439,20 @@
+ 			<0    16      74>, /* NOM + 10mv, TURBO + 45mv */
+ 			<0    16      33>, /* NOM + 10mv, TURBO + 20mv */
+ 			<0    0        0>;
++		cpr-virtual-corner-init-voltage-adjustment =
++			<0 0 0 50000 50000 0 0 0>,
++			<0 0 0 50000 50000 0 0 0>,
++			<0 0 0 50000 50000 0 0 0>,
++			<0 0 0 50000 50000 0 0 0>,
++			<0 0 0 50000 50000 0 0 0>,
++			<0 0 0 50000 50000 0 0 0>;
++		qcom,cpr-virtual-corner-quotient-adjustment =
++			<0 0 0 82 82 0 0 0>,
++			<0 0 0 82 82 0 0 0>,
++			<0 0 0 82 82 0 0 0>,
++			<0 0 0 82 82 0 0 0>,
++			<0 0 0 82 82 0 0 0>,
++			<0 0 0 82 82 0 0 0>;
+ 		qcom,cpr-floor-to-ceiling-max-range =
+ 			<(-1) 30000 30000 30000 30000 50000 50000 50000>,
+ 			<(-1) 30000 30000 30000 30000 50000 50000 50000>,
+-- 
+2.11.0
+

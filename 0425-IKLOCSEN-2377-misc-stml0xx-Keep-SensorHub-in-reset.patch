@@ -1,0 +1,68 @@
+From d7a9b52770d123527f70f55cbfca487c77ef41d0 Mon Sep 17 00:00:00 2001
+From: Gabriel Burca <Gabriel.Burca@motorola.com>
+Date: Fri, 23 Oct 2015 12:39:32 -0500
+Subject: [PATCH 425/959] IKLOCSEN-2377 misc: stml0xx: Keep SensorHub in reset
+
+- To make it obvious that the build is missing SensorHub firmware or
+  the flasher, the SensorHub is kept in reset until the flasher tells
+  it to go into normal mode (after verifying that proper firmware is
+  present in the /system partition).
+
+Change-Id: If8ef6592429bbc2ba9dadf9406a8817e2d825952
+Signed-off-by: Gabriel Burca <Gabriel.Burca@motorola.com>
+Reviewed-on: http://gerrit.mot.com/794107
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Eric Hefner <ehefner@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index ff05bc1c1f2..b4886041ee3 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -535,14 +535,15 @@ static int stml0xx_gpio_init(struct stml0xx_platform_data *pdata,
+ 			"stml0xx reset gpio_request failed: %d", err);
+ 		goto free_int;
+ 	}
++	gpio_direction_output(pdata->gpio_reset, 1);
+ 	if (pdata->reset_hw_type == 0) {
+-		gpio_direction_output(pdata->gpio_reset, 1);
+-		gpio_set_value(pdata->gpio_reset, 1);
+ 		err = gpio_export(pdata->gpio_reset, 0);
+ 	} else {
+-		gpio_direction_input(pdata->gpio_reset);
+ 		err = gpio_export(pdata->gpio_reset, 1);
+ 	}
++	/* Keep the part in reset until the flasher uses NORMALMODE to tell us
++	 * we're good to go. */
++	gpio_set_value(pdata->gpio_reset, 0);
+ 	if (err) {
+ 		dev_err(&stml0xx_misc_data->spi->dev,
+ 			"reset gpio_export failed: %d", err);
+@@ -992,7 +993,14 @@ static int stml0xx_probe(struct spi_device *spi)
+ 
+ 	ps_stml0xx->is_suspended = false;
+ 
+-	switch_stml0xx_mode(NORMALMODE);
++	/* We could call switch_stml0xx_mode(NORMALMODE) at this point, but
++	 * instead we will hold the part in reset and only go to NORMALMODE on a
++	 * request to do so from the flasher.  The flasher must be present, and
++	 * it must verify the firmware file is available before switching to
++	 * NORMALMODE. This is to prevent a build that is missing firmware or
++	 * flasher from behaving as a normal build (with factory firmware in the
++	 * part).
++	 */
+ 
+ #ifdef CONFIG_MMI_HALL_NOTIFICATIONS
+ 	ps_stml0xx->hall_data = mmi_hall_init();
+-- 
+2.11.0
+

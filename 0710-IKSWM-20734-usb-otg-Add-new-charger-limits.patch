@@ -1,0 +1,77 @@
+From 827264f933135873b91d22386b7cd5a946b6c219 Mon Sep 17 00:00:00 2001
+From: mahj2 <mahj2@motorola.com>
+Date: Thu, 25 Feb 2016 10:49:11 +0800
+Subject: [PATCH 710/959] IKSWM-20734 usb: otg: Add new charger limits
+
+Some mainstream chargers enter a "protection mode" (output power is
+disabled) when the current or power being pulled from the charger
+exceeds a specific threshold. Some Belking chargers can only support
+up to 1200mA before entering protection mode. These Belkin chargers
+are detected as "proprietary". Some HTC chargers can only support up
+to 1300mA before entering protection mode. These HTC charger are
+detected as DCP. The input current limits will be set accordingly.
+This change would set max charging current for DCP to 1300mA instead
+of 1500mA.
+
+Change-Id: Icd395243474bf2cfe06f0851df69372c6bfc6016
+Signed-off-by: mahj2 <mahj2@motorola.com>
+Reviewed-on: http://gerrit.mot.com/825345
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/usb/phy/phy-msm-usb.c | 9 ++++++---
+ include/linux/usb/msm_hsusb.h | 2 ++
+ 2 files changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/usb/phy/phy-msm-usb.c b/drivers/usb/phy/phy-msm-usb.c
+index 9589a46ed89..52298ee037c 100644
+--- a/drivers/usb/phy/phy-msm-usb.c
++++ b/drivers/usb/phy/phy-msm-usb.c
+@@ -3524,14 +3524,17 @@ static void msm_otg_sm_work(struct work_struct *w)
+ 			case USB_CHG_STATE_DETECTED:
+ 				switch (motg->chg_type) {
+ 				case USB_DCP_CHARGER:
+-					/* fall through */
++					msm_otg_notify_charger(motg,
++								IDEV_CHG_DCP);
++					pm_runtime_put_sync(otg->phy->dev);
++					break;
+ 				case USB_PROPRIETARY_CHARGER:
+ 					if (ta_charger_detected)
+ 						msm_otg_notify_charger(motg,
+ 								IDEV_CHG_TA);
+ 					else
+ 						msm_otg_notify_charger(motg,
+-						dcp_max_current);
++								IDEV_CHG_PROP);
+ 					if (!motg->is_ext_chg_dcp)
+ 						otg->phy->state =
+ 							OTG_STATE_B_CHARGER;
+@@ -4472,7 +4475,7 @@ out:
+ 
+ 	if (motg->is_ext_chg_dcp) {
+ 		if (test_bit(B_SESS_VLD, &motg->inputs)) {
+-			msm_otg_notify_charger(motg, IDEV_CHG_MAX);
++			msm_otg_notify_charger(motg, IDEV_CHG_DCP);
+ 		} else {
+ 			motg->is_ext_chg_dcp = false;
+ 			motg->chg_state = USB_CHG_STATE_UNDEFINED;
+diff --git a/include/linux/usb/msm_hsusb.h b/include/linux/usb/msm_hsusb.h
+index 01dd88bb66e..6b4383dcc8f 100644
+--- a/include/linux/usb/msm_hsusb.h
++++ b/include/linux/usb/msm_hsusb.h
+@@ -106,6 +106,8 @@ enum msm_usb_phy_type {
+ };
+ 
+ #define IDEV_CHG_MAX	1500
++#define IDEV_CHG_DCP	1300
++#define IDEV_CHG_PROP	1200
+ #define IDEV_CHG_TA	1100
+ #define IDEV_CHG_MIN	500
+ #define IUNIT		100
+-- 
+2.11.0
+

@@ -1,0 +1,49 @@
+From a01e3def3934f18a4fedd6095dcf7a7d9c75cc63 Mon Sep 17 00:00:00 2001
+From: Konstantin Makariev <kmakariev@motorola.com>
+Date: Wed, 14 Oct 2015 15:38:58 -0500
+Subject: [PATCH 372/959] IKSWM-7374 input: synaptics_dsx_i2c: add clip area to
+ function 11
+
+Add clip area handling from function 12 to function 11.
+
+Change-Id: I6ad56365cea0bc4dd0d3407fde055f4331959145
+Signed-off-by: Konstantin Makariev <kmakariev@motorola.com>
+Reviewed-on: http://gerrit.mot.com/791866
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/touchscreen/synaptics_dsx_i2c.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/drivers/input/touchscreen/synaptics_dsx_i2c.c b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+index 1aea1982c29..03323f593a4 100644
+--- a/drivers/input/touchscreen/synaptics_dsx_i2c.c
++++ b/drivers/input/touchscreen/synaptics_dsx_i2c.c
+@@ -3675,6 +3675,21 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
+ 			if (rmi4_data->board->y_flip)
+ 				y = rmi4_data->sensor_max_y - y;
+ 
++			if (rmi4_data->clipping_on && rmi4_data->clipa) {
++				bool inside;
++
++				inside = (x >= rmi4_data->clipa->xul_clip) &&
++					(x <= rmi4_data->clipa->xbr_clip) &&
++					(y >= rmi4_data->clipa->yul_clip) &&
++					(y <= rmi4_data->clipa->ybr_clip);
++
++				if (!inside) {
++					dev_dbg(&rmi4_data->i2c_client->dev,
++						"%d,%d ouside clipping area\n",
++						x, y);
++					continue;
++				}
++			}
+ #ifdef TYPE_B_PROTOCOL
+ 			input_mt_slot(rmi4_data->input_dev, finger);
+ 			input_mt_report_slot_state(rmi4_data->input_dev,
+-- 
+2.11.0
+

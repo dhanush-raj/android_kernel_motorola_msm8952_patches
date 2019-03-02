@@ -1,0 +1,25 @@
+From 85af4f03d1a488a08f1fee4d472ae510d6bd9b4b Mon Sep 17 00:00:00 2001
+From: Nikit Sharma <nikitsharma92@gmail.com>
+Date: Sat, 17 Mar 2018 23:31:15 +0530
+Subject: [PATCH 955/959] staging: prima: Add QCOM_TDLS config
+
+---
+ drivers/staging/prima/Kconfig | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/staging/prima/Kconfig b/drivers/staging/prima/Kconfig
+index 9306175a229..e3cf3f3477e 100644
+--- a/drivers/staging/prima/Kconfig
++++ b/drivers/staging/prima/Kconfig
+@@ -53,4 +53,8 @@ config WLAN_OFFLOAD_PACKETS
+ 	bool "Enable offload packets feature"
+ 	default n
+ 
++config QCOM_TDLS
++    bool "Enable TDLS feature"
++    default n
++
+ endif # PRIMA_WLAN || PRONTO_WLAN
+-- 
+2.11.0
+

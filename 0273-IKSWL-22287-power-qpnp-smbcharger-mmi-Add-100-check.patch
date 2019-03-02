@@ -1,0 +1,42 @@
+From 393e925acf47dc53e45d2410f1001d43c3c3e23c Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Mon, 22 Jun 2015 13:37:08 -0500
+Subject: [PATCH 273/959] IKSWL-22287: power: qpnp-smbcharger-mmi: Add 100%
+ check
+
+Before declaring FULL need to also check the Fuel Gauge
+to ensure it made it to 100%.  This will prevent Use
+Cases that trick the Charge current into looking like
+it has reached FULL from stopping charge.
+
+Change-Id: I11cdc29c77978534bf8226295a3a5220492f8423
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/759315
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Vidyadhar Gurram <rnh786@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 6e5793fa718..72849c6ee7a 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -7152,7 +7152,8 @@ static void smbchg_heartbeat_work(struct work_struct *work)
+ 	} else if ((chip->stepchg_state == STEP_TAPER) &&
+ 		   (batt_ma < 0) && (chip->usb_present)) {
+ 		batt_ma *= -1;
+-		if ((batt_ma <= chip->stepchg_iterm_ma) &&
++		if ((batt_soc >= 100) &&
++		    (batt_ma <= chip->stepchg_iterm_ma) &&
+ 		    (chip->allowed_fastchg_current_ma >=
+ 		     chip->stepchg_iterm_ma))
+ 			if (chip->stepchg_state_holdoff >= 2) {
+-- 
+2.11.0
+

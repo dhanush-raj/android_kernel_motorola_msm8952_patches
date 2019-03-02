@@ -1,0 +1,35 @@
+From 24ff698ff944945466bbc68f0a88cab584ab3baf Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Fri, 21 Nov 2014 22:37:11 -0800
+Subject: [PATCH 015/959] IKVPREL1L-3183:defconfig.mk: Add support
+ -perf-defconfig userdebug build
+
+ Add support -perf-defconfig userdebug build
+
+Change-Id: I6ef5db58b275cf1bb2ea3cdb85352074c82f2460
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/692016
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ defconfig.mk | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/defconfig.mk b/defconfig.mk
+index 6bfab1c054f..d4a67851dd6 100644
+--- a/defconfig.mk
++++ b/defconfig.mk
+@@ -2,7 +2,7 @@ DEFCONFIGSRC			:= kernel/arch/$(KERNEL_ARCH)/configs
+ LJAPDEFCONFIGSRC		:= ${DEFCONFIGSRC}/ext_config
+ PRODUCT_SPECIFIC_DEFCONFIGS	:= $(DEFCONFIGSRC)/$(KERNEL_DEFCONFIG)
+ TARGET_DEFCONFIG		:= $(KERNEL_OUT)/mapphone_defconfig
+-KERNEL_DEBUG_DEFCONFIG          := $(LJAPDEFCONFIGSRC)/debug-$(subst _defconfig,,$(KERNEL_DEFCONFIG)).config
++KERNEL_DEBUG_DEFCONFIG          := $(LJAPDEFCONFIGSRC)/debug-$(subst -perf,,$(subst _defconfig,,$(KERNEL_DEFCONFIG))).config
+ 
+ # add debug config file for non-user build
+ ifneq ($(TARGET_BUILD_VARIANT), user)
+-- 
+2.11.0
+

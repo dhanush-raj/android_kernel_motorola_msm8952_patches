@@ -1,0 +1,49 @@
+From 1fb8dac7ffb6ff86d839b07e52710d13e21aeee2 Mon Sep 17 00:00:00 2001
+From: Jason Knopsnyder <jasonk@motorola.com>
+Date: Wed, 2 Jul 2014 17:12:20 -0500
+Subject: [PATCH 283/959] IKKRNBSP-2497: power_supply: Add
+ POWER_SUPPLY_PROP_TEMP_HOTSPOT
+
+This property is meant to hold the temperature of the hottest
+point on the battery.
+
+Change-Id: I6eba5cfb5a00a602d28728e2b01a19710e82483d
+Signed-off-by: Jason Knopsnyder <jasonk@motorola.com>
+Reviewed-on: http://gerrit.mot.com/650809
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/power_supply_sysfs.c | 1 +
+ include/linux/power_supply.h       | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/drivers/power/power_supply_sysfs.c b/drivers/power/power_supply_sysfs.c
+index d5eae376693..b1c7e11e803 100644
+--- a/drivers/power/power_supply_sysfs.c
++++ b/drivers/power/power_supply_sysfs.c
+@@ -213,6 +213,7 @@ static struct device_attribute power_supply_attrs[] = {
+ 	POWER_SUPPLY_ATTR(temp_ambient),
+ 	POWER_SUPPLY_ATTR(temp_ambient_alert_min),
+ 	POWER_SUPPLY_ATTR(temp_ambient_alert_max),
++	POWER_SUPPLY_ATTR(temp_hotspot),
+ 	POWER_SUPPLY_ATTR(time_to_empty_now),
+ 	POWER_SUPPLY_ATTR(time_to_empty_avg),
+ 	POWER_SUPPLY_ATTR(time_to_full_now),
+diff --git a/include/linux/power_supply.h b/include/linux/power_supply.h
+index 62d8ac66d3e..ecce82d3f98 100644
+--- a/include/linux/power_supply.h
++++ b/include/linux/power_supply.h
+@@ -178,6 +178,7 @@ enum power_supply_property {
+ 	POWER_SUPPLY_PROP_TEMP_AMBIENT,
+ 	POWER_SUPPLY_PROP_TEMP_AMBIENT_ALERT_MIN,
+ 	POWER_SUPPLY_PROP_TEMP_AMBIENT_ALERT_MAX,
++	POWER_SUPPLY_PROP_TEMP_HOTSPOT,
+ 	POWER_SUPPLY_PROP_TIME_TO_EMPTY_NOW,
+ 	POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG,
+ 	POWER_SUPPLY_PROP_TIME_TO_FULL_NOW,
+-- 
+2.11.0
+

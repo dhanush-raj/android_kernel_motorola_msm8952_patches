@@ -1,0 +1,36 @@
+From 0bde703fc1e615b89134e024b1a721a163f1a26a Mon Sep 17 00:00:00 2001
+From: Xiaofei Ma <xiaofei@motorola.com>
+Date: Fri, 4 Sep 2015 11:33:58 -0500
+Subject: [PATCH 136/959] IKQCOMSD1-2939: ASoC: soc: msm: 8916: Select TFA9890
+ codec
+
+Select TFA9890 codec for smartboost.
+
+Change-Id: I4179dd0e450870f26d69037d87c980f657d8e279
+Signed-off-by: Xiaofei Ma <xiaofei@motorola.com>
+Reviewed-on: http://gerrit.mot.com/781562
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Reviewed-by: Jonathan Eklund <jeklund@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/msm/Kconfig | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/sound/soc/msm/Kconfig b/sound/soc/msm/Kconfig
+index faef19f6b11..5f41f7e9088 100644
+--- a/sound/soc/msm/Kconfig
++++ b/sound/soc/msm/Kconfig
+@@ -267,6 +267,7 @@ config SND_SOC_MSM8X16
+ 	select SND_SOC_CPE
+ 	select SND_HWDEP
+         select DTS_EAGLE
++	select SND_SOC_TFA9890
+ 	help
+ 	 To add support for SoC audio on MSM8X16.
+ 	 This will enable sound soc drivers which
+-- 
+2.11.0
+

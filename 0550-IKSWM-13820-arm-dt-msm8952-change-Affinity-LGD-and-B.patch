@@ -1,0 +1,48 @@
+From 2ec8ea7ef4ce86e2ec6dbae700218a2a2969f5c2 Mon Sep 17 00:00:00 2001
+From: wengjun1 <wengjun1@motorola.com>
+Date: Fri, 11 Dec 2015 14:41:23 +0800
+Subject: [PATCH 550/959] IKSWM-13820 arm/dt: msm8952: change Affinity LGD and
+ BOE panel suspend sequence
+
+The following changes are needed to support Affinity LGD and BOE panel suspend sequence
+-- enable handling of special display notification
+-- enable "Report LPWG (Low Power Wakeup Gesture) only" bit to disable
+touch processing. This is done before changing SleepMode to SensorSleep.
+
+Change-Id: I701a99d03a750306e48c2874366b4c4f5d8a10ef
+Signed-off-by: wengjun1 <wengjun1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/806565
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Konstantin Makariev <kmakariev@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index c8237226e77..bb2536dc1a0 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -850,6 +850,7 @@
+ 		gpios = <&msm_gpio 65 0>, /* IRQ */
+ 			<&msm_gpio 64 0>; /* RESET */
+ 		synaptics,touch-clip-area = <450 1875 610 1919>;
++		synaptics,use-in-progress-event-blank;
+ 		vdd_quirk-supply = <&pm8950_l6>;
+ 		synaptics,gpio-config;
+ 		/* pins used by touchscreen */
+@@ -863,7 +864,7 @@
+ 			patch-data = "";
+ 		};
+ 		default_suspended: touchstate_aod_suspended {
+-			patch-data = "F1@0=1&7";
++			patch-data = "F12@20:1=2;F1@0=1&7";
+ 		};
+ 	};
+ };
+-- 
+2.11.0
+

@@ -1,0 +1,99 @@
+From 7e2d7b5259d3bdc0514517aa8c4122c6f134eece Mon Sep 17 00:00:00 2001
+From: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Date: Tue, 26 Jan 2016 15:36:16 -0600
+Subject: [PATCH 679/959] IKLOCSEN-2540 drivers:misc:stml0xx: Make discard
+ sensor queue flag global
+
+stml0xx_resume() schedules a work function with a flag set to flush the
+streaming sensor queue coming out of suspend. It is possible that this
+is missed as a previously queued work function prior to suspend
+may take precedence. Make this flag global instead of keeping it local
+to the work structure to address this issue.
+
+Change-Id: I6a249b9dd6292d6f4fc66d535ec4e5141b0182b2
+Signed-off-by: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Reviewed-on: http://gerrit.mot.com/822859
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c | 3 ++-
+ drivers/misc/stml0xx/stml0xx_irq.c  | 4 +++-
+ include/linux/stml0xx.h             | 2 +-
+ 3 files changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 3e167df0c1c..c174ac0b6f4 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -1000,6 +1000,7 @@ static int stml0xx_probe(struct spi_device *spi)
+ 
+ 	ps_stml0xx->is_suspended = false;
+ 	ps_stml0xx->irq_wake_work_pending = false;
++	ps_stml0xx->discard_sensor_queue = false;
+ 
+ 	/* We could call switch_stml0xx_mode(NORMALMODE) at this point, but
+ 	 * instead we will hold the part in reset and only go to NORMALMODE on a
+@@ -1115,6 +1116,7 @@ static int stml0xx_resume(struct device *dev)
+ 
+ 	mutex_lock(&ps_stml0xx->lock);
+ 	ps_stml0xx->is_suspended = false;
++	ps_stml0xx->discard_sensor_queue = true;
+ 	enable_irq(ps_stml0xx->irq);
+ 
+ 	/* Schedule work for wake IRQ, if pending */
+@@ -1150,7 +1152,6 @@ static int stml0xx_resume(struct device *dev)
+ 	}
+ 	INIT_WORK((struct work_struct *)stm_ws, stml0xx_irq_work_func);
+ 	stm_ws->ts_ns = ts_to_ns(ts);
+-	stm_ws->flags = IRQ_WORK_FLAG_DISCARD_SENSOR_QUEUE;
+ 	queue_work(ps_stml0xx->irq_work_queue, (struct work_struct *)stm_ws);
+ 
+ 	mutex_unlock(&ps_stml0xx->lock);
+diff --git a/drivers/misc/stml0xx/stml0xx_irq.c b/drivers/misc/stml0xx/stml0xx_irq.c
+index 941faf22471..ec9b539b301 100644
+--- a/drivers/misc/stml0xx/stml0xx_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_irq.c
+@@ -284,12 +284,14 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 	    (buf[IRQ_IDX_STATUS_MED] << 8) | buf[IRQ_IDX_STATUS_LO];
+ 
+ 	/* Check for streaming sensors */
+-	if ((stm_ws->flags & IRQ_WORK_FLAG_DISCARD_SENSOR_QUEUE) == 0) {
++	if (!ps_stml0xx->discard_sensor_queue) {
+ 		if (irq_status & M_QUEUE_OVERFLOW)
+ 			dev_err(&stml0xx_misc_data->spi->dev,
+ 				"Streaming sensor queue full");
+ 		if (irq_status & (M_ACCEL | M_ACCEL2 | M_GYRO | M_UNCALIB_GYRO))
+ 			stml0xx_process_stream_sensor_queue(buf, stm_ws->ts_ns);
++	} else {
++		ps_stml0xx->discard_sensor_queue = false;
+ 	}
+ 
+ 	if (irq_status & M_ALS) {
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 682801dd0a9..10097cbdbf8 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -135,7 +135,6 @@ enum vmm_ids {
+ 
+ /* Non-wake IRQ work function flags */
+ #define IRQ_WORK_FLAG_NONE                   0x00
+-#define IRQ_WORK_FLAG_DISCARD_SENSOR_QUEUE   0x01
+ 
+ /* stml0xx_readbuff offsets. */
+ #define IRQ_WAKE_LO  0
+@@ -326,6 +325,7 @@ struct stml0xx_data {
+ 	struct regulator *regulator_2;
+ 	struct regulator *regulator_3;
+ 
++	bool discard_sensor_queue;
+ 	bool is_suspended;
+ #ifdef CONFIG_MMI_HALL_NOTIFICATIONS
+ 	struct mmi_hall_data *hall_data;
+-- 
+2.11.0
+

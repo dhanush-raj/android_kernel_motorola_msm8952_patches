@@ -1,0 +1,92 @@
+From 191fa4d5dbbc0a6285aa91a572941d7255328bc3 Mon Sep 17 00:00:00 2001
+From: Daniel Moore <dtmoore@motorola.com>
+Date: Mon, 8 Sep 2014 10:31:19 -0500
+Subject: [PATCH 072/959] IKLOCSEN-1666:misc:stml0xx: Add sensor supply 3
+
+Add support for another sensor supply for
+styx 3G(otus) support
+
+On otus supply 3 will power the prox
+
+If there is no supply 3 do not exit because
+other products might not have 3 supplies
+
+Propagated from 8610 stml0xx kernel driver
+
+Change-Id: I2291671c482188dadceb4142e9cc2f83e0fb290a
+Signed-off-by: Dan Moore <dtmoore@motorola.com>
+Reviewed-on: http://gerrit.mot.com/668832
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c | 23 +++++++++++++++++++++++
+ include/linux/stml0xx.h             |  1 +
+ 2 files changed, 24 insertions(+)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 037c46c7f74..e8e59156b88 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -708,6 +708,21 @@ static int stml0xx_probe(struct spi_device *spi)
+ 		goto err_regulator;
+ 	}
+ 
++	/* not all products have 3 sensor supplies */
++	ps_stml0xx->regulator_3 = regulator_get(&spi->dev, "sensor3");
++
++	if (!IS_ERR(ps_stml0xx->regulator_3)) {
++		if (regulator_enable(ps_stml0xx->regulator_3)) {
++			dev_err(&spi->dev, "Failed to enable Sensor 3 regulator");
++			regulator_disable(ps_stml0xx->regulator_2);
++			regulator_disable(ps_stml0xx->regulator_1);
++			regulator_put(ps_stml0xx->regulator_3);
++			regulator_put(ps_stml0xx->regulator_2);
++			regulator_put(ps_stml0xx->regulator_1);
++			goto err_regulator;
++		}
++	}
++
+ 	err = stml0xx_gpio_init(pdata, spi);
+ 	if (err) {
+ 		dev_err(&spi->dev, "stml0xx gpio init failed");
+@@ -921,6 +936,10 @@ err1:
+ 	wake_lock_destroy(&ps_stml0xx->reset_wakelock);
+ 	stml0xx_gpio_free(pdata);
+ err_gpio_init:
++	if (!IS_ERR(ps_stml0xx->regulator_3)) {
++		regulator_disable(ps_stml0xx->regulator_3);
++		regulator_put(ps_stml0xx->regulator_3);
++	}
+ 	regulator_disable(ps_stml0xx->regulator_2);
+ 	regulator_disable(ps_stml0xx->regulator_1);
+ 	regulator_put(ps_stml0xx->regulator_2);
+@@ -967,6 +986,10 @@ static int stml0xx_remove(struct spi_device *spi)
+ 	wake_lock_destroy(&ps_stml0xx->reset_wakelock);
+ 	disable_irq_wake(ps_stml0xx->irq);
+ 
++	if (!IS_ERR(ps_stml0xx->regulator_3)) {
++		regulator_disable(ps_stml0xx->regulator_3);
++		regulator_put(ps_stml0xx->regulator_3);
++	}
+ 	regulator_disable(ps_stml0xx->regulator_2);
+ 	regulator_disable(ps_stml0xx->regulator_1);
+ 	regulator_put(ps_stml0xx->regulator_2);
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index c00e94ab486..35f10060bfe 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -575,6 +575,7 @@ struct stml0xx_data {
+ 
+ 	struct regulator *regulator_1;
+ 	struct regulator *regulator_2;
++	struct regulator *regulator_3;
+ 
+ 	bool is_suspended;
+ 	bool pending_wake_work;
+-- 
+2.11.0
+

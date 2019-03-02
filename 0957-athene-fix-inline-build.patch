@@ -1,0 +1,43 @@
+From c3968e77d0b44789cf4bb6a8a2fd4b316b1d1cdd Mon Sep 17 00:00:00 2001
+From: Vachounet <vachounet@live.fr>
+Date: Wed, 18 Jan 2017 09:50:03 +0100
+Subject: [PATCH 957/959] athene: fix inline build
+
+---
+ drivers/input/misc/vl53L0/{ => inc}/stmvl53l0-cci.h | 0
+ drivers/input/misc/vl53L0/{ => inc}/stmvl53l0-i2c.h | 0
+ drivers/input/misc/vl53L0/{ => inc}/stmvl53l0.h     | 0
+ drivers/video/msm/msm_dba/msm_dba.c                 | 2 +-
+ 4 files changed, 1 insertion(+), 1 deletion(-)
+ rename drivers/input/misc/vl53L0/{ => inc}/stmvl53l0-cci.h (100%)
+ rename drivers/input/misc/vl53L0/{ => inc}/stmvl53l0-i2c.h (100%)
+ rename drivers/input/misc/vl53L0/{ => inc}/stmvl53l0.h (100%)
+
+diff --git a/drivers/input/misc/vl53L0/stmvl53l0-cci.h b/drivers/input/misc/vl53L0/inc/stmvl53l0-cci.h
+similarity index 100%
+rename from drivers/input/misc/vl53L0/stmvl53l0-cci.h
+rename to drivers/input/misc/vl53L0/inc/stmvl53l0-cci.h
+diff --git a/drivers/input/misc/vl53L0/stmvl53l0-i2c.h b/drivers/input/misc/vl53L0/inc/stmvl53l0-i2c.h
+similarity index 100%
+rename from drivers/input/misc/vl53L0/stmvl53l0-i2c.h
+rename to drivers/input/misc/vl53L0/inc/stmvl53l0-i2c.h
+diff --git a/drivers/input/misc/vl53L0/stmvl53l0.h b/drivers/input/misc/vl53L0/inc/stmvl53l0.h
+similarity index 100%
+rename from drivers/input/misc/vl53L0/stmvl53l0.h
+rename to drivers/input/misc/vl53L0/inc/stmvl53l0.h
+diff --git a/drivers/video/msm/msm_dba/msm_dba.c b/drivers/video/msm/msm_dba/msm_dba.c
+index c99ede95440..5281f7660d6 100644
+--- a/drivers/video/msm/msm_dba/msm_dba.c
++++ b/drivers/video/msm/msm_dba/msm_dba.c
+@@ -22,7 +22,7 @@
+ #include <linux/err.h>
+ 
+ #include <video/msm_dba.h>
+-#include <msm_dba_internal.h>
++#include "msm_dba_internal.h"
+ 
+ static DEFINE_MUTEX(register_mutex);
+ 
+-- 
+2.11.0
+

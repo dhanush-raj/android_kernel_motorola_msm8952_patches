@@ -1,0 +1,40 @@
+From d5eb2caee8cd1eceba1ed59738a6da9aa58c209d Mon Sep 17 00:00:00 2001
+From: Lucas Alves <lucasm@motorola.com>
+Date: Thu, 12 May 2016 13:40:25 -0300
+Subject: [PATCH 884/959] IKSWM-37470: Add Amazon India channel id
+
+This channel id is need to support the preloaded Amazon application as stated in document:
+
+https://docs.google.com/spreadsheets/d/1cFLnFjai0L0q2qvPR6p19GUbBxlx4HoK5JgFc7uqSSI/edit#gid=3
+
+Change-Id: I04e6ee3e9457c7c9cf014b512618b4ced9f9958a
+Signed-off-by: lucasm <lucasm@motorola.com>
+Reviewed-on: http://gerrit.mot.com/855781
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jose Douglas Bertazzoni Zambianco <douglasz@motorola.com>
+Reviewed-by: Tarciano Facco Pegoraro <tarciano@motorola.com>
+Reviewed-by: Eliseu Massing Junior <eliseu@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi b/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
+index 2c702933f80..309d6fad6bf 100644
+--- a/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
++++ b/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
+@@ -210,7 +210,7 @@
+ 		"retcn",	/* 193 */
+ 		"telstra",	/* 194 */
+ 		"vfau",	/* 195 */
+-		"undefined",	/* 196 */
++		"amzin",	/* 196 */
+ 		"undefined",	/* 197 */
+ 		"undefined",	/* 198 */
+ 		"undefined",	/* 199 */
+-- 
+2.11.0
+

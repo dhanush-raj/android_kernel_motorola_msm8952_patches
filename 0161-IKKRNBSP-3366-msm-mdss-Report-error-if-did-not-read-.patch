@@ -1,0 +1,46 @@
+From 6d139c54e21818710fb2b93751b1f2a02c33f2e6 Mon Sep 17 00:00:00 2001
+From: Bang Nguyen <bnguyen1@motorola.com>
+Date: Thu, 18 Sep 2014 10:31:08 -0500
+Subject: [PATCH 161/959] IKKRNBSP-3366: msm: mdss: Report error if did not
+ read expected amount of data
+
+Update display read APIs to ensure the amount of data read matches the
+amount of data we expected to read.  If there is a mismatch, return an
+error.
+
+'commit fe8eb0506a77 ("IKKRNBSP-2622: msm: mdss: Report error
+if did not read expected amount of data")'
+Signed-off-by: Zac Crosby <zac@motorola.com>
+Signed-off-by: Parasuraman <parasur@motorola.com>
+Change-Id: I7c685a8114e464ec1ef16851375386b0ab90616b
+Reviewed-on: http://gerrit.mot.com/784114
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shi-Yong Li <a22381@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/mdss_dsi_host.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/video/msm/mdss/mdss_dsi_host.c b/drivers/video/msm/mdss/mdss_dsi_host.c
+index 10839868c99..9794e13d0be 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_host.c
++++ b/drivers/video/msm/mdss/mdss_dsi_host.c
+@@ -2347,6 +2347,11 @@ int mdss_dsi_cmdlist_rx(struct mdss_dsi_ctrl_pdata *ctrl,
+ 				(req->flags & CMD_REQ_DMA_TPG));
+ 		memcpy(req->rbuf, rp->data, rp->len);
+ 		ctrl->rx_len = len;
++		if (len != req->rlen) {
++			pr_err("%s: Tried to read %d bytes, actually read %d "
++					"bytes\n", __func__, req->rlen, len);
++			len = 0;
++		}
+ 	} else {
+ 		pr_err("%s: No rx buffer provided\n", __func__);
+ 	}
+-- 
+2.11.0
+

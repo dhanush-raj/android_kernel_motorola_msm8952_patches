@@ -1,0 +1,264 @@
+From 350a60b40d174cf118f7af8ca55d8cc91e819aba Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Thu, 15 Jan 2015 17:28:09 -0600
+Subject: [PATCH 316/959] IKKRNBSP-2868  leds: leds-atc: add new driver for ATC
+ LED
+
+ATC (or charing) led is controlled using dedicated register on PMIC.
+Add dedicated driver for this purpose instead of hacking leds-qpnp code.
+
+Change-Id: I3a6e83935aef564a2bd95069ebee6175f763139e
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/704954
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ .../devicetree/bindings/leds/leds-atc.txt          |  14 ++
+ drivers/leds/Kconfig                               |  10 ++
+ drivers/leds/Makefile                              |   1 +
+ drivers/leds/leds-atc.c                            | 177 +++++++++++++++++++++
+ 4 files changed, 202 insertions(+)
+ create mode 100644 Documentation/devicetree/bindings/leds/leds-atc.txt
+ create mode 100644 drivers/leds/leds-atc.c
+
+diff --git a/Documentation/devicetree/bindings/leds/leds-atc.txt b/Documentation/devicetree/bindings/leds/leds-atc.txt
+new file mode 100644
+index 00000000000..445175ce64c
+--- /dev/null
++++ b/Documentation/devicetree/bindings/leds/leds-atc.txt
+@@ -0,0 +1,14 @@
++Driver leds-atc is used to control ATC charging led on a Qualcomm PMIC.
++
++Required properties
++- compatible		: string should be "qcom,leds-atc"
++- linux,name		: name of the led that is used in led framework
++- qcom,ctrl-reg		: ATC LED register address. Check PMIC specification
++
++Example:
++
++qcom,leds@104d {
++	compatible = "qcom,leds-atc";
++	linux,name = "charging";
++	qcom,ctrl-reg = <0x104D>;
++};
+diff --git a/drivers/leds/Kconfig b/drivers/leds/Kconfig
+index 9dedfdc4d1a..61199e3a495 100644
+--- a/drivers/leds/Kconfig
++++ b/drivers/leds/Kconfig
+@@ -287,6 +287,16 @@ config LEDS_PCA9633
+ 	  This option enables support for LEDs connected to the PCA9633
+ 	  LED driver chip accessed via the I2C bus.
+ 
++config LEDS_ATC
++	tristate "Support for PMIC ATC LED"
++	depends on LEDS_CLASS
++	depends on SPMI && OF_SPMI
++	help
++	  This driver supports the ATC led functionality of Qualcomm PNP PMIC.
++	  Creates standard LED interface for the auto trickle charge indication
++	  LED. SPMI register write is used to access PMIC control register.
++	  Device tree can be used to adjust control register address used.
++
+ config LEDS_QPNP
+ 	tristate "Support for QPNP LEDs"
+ 	depends on SPMI && OF_SPMI
+diff --git a/drivers/leds/Makefile b/drivers/leds/Makefile
+index 201a9097c35..ed4c6ab295f 100644
+--- a/drivers/leds/Makefile
++++ b/drivers/leds/Makefile
+@@ -58,6 +58,7 @@ obj-$(CONFIG_LEDS_LM355x)		+= leds-lm355x.o
+ obj-$(CONFIG_LEDS_BLINKM)		+= leds-blinkm.o
+ obj-$(CONFIG_LEDS_MSM_GPIO_FLASH)	+= leds-msm-gpio-flash.o
+ obj-$(CONFIG_LEDS_AW2013)		+= leds-aw2013.o
++obj-$(CONFIG_LEDS_ATC)			+= leds-atc.o
+ 
+ # LED SPI Drivers
+ obj-$(CONFIG_LEDS_DAC124S085)		+= leds-dac124s085.o
+diff --git a/drivers/leds/leds-atc.c b/drivers/leds/leds-atc.c
+new file mode 100644
+index 00000000000..4bebc7ffd06
+--- /dev/null
++++ b/drivers/leds/leds-atc.c
+@@ -0,0 +1,177 @@
++/*
++ * leds-atc - Simple driver to control ATC led on a Qualcomm PMIC
++ * Copyright (c) 2015, MMI. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/init.h>
++#include <linux/slab.h>
++#include <linux/leds.h>
++#include <linux/err.h>
++#include <linux/of_platform.h>
++#include <linux/of_device.h>
++#include <linux/spmi.h>
++
++#define FORCE_ON_MASK	0x03
++
++/**
++ * @led_classdev - led class device
++ * @spmi_device - spmi class device
++ * @addr - spmi address for control register
++ */
++struct atc_led_data {
++	struct led_classdev	cdev;
++	struct spmi_device	*spmi_dev;
++	u32			addr;
++};
++
++static int
++spmi_masked_write(struct atc_led_data *led, u16 addr, u8 mask, u8 val)
++{
++	int rc;
++	u8 reg;
++
++	rc = spmi_ext_register_readl(led->spmi_dev->ctrl, led->spmi_dev->sid,
++		addr, &reg, 1);
++	if (rc) {
++		dev_err(&led->spmi_dev->dev,
++			"Unable to read from addr=%#x, rc(%d)\n", addr, rc);
++	}
++
++	reg &= ~mask;
++	reg |= val;
++
++	rc = spmi_ext_register_writel(led->spmi_dev->ctrl, led->spmi_dev->sid,
++		addr, &reg, 1);
++	if (rc)
++		dev_err(&led->spmi_dev->dev,
++			"Unable to write to addr=%#x, rc(%d)\n", addr, rc);
++	return rc;
++}
++
++static void atc_led_set(struct led_classdev *led_cdev,
++				enum led_brightness value)
++{
++	u8 val;
++	struct atc_led_data *led;
++
++	led = container_of(led_cdev, struct atc_led_data, cdev);
++	val = (led->cdev.brightness) ? 1 : 0;
++	spmi_masked_write(led, led->addr, FORCE_ON_MASK, val);
++	led->cdev.brightness = value;
++}
++
++static enum led_brightness atc_led_get(struct led_classdev *led_cdev)
++{
++	return led_cdev->brightness;
++}
++
++static int atc_leds_probe(struct spmi_device *spmi)
++{
++	struct atc_led_data *led;
++	struct resource *led_resource;
++	struct device_node *node;
++	u32 offset;
++	int rc;
++
++	node = spmi->dev.of_node;
++	if (node == NULL)
++		return -ENODEV;
++
++	led = devm_kzalloc(&spmi->dev, sizeof(struct atc_led_data), GFP_KERNEL);
++	if (!led) {
++		dev_err(&spmi->dev, "Unable to allocate memory\n");
++		return -ENOMEM;
++	}
++
++	led->spmi_dev = spmi;
++
++	led_resource = spmi_get_resource(spmi, NULL, IORESOURCE_MEM, 0);
++	if (!led_resource) {
++		dev_err(&spmi->dev, "Unable to get LED base address\n");
++		return -ENXIO;
++	}
++
++	rc = of_property_read_u32(node, "qcom,ctrl-reg", &offset);
++	if (rc < 0) {
++		dev_err(&spmi->dev,
++			"Failure reading ctrl offset, rc = %d\n", rc);
++		return -ENODEV;
++	}
++
++	led->addr = led_resource->start + offset;
++
++	rc = of_property_read_string(node, "linux,name", &led->cdev.name);
++	if (rc < 0) {
++		dev_err(&spmi->dev,
++			"Failure reading led name, rc = %d\n", rc);
++		return -ENODEV;
++	}
++
++	led->cdev.brightness_set = atc_led_set;
++	led->cdev.brightness_get = atc_led_get;
++	led->cdev.brightness = LED_OFF;
++
++	rc = led_classdev_register(&spmi->dev, &led->cdev);
++	if (rc) {
++		dev_err(&spmi->dev, "unable to ATC led rc=%d\n", rc);
++		return -ENODEV;
++	}
++
++	dev_set_drvdata(&spmi->dev, led);
++	return 0;
++}
++
++static int atc_leds_remove(struct spmi_device *spmi)
++{
++	struct atc_led_data *led  = dev_get_drvdata(&spmi->dev);
++
++	if (NULL != led)
++		led_classdev_unregister(&led->cdev);
++
++	return 0;
++}
++
++#ifdef CONFIG_OF
++static struct of_device_id spmi_match_table[] = {
++	{ .compatible = "qcom,leds-atc",},
++	{ },
++};
++#else
++#define spmi_match_table NULL
++#endif
++
++static struct spmi_driver atc_leds_driver = {
++	.driver		= {
++		.name	= "qcom,leds-atc",
++		.of_match_table = spmi_match_table,
++	},
++	.probe		= atc_leds_probe,
++	.remove		= atc_leds_remove,
++};
++
++static int __init atc_led_init(void)
++{
++	return spmi_driver_register(&atc_leds_driver);
++}
++module_init(atc_led_init);
++
++static void __exit atc_led_exit(void)
++{
++	spmi_driver_unregister(&atc_leds_driver);
++}
++module_exit(atc_led_exit);
++
++MODULE_DESCRIPTION("ATC LED driver");
++MODULE_LICENSE("GPL v2");
++MODULE_ALIAS("leds:leds-atc");
+-- 
+2.11.0
+

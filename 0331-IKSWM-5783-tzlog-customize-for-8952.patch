@@ -1,0 +1,90 @@
+From 7dd0de28fe1277e572b068bc73e194aa59df336e Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Fri, 2 Oct 2015 03:05:56 -0700
+Subject: [PATCH 331/959] IKSWM-5783 tzlog: customize for 8952
+
+Update data structure definition and CPU version information
+according to 8952 tz/sbl
+
+Change-Id: I9eee07db37b75a58d1cc2a07d58cc6014203d4ee
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+Reviewed-on: http://gerrit.mot.com/787912
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/firmware/qcom/tz_log.c      | 20 ++++++++++++++++++++
+ drivers/soc/qcom/watchdog_cpu_ctx.c |  2 +-
+ 2 files changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/firmware/qcom/tz_log.c b/drivers/firmware/qcom/tz_log.c
+index cdaef205585..093f319b4a2 100644
+--- a/drivers/firmware/qcom/tz_log.c
++++ b/drivers/firmware/qcom/tz_log.c
+@@ -95,6 +95,15 @@ struct tzdbg_reset_info_t {
+ 	uint32_t reset_type;	/* Reset Reason */
+ 	uint32_t reset_cnt;	/* Number of resets occured/CPU */
+ };
++
++/* warm boot reason for cores */
++struct tzbsp_diag_wakeup_info_t {
++	/* Wake source info : APCS_GICC_HPPIR */
++	uint32_t HPPIR;
++	/* Wake source info : APCS_GICC_AHPPIR */
++	uint32_t AHPPIR;
++};
++
+ /*
+  * Interrupt Info Table
+  */
+@@ -149,7 +158,10 @@ struct tzdbg_log_t {
+  * copied into buffer from i/o memory.
+  */
+ struct tzdbg_t {
++	/* Magic Number */
+ 	uint32_t magic_num;
++
++	/* Major.Minor version */
+ 	uint32_t version;
+ 	/*
+ 	 * Number of CPU's
+@@ -179,6 +191,10 @@ struct tzdbg_t {
+ 	 * Ring Buffer Length
+ 	 */
+ 	uint32_t ring_len;
++
++	/* Offset for Wakeup info */
++	uint32_t wakeup_info_off;
++
+ 	/*
+ 	 * VMID to EE Mapping
+ 	 */
+@@ -193,6 +209,10 @@ struct tzdbg_t {
+ 	struct tzdbg_reset_info_t reset_info[TZBSP_MAX_CPU_COUNT];
+ 	uint32_t num_interrupts;
+ 	struct tzdbg_int_t  int_info[TZBSP_DIAG_INT_NUM];
++
++	/* Wake up info */
++	struct tzbsp_diag_wakeup_info_t  wakeup_info[TZBSP_MAX_CPU_COUNT];
++
+ 	/*
+ 	 * We need at least 2K for the ring buffer
+ 	 */
+diff --git a/drivers/soc/qcom/watchdog_cpu_ctx.c b/drivers/soc/qcom/watchdog_cpu_ctx.c
+index 9c8afcc279f..1de0c1d8117 100644
+--- a/drivers/soc/qcom/watchdog_cpu_ctx.c
++++ b/drivers/soc/qcom/watchdog_cpu_ctx.c
+@@ -31,7 +31,7 @@
+ 
+ #define DUMP_MAGIC_NUMBER	0x42445953
+ 
+-#define CPU_FORMAT_VERSION3	0x13
++#define CPU_FORMAT_VERSION3	0x11
+ 
+ struct sysdbg_cpu64_ctxt_regs {
+ 	uint64_t x0;
+-- 
+2.11.0
+

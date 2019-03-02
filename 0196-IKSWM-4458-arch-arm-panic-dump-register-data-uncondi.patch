@@ -1,0 +1,35 @@
+From b3842d65b5afa8bca43d1b30c21dd9004351bc44 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Thu, 24 Sep 2015 20:34:38 -0700
+Subject: [PATCH 196/959] IKSWM-4458 arch:arm:panic: dump register data
+ unconditionally
+
+When kernel panic happens, "register data" may not be dumpped.
+Dump them unconditinally. It will be helpful for panic debugging.
+show_extra_register_data() will check whether it's valid
+address. So it's safe to invoke show_extra_register_data()
+directly.
+
+Change-Id: I2d69099f0f447f2a4f52ee08780e1a51217fd67b
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ arch/arm/kernel/process.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/arch/arm/kernel/process.c b/arch/arm/kernel/process.c
+index c327753bb14..ae54845e487 100644
+--- a/arch/arm/kernel/process.c
++++ b/arch/arm/kernel/process.c
+@@ -437,8 +437,7 @@ void __show_regs(struct pt_regs *regs)
+ 		printk("Control: %08x%s\n", ctrl, buf);
+ 	}
+ #endif
+-	if (get_fs() == get_ds())
+-		show_extra_register_data(regs, 128);
++	show_extra_register_data(regs, 128);
+ }
+ 
+ void show_regs(struct pt_regs * regs)
+-- 
+2.11.0
+

@@ -1,0 +1,72 @@
+From bd8569d39dd34fa89670f720e9921956ed442fc3 Mon Sep 17 00:00:00 2001
+From: SeungYoon Lee <w22905@motorola.com>
+Date: Tue, 22 Mar 2016 16:08:40 -0500
+Subject: [PATCH 820/959] IKSWM-27166 ASoC: msm8952: ospl: disable F0 curve
+ reading
+
+this command was implemented for audio output analysis and
+as we don't have enough time to debug why this causes problem,
+short term plan is to disable this for now and pursue this for
+later program with greater bandwidth and allow this during
+diagnostic mode only.
+
+Change-Id: If59bf38623c9c13e8f94ce765db6f62e3f2d878f
+Signed-off-by: SeungYoon Lee <w22905@motorola.com>
+Reviewed-on: http://gerrit.mot.com/836247
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Xiaofei Ma <xiaofei@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/soc/msm/ospl2xx.c | 26 --------------------------
+ 1 file changed, 26 deletions(-)
+
+diff --git a/sound/soc/msm/ospl2xx.c b/sound/soc/msm/ospl2xx.c
+index 7e30b2d0ed9..4edbb97edb4 100644
+--- a/sound/soc/msm/ospl2xx.c
++++ b/sound/soc/msm/ospl2xx.c
+@@ -882,29 +882,6 @@ static int ospl2xx_tx_get_f0(struct snd_kcontrol *kcontrol,
+ 	return 0;
+ }
+ 
+-/* PARAM_ID_OPALUM_TX_F0_CURVE */
+-static int ospl2xx_tx_get_f0_curve(struct snd_kcontrol *kcontrol,
+-			struct snd_ctl_elem_value *ucontrol)
+-{
+-	int i = 0;
+-
+-	mutex_lock(&mr_lock);
+-	ospl2xx_afe_set_callback(ospl2xx_afe_callback);
+-	ospl2xx_afe_get_param(PARAM_ID_OPALUM_TX_F0_CURVE);
+-
+-	if (f0_curve != NULL &&
+-	    f0_curve_size >= F0_CURVE_POINTS * sizeof(int32_t))
+-		for (i = 0; i < F0_CURVE_POINTS; i++)
+-			ucontrol->value.integer.value[i] = f0_curve[i];
+-	else
+-		pr_err("%s: returned f0 points too small, %d\n",
+-			__func__, f0_curve_size);
+-
+-	mutex_unlock(&mr_lock);
+-
+-	return 0;
+-}
+-
+ /* PARAM_ID_OPALUM_TX_TEMP_MEASUREMENT_VALUE */
+ static int ospl2xx_tx_get_temp_cal(struct snd_kcontrol *kcontrol,
+ 			struct snd_ctl_elem_value *ucontrol)
+@@ -1060,9 +1037,6 @@ static const struct snd_kcontrol_new ospl2xx_params_controls[] = {
+ 	/* GET */ SOC_SINGLE_MULTI_EXT("OSPL Tx F0",
+ 		SND_SOC_NOPM, 0, 0xFFFF, 0, 2,
+ 		ospl2xx_tx_get_f0, NULL),
+-	/* GET */ SOC_SINGLE_MULTI_EXT("OSPL Tx F0_curve",
+-		SND_SOC_NOPM, 0, 0xFFFF, 0, F0_CURVE_POINTS,
+-		ospl2xx_tx_get_f0_curve, NULL),
+ 	/* GET */ SOC_SINGLE_MULTI_EXT("OSPL Tx temp_cal",
+ 		SND_SOC_NOPM, 0, 0xFFFF, 0, 2,
+ 		ospl2xx_tx_get_temp_cal, NULL),
+-- 
+2.11.0
+

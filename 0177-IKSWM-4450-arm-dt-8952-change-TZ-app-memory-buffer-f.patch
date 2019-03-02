@@ -1,0 +1,55 @@
+From ce396cf0b6f85cdb0a8d99a35768089e24617978 Mon Sep 17 00:00:00 2001
+From: Yuanyuan Zhong <zyy@motorola.com>
+Date: Tue, 22 Sep 2015 14:19:08 -0500
+Subject: [PATCH 177/959] IKSWM-4450 arm/dt: 8952: change TZ app memory buffer
+ from 5M to 20M
+
+Before:
+name            start            size           end
+---------------------------------------------------------------------
+other_ext_mem   0x85e00000       0xa00000       0x86800000
+qcom_seecom     0x85e00000       0x500000       0x86300000
+
+After:
+name            start            size           end
+---------------------------------------------------------------------
+other_ext_mem   0x84f00000      0x1900000       0x86800000
+qcom_seecom     0x84f00000      0x1400000       0x86300000
+
+Also remove qcom,appsbl-qseecom-support property. Currently there is no
+such support in 8952 bootloader.
+
+Change-Id: I43685c786e6efc5b383f4f60f717f5cbbc62b7af
+Signed-off-by: Yuanyuan Zhong <zyy@motorola.com>
+Reviewed-on: http://gerrit.mot.com/785821
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Reviewed-by: James Morikuni <e43490@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index fbed1cd4111..ae5ed37d719 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -566,3 +566,12 @@
+ 		pinctrl-0 = <&tfa9890_reset_default &tfa9890_earpiece_default>;
+ 	};
+ };
++
++&other_ext_mem {
++	reg = <0x0 0x84f00000 0x0 0x1900000>;
++};
++
++&qcom_seecom {
++	reg = <0x84f00000 0x1400000>;
++	/delete-property/ qcom,appsbl-qseecom-support;
++};
+-- 
+2.11.0
+

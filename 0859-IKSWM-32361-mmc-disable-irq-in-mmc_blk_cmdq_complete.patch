@@ -1,0 +1,47 @@
+From 2976f234eef8f09b12ee4b25e6a50ab88243fc24 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Fri, 15 Apr 2016 15:57:59 -0700
+Subject: [PATCH 859/959] IKSWM-32361:mmc: disable irq in
+ mmc_blk_cmdq_complete_rq
+
+ disable irq in mmc_blk_cmdq_complete_rq to avoid the
+ task be interrupted by irq.
+
+Change-Id: Ia8157f5369935388e35448ae326d3700a06c7d5f
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/845144
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/mmc/card/block.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/mmc/card/block.c b/drivers/mmc/card/block.c
+index 1c6926f5e88..4335aa0c654 100644
+--- a/drivers/mmc/card/block.c
++++ b/drivers/mmc/card/block.c
+@@ -3301,6 +3301,9 @@ void mmc_blk_cmdq_complete_rq(struct request *rq)
+ 	struct mmc_queue *mq = (struct mmc_queue *)rq->q->queuedata;
+ 	int err = 0;
+ 	bool is_dcmd = false;
++	unsigned long flags;
++
++	local_irq_save(flags);
+ 
+ 	if (mrq->cmd && mrq->cmd->error)
+ 		err = mrq->cmd->error;
+@@ -3349,6 +3352,8 @@ void mmc_blk_cmdq_complete_rq(struct request *rq)
+ 	blk_end_request(rq, err, cmdq_req->data.bytes_xfered);
+ 
+ out:
++	local_irq_restore(flags);
++
+ 	if (host->clk_scaling.enable) {
+ 		spin_lock_bh(&host->clk_scaling.lock);
+ 		mmc_update_clk_scaling(host, is_dcmd);
+-- 
+2.11.0
+

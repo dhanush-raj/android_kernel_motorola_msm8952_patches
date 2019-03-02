@@ -1,0 +1,32 @@
+From 0c174aeef9e94fac39b6e269f28490a8b461a8c4 Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Fri, 29 Jan 2016 15:09:18 -0800
+Subject: [PATCH 667/959] IKSWM-18884 config: 8952: enable qpnp user reset
+
+Enable CONFIG_QPNP_USER_RESET so that the user can trigger
+a watchdog reset for debugging purpose.
+
+Change-Id: Iae9a294aaca272d191aaaab5cf44e4c6f0657109
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/817421
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index ef610553e7c..c8e17e5db08 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -67,3 +67,4 @@ CONFIG_CRYPTO_AES_ARM_BS=y
+ CONFIG_F2FS_FS=y
+ CONFIG_F2FS_FS_SECURITY=y
+ CONFIG_F2FS_FS_XATTR=y
++CONFIG_QPNP_USER_RESET=y
+-- 
+2.11.0
+

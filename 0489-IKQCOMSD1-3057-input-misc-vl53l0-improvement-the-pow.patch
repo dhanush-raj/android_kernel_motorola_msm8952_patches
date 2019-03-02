@@ -1,0 +1,60 @@
+From f7357da72b16ea10c618e4c42f0707b67ee25bec Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Mon, 16 Nov 2015 20:43:50 -0600
+Subject: [PATCH 489/959] IKQCOMSD1-3057:input:misc:vl53l0: improvement the 
+ powerup
+
+improve pwoerup time
+
+Change-Id: Id0d02f4ad77e62dadd8f96df0645dfb052bd308c
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/800463
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/vl53L0/stmvl53l0_module-i2c.c | 12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/input/misc/vl53L0/stmvl53l0_module-i2c.c b/drivers/input/misc/vl53L0/stmvl53l0_module-i2c.c
+index a3329bffcfa..dd7844e1f4e 100644
+--- a/drivers/input/misc/vl53L0/stmvl53l0_module-i2c.c
++++ b/drivers/input/misc/vl53L0/stmvl53l0_module-i2c.c
+@@ -187,7 +187,7 @@ static int stmvl53l0_get_dt_data(struct device *dev, struct i2c_data *data)
+ static int stmvl53l0_probe(struct i2c_client *client,
+ 				   const struct i2c_device_id *id)
+ {
+-	int rc = 0;
++	int rc = 0, i = 0;
+ 	struct stmvl53l0_data *vl53l0_data = NULL;
+ 	struct i2c_data *i2c_object = NULL;
+ 	int present;
+@@ -227,7 +227,13 @@ static int stmvl53l0_probe(struct i2c_client *client,
+ 		vl53l0_errmsg("%d,error rc %d\n", __LINE__, rc);
+ 		return rc;
+ 	}
+-	rc = stmvl53l0_checkmoduleid(vl53l0_data, i2c_object->client, I2C_BUS);
++	for (i = 0; i < 5; i++) {
++		rc = stmvl53l0_checkmoduleid
++			(vl53l0_data, i2c_object->client, I2C_BUS);
++		if (!rc)
++			break;
++		msleep(20);
++	}
+ 	if (rc != 0) {
+ 		vl53l0_errmsg("%d,error rc %d\n", __LINE__, rc);
+ 		stmvl53l0_power_down_i2c(i2c_object);
+@@ -303,7 +309,7 @@ int stmvl53l0_power_up_i2c(void *i2c_object, unsigned int *preset_flag)
+ 		data->gconf.cam_gpio_req_tbl_size, 1);
+ 
+ 	gpio_set_value_cansleep(data->gconf.cam_gpio_req_tbl[0].gpio, 1);
+-	msleep(200);
++
+ 	data->power_up = 1;
+ 	*preset_flag = 1;
+ 
+-- 
+2.11.0
+

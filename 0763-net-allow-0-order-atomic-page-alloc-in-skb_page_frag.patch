@@ -1,0 +1,54 @@
+From 722ad869e601d6247a61675695a6903290a2b498 Mon Sep 17 00:00:00 2001
+From: Michael Dalton <mwdalton@google.com>
+Date: Thu, 16 Jan 2014 22:23:25 -0800
+Subject: [PATCH 763/959] net: allow > 0 order atomic page alloc in
+ skb_page_frag_refill
+
+skb_page_frag_refill currently permits only order-0 page allocs
+unless GFP_WAIT is used. Change skb_page_frag_refill to attempt
+higher-order page allocations whether or not GFP_WAIT is used. If
+memory cannot be allocated, the allocator will fall back to
+successively smaller page allocs (down to order-0 page allocs).
+
+This change brings skb_page_frag_refill in line with the existing
+page allocation strategy employed by netdev_alloc_frag, which attempts
+higher-order page allocations whether or not GFP_WAIT is set, falling
+back to successively lower-order page allocations on failure. Part
+of migration of virtio-net to per-receive queue page frag allocators.
+
+Acked-by: Michael S. Tsirkin <mst@redhat.com>
+Acked-by: Eric Dumazet <edumazet@google.com>
+Signed-off-by: Michael Dalton <mwdalton@google.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+(cherry picked from commit 097b4f19e508015ca65a28ea4876740d35a19eea)
+Change-Id: I645fcbc24cb499baabf2552d599725cc190ccff8
+Reviewed-on: http://gerrit.mot.com/750527
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830450
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ net/core/sock.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/net/core/sock.c b/net/core/sock.c
+index 4777282db49..81b45f2fbf5 100644
+--- a/net/core/sock.c
++++ b/net/core/sock.c
+@@ -1868,9 +1868,7 @@ bool skb_page_frag_refill(unsigned int sz, struct page_frag *pfrag, gfp_t prio)
+ 		put_page(pfrag->page);
+ 	}
+ 
+-	/* We restrict high order allocations to users that can afford to wait */
+-	order = (prio & __GFP_WAIT) ? SKB_FRAG_PAGE_ORDER : 0;
+-
++	order = SKB_FRAG_PAGE_ORDER;
+ 	do {
+ 		gfp_t gfp = prio;
+ 
+-- 
+2.11.0
+

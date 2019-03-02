@@ -1,0 +1,59 @@
+From 2b8e9abf3eae0d3a2ce7f7166ec29e0d8347752d Mon Sep 17 00:00:00 2001
+From: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Date: Thu, 28 Feb 2013 13:32:17 -0600
+Subject: [PATCH 007/959] IKKRNBSP-1406 build: generate consistent kernel
+ module binaries
+
+ - Use relative path names when building the kernel and kernel binary
+   images. Things like dynamic debug (and any usage of the __FILE__
+   macro) cause the absolute path name of kernel source files to be
+   encoded in binaries produced when using the O= make option.
+
+ - Strip the GNU linker unique build ID from kernel module binaries.
+
+Change-Id: I8eb2f813fbbc97285a63d58118b8338d410b09d4
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/521329
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Check Patch <CHEKPACH@motorola.com>
+Reviewed-by: Klocwork kwcheck <klocwork-kwcheck@sourceforge.mot.com>
+Reviewed-by: Christopher Fries <qcf001@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+(cherry picked from commit 16479864aac9b2c32ab5dd14a29167a4078ed007)
+(cherry picked from commit 9c747b5eabbe096637461a5b9c872d2328f7f40c)
+---
+ AndroidKernel.mk | 11 +++++++----
+ 1 file changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/AndroidKernel.mk b/AndroidKernel.mk
+index b4bb7b49816..2018b551632 100644
+--- a/AndroidKernel.mk
++++ b/AndroidKernel.mk
+@@ -68,6 +68,9 @@ endif
+ KERNEL_HEADERS_INSTALL := $(KERNEL_OUT)/usr
+ KERNEL_MODULES_INSTALL := system
+ KERNEL_MODULES_OUT := $(TARGET_OUT)/lib/modules
++# relative path from KERNEL_OUT to kernel source directory
++KERNEL_SOURCE_RELATIVE_PATH := ../../../../../../kernel
++
+ 
+ TARGET_PREBUILT_KERNEL := $(TARGET_PREBUILT_INT_KERNEL)
+ $(info TARGET_PREBUILT_KERNEL is $(TARGET_PREBUILT_KERNEL))
+@@ -112,10 +115,10 @@ $(KERNEL_CONFIG): $(KERNEL_OUT) $(TARGET_DEFCONFIG)
+ $(TARGET_PREBUILT_INT_KERNEL): $(KERNEL_OUT) $(KERNEL_CONFIG) $(KERNEL_HEADERS_INSTALL)
+ 	$(hide) echo "Building kernel..."
+ 	$(hide) rm -rf $(KERNEL_OUT)/arch/$(KERNEL_ARCH)/boot/dts
+-	$(MAKE) -C kernel O=../$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_CFLAGS)
+-	$(MAKE) -C kernel O=../$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_CFLAGS) dtbs
+-	$(MAKE) -C kernel O=../$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_CFLAGS) modules
+-	$(MAKE) -C kernel O=../$(KERNEL_OUT) INSTALL_MOD_PATH=../../$(KERNEL_MODULES_INSTALL) INSTALL_MOD_STRIP=1 ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) modules_install
++	$(MAKE) -C kernel KBUILD_RELSRC=$(KERNEL_SOURCE_RELATIVE_PATH) O=../$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_CFLAGS)
++	$(MAKE) -C kernel KBUILD_RELSRC=$(KERNEL_SOURCE_RELATIVE_PATH) O=../$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_CFLAGS) dtbs
++	$(MAKE) -C kernel KBUILD_RELSRC=$(KERNEL_SOURCE_RELATIVE_PATH) O=../$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_CFLAGS) modules
++	$(MAKE) -C kernel KBUILD_RELSRC=$(KERNEL_SOURCE_RELATIVE_PATH) O=../$(KERNEL_OUT) INSTALL_MOD_PATH=../../$(KERNEL_MODULES_INSTALL) INSTALL_MOD_STRIP="--strip-debug --remove-section=.note.gnu.build-id" ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) modules_install
+ 	$(mv-modules)
+ 	$(clean-module-folder)
+ 
+-- 
+2.11.0
+

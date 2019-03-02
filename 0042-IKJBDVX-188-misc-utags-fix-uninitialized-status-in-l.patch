@@ -1,0 +1,47 @@
+From 9f924f993261e004909b2f8b5bd63969cc390f67 Mon Sep 17 00:00:00 2001
+From: Jason Hrycay <jason.hrycay@motorola.com>
+Date: Wed, 22 May 2013 21:41:55 -0500
+Subject: [PATCH 042/959] IKJBDVX-188 misc: utags: fix uninitialized status in
+ load_utags
+
+The status variable passed to thaw_tags is uninitialized. Pass NULL,
+instead since we aren't even making use of the return code anyhow.
+
+Change-Id: Ifb39e78cf5ab887b336a3edf1fae9811c6fdd0d3
+Signed-off-by: Jason Hrycay <jason.hrycay@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/540753
+SLT-Approved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-by: Igor Kovalenko <cik009@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-by: Alexander Filonenko <vtp684@motorola.com>
+Reviewed-by: Christopher Fries <c.fries@motorola.com>
+---
+ drivers/misc/utag/utags.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/drivers/misc/utag/utags.c b/drivers/misc/utag/utags.c
+index cd7685c3ff3..a6a185d3c59 100644
+--- a/drivers/misc/utag/utags.c
++++ b/drivers/misc/utag/utags.c
+@@ -477,7 +477,6 @@ static struct utag *load_utags(const char *partition_name)
+ 	int file_errno;
+ 	struct file *filp = NULL;
+ 	struct inode *inode = NULL;
+-	enum utag_error *status;
+ 
+ 	if (0 == partition_name[0]) {
+ 		pr_err("%s utag partition not set\n", __func__);
+@@ -523,7 +522,7 @@ static struct utag *load_utags(const char *partition_name)
+ 		goto free_data;
+ 	}
+ 
+-	head = thaw_tags(block_size, data, status);
++	head = thaw_tags(block_size, data, NULL);
+ 
+  free_data:
+ 	kfree(data);
+-- 
+2.11.0
+

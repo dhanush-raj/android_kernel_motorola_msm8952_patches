@@ -1,0 +1,43 @@
+From 2d927add405851007cd0800997df3c3db63fe162 Mon Sep 17 00:00:00 2001
+From: Axel Lin <axel.lin@gmail.com>
+Date: Wed, 18 Dec 2013 04:26:52 +0100
+Subject: [PATCH 716/959] ARM: 7929/1: Remove duplicate SCHED_HRTICK config
+ option
+
+There are two SCHED_HRTICK config entries in Kconfig.
+This looks like a merge mistake. Fix it.
+
+Signed-off-by: Axel Lin <axel.lin@ingics.com>
+Signed-off-by: Russell King <rmk+kernel@arm.linux.org.uk>
+(cherry picked from commit 3077202eb95ad5bb6abd1e6dcb28d852c1fa48b3)
+Mot-CRs-fixed: IKSWM-22509
+
+Change-Id: Ia56a87e8c4230a90ca9ba111a3e2f15e04e8ef99
+Signed-off-by: Yuanyuan Zhong <zyy@motorola.com>
+Reviewed-on: http://gerrit.mot.com/826665
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/Kconfig | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/arch/arm/Kconfig b/arch/arm/Kconfig
+index cb1fe8641da..afb41617052 100644
+--- a/arch/arm/Kconfig
++++ b/arch/arm/Kconfig
+@@ -1690,9 +1690,6 @@ config HZ
+ config SCHED_HRTICK
+ 	def_bool HIGH_RES_TIMERS
+ 
+-config SCHED_HRTICK
+-	def_bool HIGH_RES_TIMERS
+-
+ config THUMB2_KERNEL
+ 	bool "Compile the kernel in Thumb-2 mode" if !CPU_THUMBONLY
+ 	depends on CPU_V7 && !CPU_V6 && !CPU_V6K
+-- 
+2.11.0
+

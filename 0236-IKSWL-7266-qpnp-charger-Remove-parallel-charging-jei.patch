@@ -1,0 +1,44 @@
+From c593521ea8695c6bcc411698bcbb27fd67da2bb5 Mon Sep 17 00:00:00 2001
+From: Jason Knopsnyder <jasonk@motorola.com>
+Date: Wed, 8 Apr 2015 11:29:54 -0500
+Subject: [PATCH 236/959] IKSWL-7266: qpnp-charger: Remove parallel charging
+ jeita check
+
+Parallel charging should not be changed to single path charging
+if the battery temperature exceeds 45C.
+
+Change-Id: Iaed446c4e03a886541821a4d50222530307ea4d8
+Signed-off-by: Jason Knopsnyder <jasonk@motorola.com>
+Reviewed-on: http://gerrit.mot.com/732966
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index dc3121bacb2..1d1c244f76a 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -1543,12 +1543,12 @@ static bool smbchg_is_parallel_usb_ok(struct smbchg_chip *chip)
+ 		pr_smb(PR_STATUS, "Not in fast charge, skipping\n");
+ 		return false;
+ 	}
+-
++#ifdef QCOM_BASE
+ 	if (get_prop_batt_health(chip) != POWER_SUPPLY_HEALTH_GOOD) {
+ 		pr_smb(PR_STATUS, "JEITA active, skipping\n");
+ 		return false;
+ 	}
+-
++#endif
+ 	if (get_prop_batt_voltage_now(chip) < PARALLEL_MIN_BATT_VOLT_UV) {
+ 		pr_smb(PR_STATUS, "Battery Voltage below %d, skipping\n",
+ 		       PARALLEL_MIN_BATT_VOLT_UV);
+-- 
+2.11.0
+

@@ -1,0 +1,43 @@
+From f2b411b30f05dbd4407f303d67466ce1c627d2a3 Mon Sep 17 00:00:00 2001
+From: Tarciano Facco Pegoraro <tarciano@motorola.com>
+Date: Thu, 20 Oct 2016 16:51:42 -0200
+Subject: [PATCH 937/959] IKSWN-9377 arm/dt: 8952: Add channel ids for India
+ and Indonesia
+
+- Reliance JIO India: jioin;
+- Airtel India: airin;
+- Retail Indonesia: retid.
+
+Change-Id: Ia19d5e966f98986567e4d5959f4826cfc887b85c
+Signed-off-by: Tarciano Facco Pegoraro <tarciano@motorola.com>
+Reviewed-on: https://gerrit.mot.com/911405
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-by: Eliseu Massing Junior <eliseu@motorola.com>
+---
+ arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi b/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
+index a6db9ff6168..d850b12ad23 100644
+--- a/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
++++ b/arch/arm/boot/dts/qcom/carrier-channel-ids.dtsi
+@@ -211,9 +211,9 @@
+ 		"telstra",	/* 194 */
+ 		"vfau",	/* 195 */
+ 		"amzin",	/* 196 */
+-		"undefined",	/* 197 */
+-		"undefined",	/* 198 */
+-		"undefined",	/* 199 */
++		"jioin",	/* 197 */
++		"airin",	/* 198 */
++		"retid",	/* 199 */
+ 		"undefined",	/* 200 */
+ 		"undefined",	/* 201 */
+ 		"undefined",	/* 202 */
+-- 
+2.11.0
+

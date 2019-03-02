@@ -1,0 +1,57 @@
+From 96306d7780b735c809d376b58ccd9dbdac893f80 Mon Sep 17 00:00:00 2001
+From: Huosheng Liao <liaohs@motorola.com>
+Date: Mon, 21 Mar 2016 22:30:26 -0600
+Subject: [PATCH 822/959] Revert "IKSWM-24183: spi: Finalize message on prepare
+ failure"
+
+This reverts commit e95c7337847ad93ca2e6196471aa96596dd23f54.
+
+fixed IKSWM-26676
+<1>[55401.227508,4] Unable to handle kernel NULL pointer
+dereference at virtual address 0000001c
+<1>[55401.227512,4] pgd = c0004000
+<1>[55401.227518,4] [0000001c] *pgd=00000000
+<0>[55401.227525,4] Internal error: Oops: 805 [#1] PREEMPT SMP ARM
+<4>[55401.227541,4] Modules linked in:qcrypto_module(O)
+<4>[55401.227550,4] CPU: 4 PID: 209 Comm: spi4
+Tainted: P W O 3.10.84-eng-g5dcc15d-00006-g1e78c34 #1
+<4>[55401.227557,4] task: f5c10640 ti: f5d84000 task.ti: f5d84000
+<4>[55401.227571,4] PC is at spi_pump_messages+0x10c/0x14c
+<4>[55401.227577,4] LR is at spi_pump_messages+0x104/0x14c
+
+Change-Id: Ie23190b3facf34b02277a788028b265ee75d7bb8
+Reviewed-on: http://gerrit.mot.com/835694
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Reviewed-by: XiaoJun Ji <jixj@motorola.com>
+Reviewed-by: Jason Hrycay <jason.hrycay@motorola.com>
+SME-Granted: Jason Hrycay <jason.hrycay@motorola.com>
+Submit-Approved: Jason Hrycay <jason.hrycay@motorola.com>
+Tested-by: Jason Hrycay <jason.hrycay@motorola.com>
+---
+ drivers/spi/spi.c | 7 -------
+ 1 file changed, 7 deletions(-)
+
+diff --git a/drivers/spi/spi.c b/drivers/spi/spi.c
+index 35e9e67f3ba..32b7bb111eb 100644
+--- a/drivers/spi/spi.c
++++ b/drivers/spi/spi.c
+@@ -577,13 +577,6 @@ static void spi_pump_messages(struct kthread_work *work)
+ 		if (ret) {
+ 			dev_err(&master->dev,
+ 				"failed to prepare transfer hardware\n");
+-			/* If hardware failed to prepare, need to ensure we
+-			 * finalize the message so anyone waiting on the message
+-			 * completion gets it. transfer_one_message already
+-			 * ensures this is done internally.
+-			 */
+-			master->cur_msg->status = ret;
+-			spi_finalize_current_message(master);
+ 			return;
+ 		}
+ 	}
+-- 
+2.11.0
+

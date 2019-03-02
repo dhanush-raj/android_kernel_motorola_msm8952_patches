@@ -1,0 +1,35 @@
+From 97d2c01798b95187e0e602075a8d637f30138b0f Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Wed, 16 Mar 2016 11:34:43 -0500
+Subject: [PATCH 800/959] IKSWM-25798: arm/dt: msm8952: moto-common: Set ITERM
+
+Iterm for 8952 should be 146 mA.
+
+Change-Id: Ie8401bd582d9c62552e37f96d4bae56a625434cd
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/833859
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 31bfddd58de..b2ee461f1b0 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -426,7 +426,7 @@
+ 	qcom,stepchg-voltage-mv = <4200>;
+ 	qcom,stepchg-current-ma = <2500>;
+ 	qcom,stepchg-taper-ma = <2000>;
+-	qcom,stepchg-iterm-ma = <200>;
++	qcom,stepchg-iterm-ma = <146>;
+ 	qcom,hot-temp-c = <60>;
+ 	qcom,cold-temp-c = <(-20)>;
+ 	qcom,warm-temp-c = <45>;
+-- 
+2.11.0
+

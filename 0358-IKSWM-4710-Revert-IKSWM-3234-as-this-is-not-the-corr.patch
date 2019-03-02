@@ -1,0 +1,39 @@
+From 1bf750e89f7ec50d6f2627e007e776d8c4c1827a Mon Sep 17 00:00:00 2001
+From: "Russ W. Knize" <Russ.Knize@motorola.com>
+Date: Tue, 29 Sep 2015 14:15:03 -0500
+Subject: [PATCH 358/959] IKSWM-4710: Revert IKSWM-3234 as this is not the
+ correct approach
+
+Revert "IKSWM-3234: fs: esdfs: Remove the optimization to skip hash lookup."
+
+This reverts commit 5cab772840fa2cbd7d6db79efcef900b23e5a7b1.
+
+Change-Id: I607e29fa7d407ea7c091059fe4b367e90441a371
+Signed-off-by: Russ Knize <Russ.Knize@motorola.com>
+Reviewed-on: http://gerrit.mot.com/787062
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sheng-Zhe Zhao <a18689@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ fs/esdfs/derive.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/fs/esdfs/derive.c b/fs/esdfs/derive.c
+index 4970bbedb95..5a3e0c75017 100644
+--- a/fs/esdfs/derive.c
++++ b/fs/esdfs/derive.c
+@@ -537,6 +537,8 @@ int esdfs_check_derived_permission(struct inode *inode, int mask)
+ 		/* If we don't need to confine, we're done. */
+ 		if (!test_opt(ESDFS_SB(inode->i_sb), DERIVE_CONFINE))
+ 			return 0;
++		/* If we do, we can still skip the hash lookup. */
++		access = HAS_SDCARD_RW;
+ 	}
+ 
+ 	cred = current_cred();
+-- 
+2.11.0
+

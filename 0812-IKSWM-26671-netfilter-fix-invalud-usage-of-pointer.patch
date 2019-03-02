@@ -1,0 +1,36 @@
+From 09f3eb5514dfa7693402128f2fbbdae199129a6c Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Mon, 21 Mar 2016 16:51:22 -0500
+Subject: [PATCH 812/959] IKSWM-26671 netfilter: fix invalud usage of pointer
+
+A invalid usage of pointer cause the buffer overwrite by
+memcpy and hence cause kernel panic when accessing it.
+
+Change-Id: Ifa943215b511faeb4a9f29964025ae57e06b9a5b
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/835593
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ net/netfilter/nf_conntrack_irc.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/net/netfilter/nf_conntrack_irc.c b/net/netfilter/nf_conntrack_irc.c
+index 43036a658e9..e7bc8af7291 100644
+--- a/net/netfilter/nf_conntrack_irc.c
++++ b/net/netfilter/nf_conntrack_irc.c
+@@ -202,7 +202,7 @@ static int handle_nickname(struct nf_conn *ct,
+ 				kmalloc(i, GFP_ATOMIC);
+ 			if (temp->nickname) {
+ 				temp->nickname_len = i;
+-				memcpy(&temp->nickname,
++				memcpy(temp->nickname,
+ 					   nick_start, temp->nickname_len);
+ 			} else {
+ 				list_del(&temp->ptr);
+-- 
+2.11.0
+

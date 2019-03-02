@@ -1,0 +1,42 @@
+From 8334f4e1793fa689c31c6d723630734aac42008d Mon Sep 17 00:00:00 2001
+From: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Date: Mon, 20 Jul 2015 17:22:48 -0500
+Subject: [PATCH 021/959] IKKRNBSP-3292 defconfig: moto: add instructions to
+ top of moto-msm.config
+
+Change-Id: I3261af27cd854b56c5fb7e6250ac36123c81f49c
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.mot.com/768619
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index 70ad5288938..b413fd65d08 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -1 +1,17 @@
++#
++# Please avoid changing the Qualcomm defconfig files and use this file to
++# add any Motorola-specific configuration changes that are applicable to
++# userdebug, eng, and user builds.
++#
++# After building, a list of all of the config files that are used can be found
++# at the top of:
++# out/target/product/$(PRODUCT)/obj/KERNEL_OBJ/mapphone_defconfig
++#
++# The actual output of the kernel configuration system can be found at:
++# out/target/product/$(PRODUCT)/obj/KERNEL_OBJ/.config
++#
++# You can check the .config file to verify that your configuration option is
++# being set as expected.
++#
++
+ CONFIG_MMI_DEVICE_DTBS=y
+-- 
+2.11.0
+

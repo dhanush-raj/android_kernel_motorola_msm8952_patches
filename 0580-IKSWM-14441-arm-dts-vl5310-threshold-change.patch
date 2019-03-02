@@ -1,0 +1,35 @@
+From f3cbf5a6c0a3b0441b52de4646f2b2745fa585f0 Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Sun, 27 Dec 2015 19:32:48 -0600
+Subject: [PATCH 580/959] IKSWM-14441: arm/dts:vl5310 threshold change
+
+inprove the performance of SAR to avoid debounce
+
+Change-Id: I667a0fb96f6cdf3e8a001dc12e3a629ecc9303e1
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/809614
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 8214c889d23..0029bb424ff 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -944,7 +944,7 @@
+ 		pinctrl-names = "laser_default", "laser_suspend";
+ 		pinctrl-0 = <&laser_active >;
+ 		pinctrl-1 = <&laser_suspend >;
+-		st,sensorthreshold = <40 45>;
++		st,sensorthreshold = <40 50>;
+ 	};
+ 
+ 	elan@49 {
+-- 
+2.11.0
+

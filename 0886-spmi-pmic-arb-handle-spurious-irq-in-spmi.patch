@@ -1,0 +1,130 @@
+From b8252ba11eda3954c35091b5248ee5a582a7cc6c Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Wed, 11 May 2016 15:22:45 -0700
+Subject: [PATCH 886/959] spmi: pmic-arb: handle spurious irq in spmi
+
+Hanle the spurious interrupts on SPMI side. This can
+avoid disabling the whole SPMI interrupts on GIC side.
+Dump apid and status when spurious interrpts detected.
+
+Mot-CRs-fixed: IKSWM-36077
+
+Change-Id: I5686ac12c722863babb41b3a98997c9704db842f
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/855486
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/spmi/Kconfig         |  8 +++++++
+ drivers/spmi/spmi-pmic-arb.c | 57 ++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 65 insertions(+)
+
+diff --git a/drivers/spmi/Kconfig b/drivers/spmi/Kconfig
+index 15499c7d0d1..00cf307553b 100644
+--- a/drivers/spmi/Kconfig
++++ b/drivers/spmi/Kconfig
+@@ -19,6 +19,14 @@ config SPMI_MSM_PMIC_ARB
+ 	  This is required for communicating with Qualcomm PMICs and
+ 	  other devices that have the SPMI interface.
+ 
++config SPMI_MSM_PMIC_ARB_PANIC_ON_SPURIOUS_IRQ
++	bool "SPMI Arbiter Panic On Spurious IRQ"
++	depends on SPMI_MSM_PMIC_ARB
++	default n
++	help
++	  Say 'y' here to trigger a panic on spurious interrupts for
++	  debugging purpose.
++
+ config MSM_QPNP_INT
+ 	depends on SPARSE_IRQ
+ 	depends on SPMI
+diff --git a/drivers/spmi/spmi-pmic-arb.c b/drivers/spmi/spmi-pmic-arb.c
+index f68b70c17b8..60015825a89 100644
+--- a/drivers/spmi/spmi-pmic-arb.c
++++ b/drivers/spmi/spmi-pmic-arb.c
+@@ -977,6 +977,52 @@ static int pmic_arb_pic_disable(struct spmi_controller *ctrl,
+ 	return 0;
+ }
+ 
++static irqreturn_t pmic_handle_spurious_irq(struct spmi_pmic_arb_dev *pmic_arb)
++{
++	irqreturn_t ret = IRQ_NONE;
++	void __iomem *intr = pmic_arb->intr;
++	u8 pid, sid;
++	u16 apid, ppid;
++	u32 status, enable, owner;
++
++	for (apid = 0; apid < PMIC_ARB_MAX_PERIPHS; apid++) {
++		if (apid >= pmic_arb->min_intr_apid &&
++			apid <= pmic_arb->max_intr_apid)
++			continue;
++
++		owner = SPMI_OWNERSHIP_PERIPH2OWNER(
++				readl_relaxed(pmic_arb->cnfg +
++					SPMI_OWNERSHIP_TABLE_REG(apid)));
++		if (owner != pmic_arb->ee)
++			continue;
++
++		status = readl_relaxed(intr + pmic_arb->ver->irq_status(apid));
++		if (!status)
++			continue;
++
++		/* Clear the spurious peripheral interrupt bits */
++		writel_relaxed(status, intr + pmic_arb->ver->irq_clear(apid));
++		/* Irq needs to be cleared/acknowledged before exiting ISR */
++		mb();
++
++		ppid = get_peripheral_id(pmic_arb, apid);
++		sid = (ppid >> 8) & 0x0F;
++		pid = ppid & 0xFF;
++		enable = spmi_pic_acc_en_rd(pmic_arb, sid, pid, apid, "isr");
++		dev_err(pmic_arb->dev,
++			"Spurious irq detected apid=0x%x en=0x%x status=0x%x\n",
++			apid, enable, status);
++
++		ret = IRQ_HANDLED;
++	}
++
++#ifdef CONFIG_SPMI_MSM_PMIC_ARB_PANIC_ON_SPURIOUS_IRQ
++	if (ret == IRQ_HANDLED)
++		BUG();
++#endif
++	return ret;
++}
++
+ static irqreturn_t
+ periph_interrupt(struct spmi_pmic_arb_dev *pmic_arb, u8 apid, bool show)
+ {
+@@ -1077,8 +1123,15 @@ __pmic_arb_periph_irq(int irq, void *dev_id, bool show)
+ 		}
+ 	}
+ 
++	if (ret != IRQ_NONE || show)
++		return ret;
++
+ 	/* ACC_STATUS is empty but IRQ fired check IRQ_STATUS */
+ 	if (!acc_valid) {
++		/* In some cases the accumulator status may remain zero
++	 	* and the interrupt remains un-handled.
++	 	* Let's check the spurious irq with Arbiter's IRQ status.
++	 	*/
+ 		for (i = pmic_arb->min_intr_apid; i <= pmic_arb->max_intr_apid;
+ 				i++) {
+ 			if (!is_apid_valid(pmic_arb, i))
+@@ -1095,6 +1148,10 @@ __pmic_arb_periph_irq(int irq, void *dev_id, bool show)
+ 		}
+ 	}
+ 
++	/* Still not found, handle the spurious interrupts */
++	if (ret == IRQ_NONE)
++		ret = pmic_handle_spurious_irq(pmic_arb);
++
+ 	return ret;
+ }
+ 
+-- 
+2.11.0
+

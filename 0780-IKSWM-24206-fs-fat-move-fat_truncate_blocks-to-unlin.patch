@@ -1,0 +1,57 @@
+From a43c3b1a31c1c2b77531c213500a49849879c928 Mon Sep 17 00:00:00 2001
+From: Shengzhe Zhao <a18689@motorola.com>
+Date: Mon, 9 Nov 2015 17:36:26 -0800
+Subject: [PATCH 780/959] IKSWM-24206 fs: fat: move fat_truncate_blocks to
+ unlink
+
+When delete a file, do_unlinkat will call evict->fat_evict_inode
+->fat_truncate_blocks->fat_free->fat_free_clusters to free
+clusters. However, when we have multiple mount points over fat
+file system, the inode->i_count in iput could not be zero, then
+evict could not be called. Now move fat_truncate_blocks from
+fat_evict_inode to vfat_unlink. What fat_truncate_blocks does is
+marking every cluster belong to the file to FAT_ENT_FREE, so
+doing this operation should be fine in vfat_unlink.
+
+Change-Id: I8e2b579d9b3321191e92cc28bd28ba176291cab9
+Signed-off-by: Shengzhe Zhao <a18689@motorola.com>
+Reviewed-on: http://gerrit.mot.com/798731
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830278
+Reviewed-by: Jiang-Li Yuan <jlyuan@motorola.com>
+---
+ fs/fat/inode.c      | 1 -
+ fs/fat/namei_vfat.c | 1 +
+ 2 files changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/fs/fat/inode.c b/fs/fat/inode.c
+index ebdc6656c06..2c84a538d20 100644
+--- a/fs/fat/inode.c
++++ b/fs/fat/inode.c
+@@ -493,7 +493,6 @@ static void fat_evict_inode(struct inode *inode)
+ 	truncate_inode_pages(&inode->i_data, 0);
+ 	if (!inode->i_nlink) {
+ 		inode->i_size = 0;
+-		fat_truncate_blocks(inode, 0);
+ 	}
+ 	invalidate_inode_buffers(inode);
+ 	clear_inode(inode);
+diff --git a/fs/fat/namei_vfat.c b/fs/fat/namei_vfat.c
+index 2da952036a3..91fc9c31a4a 100644
+--- a/fs/fat/namei_vfat.c
++++ b/fs/fat/namei_vfat.c
+@@ -850,6 +850,7 @@ static int vfat_unlink(struct inode *dir, struct dentry *dentry)
+ 	err = fat_remove_entries(dir, &sinfo);	/* and releases bh */
+ 	if (err)
+ 		goto out;
++	fat_truncate_blocks(inode, 0);
+ 	clear_nlink(inode);
+ 	inode->i_mtime = inode->i_atime = CURRENT_TIME_SEC;
+ 	fat_detach(inode);
+-- 
+2.11.0
+

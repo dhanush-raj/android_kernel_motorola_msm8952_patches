@@ -1,0 +1,44 @@
+From 2d45ee84d5597fc1975365b0635954005e0f31e9 Mon Sep 17 00:00:00 2001
+From: caoyi1 <caoyi1@lenovo.com>
+Date: Fri, 25 Mar 2016 11:27:03 +0800
+Subject: [PATCH 830/959] IKSWM-27805:input misc epl8802,reduce sensor IC
+ current
+
+Change-Id: I5d8b3b5cfe25ceca596534fb36b9f9f92daa592f
+Signed-off-by: caoyi1 <caoyi1@lenovo.com>
+Reviewed-on: http://gerrit.mot.com/837502
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jing-Nan Zhu <jingnanzhu@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/epl8802.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/input/misc/epl8802.c b/drivers/input/misc/epl8802.c
+index 74d91d7d0ec..1d56a02e6cf 100644
+--- a/drivers/input/misc/epl8802.c
++++ b/drivers/input/misc/epl8802.c
+@@ -637,7 +637,7 @@ static void initial_global_variable(struct i2c_client *client, struct epl_sensor
+     epl_sensor.power = EPL_POWER_ON;
+     epl_sensor.reset = EPL_RESETN_RUN;
+     epl_sensor.mode = EPL_MODE_IDLE;
+-    epl_sensor.wait = EPL_WAIT_0_MS;
++    epl_sensor.wait = EPL_WAIT_400_MS;
+     epl_sensor.osc_sel = EPL_OSC_SEL_1MHZ;
+ 
+     //als setting
+@@ -677,7 +677,7 @@ static void initial_global_variable(struct i2c_client *client, struct epl_sensor
+     epl_sensor.ps.integration_time = EPL_PS_INTT_272;
+     epl_sensor.ps.gain = EPL_GAIN_LOW;
+     epl_sensor.ps.adc = EPL_PSALS_ADC_11;
+-    epl_sensor.ps.cycle = EPL_CYCLE_16;
++    epl_sensor.ps.cycle = EPL_CYCLE_8;
+     epl_sensor.ps.persist = EPL_PERIST_1;
+     epl_sensor.ps.ir_on_control = EPL_IR_ON_CTRL_ON;
+     epl_sensor.ps.ir_mode = EPL_IR_MODE_CURRENT;
+-- 
+2.11.0
+

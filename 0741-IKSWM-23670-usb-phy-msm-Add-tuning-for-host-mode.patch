@@ -1,0 +1,117 @@
+From 2aa25b14edfcd370ff751f1c4f26332fdc7bb854 Mon Sep 17 00:00:00 2001
+From: Xuehui Ye <yexh1@motorola.com>
+Date: Fri, 4 Mar 2016 10:22:27 +0800
+Subject: [PATCH 741/959] IKSWM-23670: usb: phy-msm: Add tuning for host mode
+
+Add Separate phy tuning for host mode. the default tuning doesn't
+work for host mode especially with micro-B OTG devices such as
+OTG flash drives. Invoke the tuning and reset the phy before
+host mode is started.
+
+Change-Id: I9a1c403f5f431339b2c2a36c40c4759694ef9fa4
+Signed-off-by: Xuehui Ye <yexh1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/829064
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/usb/phy/phy-msm-usb.c | 32 ++++++++++++++++++++++++++++----
+ include/linux/usb/msm_hsusb.h |  1 +
+ 2 files changed, 29 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/usb/phy/phy-msm-usb.c b/drivers/usb/phy/phy-msm-usb.c
+index 52298ee037c..e559be7f37a 100644
+--- a/drivers/usb/phy/phy-msm-usb.c
++++ b/drivers/usb/phy/phy-msm-usb.c
+@@ -476,7 +476,7 @@ static struct usb_phy_io_ops msm_otg_io_ops = {
+ 	.write = ulpi_write,
+ };
+ 
+-static void ulpi_init(struct msm_otg *motg)
++static void ulpi_init(struct msm_otg *motg, bool host)
+ {
+ 	struct msm_otg_platform_data *pdata = motg->pdata;
+ 	int aseq[10];
+@@ -487,9 +487,11 @@ static void ulpi_init(struct msm_otg *motg)
+ 				override_phy_init);
+ 		get_options(override_phy_init, ARRAY_SIZE(aseq), aseq);
+ 		seq = &aseq[1];
+-	} else {
++	} else if (host)
++		seq = pdata->phy_host_init_seq;
++	else
+ 		seq = pdata->phy_init_seq;
+-	}
++
+ 
+ 	if (!seq)
+ 		return;
+@@ -802,7 +804,7 @@ static int msm_otg_reset(struct usb_phy *phy)
+ 	msm_usb_phy_reset(motg);
+ 
+ 	/* Program USB PHY Override registers. */
+-	ulpi_init(motg);
++	ulpi_init(motg, false);
+ 
+ 	/*
+ 	 * It is required to reset USB PHY after programming
+@@ -2204,6 +2206,11 @@ static void msm_otg_start_host(struct usb_otg *otg, int on)
+ 				motg->inputs, otg->phy->state);
+ 		msm_otg_reset(&motg->phy);
+ 
++		if (pdata->phy_host_init_seq) {
++			ulpi_init(motg, true);
++			msm_otg_phy_reset(motg);
++		}
++
+ 		if (pdata->otg_control == OTG_PHY_CONTROL)
+ 			ulpi_write(otg->phy, OTG_COMP_DISABLE,
+ 				ULPI_SET(ULPI_PWR_CLK_MNG_REG));
+@@ -2249,6 +2256,9 @@ static void msm_otg_start_host(struct usb_otg *otg, int on)
+ 		if (pdata->otg_control == OTG_PHY_CONTROL)
+ 			ulpi_write(otg->phy, OTG_COMP_DISABLE,
+ 				ULPI_CLR(ULPI_PWR_CLK_MNG_REG));
++
++		/* Clear the reset counter for reverting to default tuning */
++		motg->reset_counter = 0;
+ 	}
+ }
+ 
+@@ -5761,6 +5771,20 @@ struct msm_otg_platform_data *msm_otg_dt_to_pdata(struct platform_device *pdev)
+ 				pdata->phy_init_seq,
+ 				len/sizeof(*pdata->phy_init_seq));
+ 	}
++
++	len = 0;
++	of_get_property(node, "qcom,hsusb-otg-host-phy-init-seq", &len);
++	if (len) {
++		pdata->phy_host_init_seq = devm_kzalloc(&pdev->dev, len,
++								GFP_KERNEL);
++		if (!pdata->phy_host_init_seq)
++			return NULL;
++		of_property_read_u32_array(node,
++				"qcom,hsusb-otg-host-phy-init-seq",
++				pdata->phy_host_init_seq,
++				len/sizeof(*pdata->phy_host_init_seq));
++	}
++
+ 	of_property_read_u32(node, "qcom,hsusb-otg-power-budget",
+ 				&pdata->power_budget);
+ 	of_property_read_u32(node, "qcom,hsusb-otg-mode",
+diff --git a/include/linux/usb/msm_hsusb.h b/include/linux/usb/msm_hsusb.h
+index 6b4383dcc8f..ba74bdf559c 100644
+--- a/include/linux/usb/msm_hsusb.h
++++ b/include/linux/usb/msm_hsusb.h
+@@ -291,6 +291,7 @@ enum usb_id_state {
+  */
+ struct msm_otg_platform_data {
+ 	int *phy_init_seq;
++	int *phy_host_init_seq;
+ 	int (*vbus_power)(bool on);
+ 	unsigned power_budget;
+ 	enum usb_mode_type mode;
+-- 
+2.11.0
+

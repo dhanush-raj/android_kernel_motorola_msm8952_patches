@@ -1,0 +1,71 @@
+From f5c020c9c57b162bfa43dc032b5a233f0a12e60e Mon Sep 17 00:00:00 2001
+From: Lianwei Wang <a22439@motorola.com>
+Date: Tue, 25 Nov 2014 15:13:27 -0800
+Subject: [PATCH 844/959] IKSWM-26548 power: make sync on suspend optional
+
+On embedded devices with built-in batteries, it is not so
+important to sync the file systems before suspend.  The chance
+of losing power during suspend are no greater than they are
+when the system is awake.  The sync operations can greatly
+increase suspend latency when the system has accrued many dirty
+pages and/or the target storage devices are not particularly
+fast.
+
+This commit adds a kernel config option to allow file system
+sync in the suspend path to be disabled.
+
+It is enabled by default.
+
+Change-Id: Ib0f5fdbb55cd3e503a3768f8424b2863fbc7ff22
+Signed-off-by: Lianwei Wang <a22439@motorola.com>
+Reviewed-on: http://gerrit.mot.com/726915
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Change-Id: I28fc535f0e5acd3f628fe99aa39c298de4c565a5
+Reviewed-on: http://gerrit.mot.com/842021
+Reviewed-by: Lian-Wei Wang <lian-wei.wang@motorola.com>
+Reviewed-by: Jiang-Li Yuan <jlyuan@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+---
+ kernel/power/Kconfig   | 5 +++++
+ kernel/power/suspend.c | 2 ++
+ 2 files changed, 7 insertions(+)
+
+diff --git a/kernel/power/Kconfig b/kernel/power/Kconfig
+index c9c4f922e9d..079d567361f 100644
+--- a/kernel/power/Kconfig
++++ b/kernel/power/Kconfig
+@@ -296,6 +296,11 @@ config SUSPEND_TIME_TIMEKEEPING
+ 	  Get the suspend time in suspend from timekeeping for the archs
+ 	  that dont support persistent clock.
+ 
++config PM_SYNC_BEFORE_SUSPEND
++	bool "Sync file systems before suspend"
++	depends on PM
++	default y
++
+ config SUSPEND_DEBUG
+ 	bool "Enable snapshot of regulator and tlmm when suspend"
+ 	depends on SUSPEND
+diff --git a/kernel/power/suspend.c b/kernel/power/suspend.c
+index 214f4baf507..6fae12266ec 100644
+--- a/kernel/power/suspend.c
++++ b/kernel/power/suspend.c
+@@ -360,9 +360,11 @@ static int enter_state(suspend_state_t state)
+ 	if (state == PM_SUSPEND_FREEZE)
+ 		freeze_begin();
+ 
++#ifdef CONFIG_PM_SYNC_BEFORE_SUSPEND
+ 	printk(KERN_INFO "PM: Syncing filesystems ... ");
+ 	sys_sync();
+ 	printk("done.\n");
++#endif
+ 
+ 	pr_debug("PM: Preparing system for %s sleep\n", pm_states[state].label);
+ 	error = suspend_prepare(state);
+-- 
+2.11.0
+

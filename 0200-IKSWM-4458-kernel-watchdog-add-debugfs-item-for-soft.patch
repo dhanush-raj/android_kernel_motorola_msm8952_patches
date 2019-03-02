@@ -1,0 +1,147 @@
+From 04e28c5d87226d3a9948a2c2714c946909dc9b33 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Thu, 24 Sep 2015 22:03:26 -0600
+Subject: [PATCH 200/959] IKSWM-4458 kernel:watchdog: add debugfs item for
+ softlockup and watchdog test
+
+Add a kernel module to facilitate softlockup and watchdog basic
+function test. Interface added:
+/sys/kernel/debug/fire_softlockup_reset
+/sys/kernel/debug/fire_watchdog_reset
+
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+
+Change-Id: If6e48ff51caa89c04d86a08ba651fffa1f12e635
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ kernel/Makefile       |  1 +
+ kernel/watchdogtest.c | 81 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ lib/Kconfig.debug     | 12 ++++++++
+ 3 files changed, 94 insertions(+)
+ create mode 100644 kernel/watchdogtest.c
+
+diff --git a/kernel/Makefile b/kernel/Makefile
+index e0ca34b2e3d..84c12313933 100644
+--- a/kernel/Makefile
++++ b/kernel/Makefile
+@@ -67,6 +67,7 @@ obj-$(CONFIG_KPROBES) += kprobes.o
+ obj-$(CONFIG_KGDB) += debug/
+ obj-$(CONFIG_DETECT_HUNG_TASK) += hung_task.o
+ obj-$(CONFIG_LOCKUP_DETECTOR) += watchdog.o
++obj-$(CONFIG_SOFTLOCKUP_WATCHDOG_TEST) += watchdogtest.o
+ obj-$(CONFIG_SECCOMP) += seccomp.o
+ obj-$(CONFIG_RELAY) += relay.o
+ obj-$(CONFIG_SYSCTL) += utsname_sysctl.o
+diff --git a/kernel/watchdogtest.c b/kernel/watchdogtest.c
+new file mode 100644
+index 00000000000..db31c116ed1
+--- /dev/null
++++ b/kernel/watchdogtest.c
+@@ -0,0 +1,81 @@
++/*
++ * Simple softlockup watchdog regression test module
++ *
++ * Copyright (C) 2012 Motorola Mobility LLC.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License
++ * as published by the Free Software Foundation; version 2
++ * of the License.
++ */
++
++#include <linux/completion.h>
++#include <linux/workqueue.h>
++#include <linux/irq.h>
++#include <linux/preempt.h>
++#include <linux/module.h>
++#include <linux/debugfs.h>
++#include <soc/qcom/mmi_watchdog.h>
++#include <soc/qcom/watchdog.h>
++
++#ifndef CONFIG_MSM_WATCHDOG_V2
++struct completion wdt_timeout_complete;
++static void wdt_timeout_work(struct work_struct *work)
++{
++	local_irq_disable();
++	while (1)
++	;
++	local_irq_enable();
++	complete(&wdt_timeout_complete);
++}
++static DECLARE_WORK(wdt_timeout_work_struct, wdt_timeout_work);
++#endif
++
++static int fire_watchdog_reset_set(void *data, u64 val)
++{
++
++	printk(KERN_WARNING "Fire hardware watchdog reset.\n");
++	printk(KERN_WARNING "Please wait ...\n");
++#ifdef CONFIG_MSM_WATCHDOG_V2
++	msm_trigger_wdog_bite();
++#else
++	init_completion(&wdt_timeout_complete);
++	schedule_work_on(0, &wdt_timeout_work_struct);
++	wait_for_completion(&wdt_timeout_complete);
++#endif
++	return 0;
++}
++DEFINE_SIMPLE_ATTRIBUTE(fire_watchdog_reset_fops,
++	NULL, fire_watchdog_reset_set, "%llu\n");
++
++static int fire_softlockup_reset_set(void *data, u64 val)
++{
++	touch_hw_watchdog();
++
++	printk(KERN_WARNING "Fire softlockup watchdog reset.\n");
++	printk(KERN_WARNING "Please wait ...\n");
++	preempt_disable();
++	while (1)
++	;
++
++	return 0;
++}
++DEFINE_SIMPLE_ATTRIBUTE(fire_softlockup_reset_fops,
++	NULL, fire_softlockup_reset_set, "%llu\n");
++
++static int watchdog_test_init(void)
++{
++	debugfs_create_file("fire_softlockup_reset", 0200,
++		NULL, NULL, &fire_softlockup_reset_fops);
++	debugfs_create_file("fire_watchdog_reset", 0200,
++		NULL, NULL, &fire_watchdog_reset_fops);
++	return 0;
++}
++
++static void watchdog_test_exit(void)
++{
++}
++
++module_init(watchdog_test_init);
++module_exit(watchdog_test_exit);
++MODULE_LICENSE("GPL");
+diff --git a/lib/Kconfig.debug b/lib/Kconfig.debug
+index c92c6f150af..e4a12a80b2b 100644
+--- a/lib/Kconfig.debug
++++ b/lib/Kconfig.debug
+@@ -1635,6 +1635,18 @@ config MEMTEST
+ 	        memtest=17, mean do 17 test patterns.
+ 	  If you are unsure how to answer this question, answer N.
+ 
++config SOFTLOCKUP_WATCHDOG_TEST
++       bool "To test softlockup watchdog"
++       depends on LOCKUP_DETECTOR && DEBUG_FS
++       default n
++       help
++         This option provides a kernel debugfs item that can be used
++         to test softlockup watchdog reset. This option is not useful
++         for distributions or general kernels, but only for kernel
++         developers working on architecture code for test purpose.
++
++         Say N if you are unsure.
++
+ source "samples/Kconfig"
+ 
+ source "lib/Kconfig.kgdb"
+-- 
+2.11.0
+

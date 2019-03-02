@@ -1,0 +1,44 @@
+From 94c1b7a6040d03da82beeb5e742692eec7f8f9eb Mon Sep 17 00:00:00 2001
+From: Siena Richard <sienar@codeaurora.org>
+Date: Tue, 16 Aug 2016 13:03:56 -0700
+Subject: [PATCH 936/959] misc: qcom: qdsp6v2: initialize wma_config_32
+
+Not all memebers of wma_config_32 are set before they are used which
+might lead to invalid values being passed and used. To fix this issue
+initialize all member variables of struct wma_config_32 to 0 before
+assigning specific values individually.
+
+Change-Id: Ibb082ce691625527e9a9ffd4978dea7ba4df9e84
+CRs-Fixed: 1054352
+Signed-off-by: Siena Richard <sienar@codeaurora.org>
+Mot-CRs-fixed: IKSECURITY-1584
+Reviewed-on: https://gerrit.mot.com/907072
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kiran Kumar Krishna <kiran@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+(cherry picked from commit 6f24002bbaae85d7fb3b2ed8ca6081ebdb86ff74)
+Reviewed-on: https://gerrit.mot.com/910398
+Reviewed-by: Vrushali Prakash Bhosale <wkvq37@motorola.com>
+---
+ drivers/misc/qcom/qdsp6v2/audio_wma.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/misc/qcom/qdsp6v2/audio_wma.c b/drivers/misc/qcom/qdsp6v2/audio_wma.c
+index 2ca4dc8fc3e..32dc601da55 100644
+--- a/drivers/misc/qcom/qdsp6v2/audio_wma.c
++++ b/drivers/misc/qcom/qdsp6v2/audio_wma.c
+@@ -168,6 +168,8 @@ static long audio_compat_ioctl(struct file *file, unsigned int cmd,
+ 
+ 		memset(&wma_config_32, 0, sizeof(wma_config_32));
+ 
++		memset(&wma_config_32, 0, sizeof(wma_config_32));
++
+ 		wma_config = (struct msm_audio_wma_config_v2 *)audio->codec_cfg;
+ 		wma_config_32.format_tag = wma_config->format_tag;
+ 		wma_config_32.numchannels = wma_config->numchannels;
+-- 
+2.11.0
+

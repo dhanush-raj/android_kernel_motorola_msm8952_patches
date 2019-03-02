@@ -1,0 +1,93 @@
+From 96c2af8fee0cb937003fdfbe67ade2f5a23dac63 Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Tue, 19 May 2015 15:13:50 -0500
+Subject: [PATCH 264/959] IKSWL-16718: power: qpnp-smbcharger-mmi: Set ICL for
+ USB inputs
+
+If the input current set from the charging driver equals one of the
+values corresponding to those in the USB spec, the ICL is not
+configured. This results in the device over drawing the specified
+max current from the charger. Hence ICL regardless of the input
+max current.
+
+Change-Id: I7710fd9aac739d22e584de7659b36160492fc334
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/749288
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 27 +++++++++++++++++++++++++++
+ 1 file changed, 27 insertions(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 6e97f45a68e..5b9b1f8ed61 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -1531,6 +1531,29 @@ static int smbchg_set_high_usb_chg_current(struct smbchg_chip *chip,
+ 	return rc;
+ }
+ 
++static int smbchg_set_usb_chg_current(struct smbchg_chip *chip,
++							int current_ma)
++{
++	int i, rc;
++	u8 usb_cur_val;
++
++	for (i = ARRAY_SIZE(usb_current_table) - 1; i >= 0; i--) {
++		if (current_ma >= usb_current_table[i])
++			break;
++	}
++
++	/* Set minimum input limit if not found in the current table */
++	if (i < 0)
++		i = 0;
++
++	usb_cur_val = i & USBIN_INPUT_MASK;
++	rc = smbchg_sec_masked_write(chip, chip->usb_chgpth_base + IL_CFG,
++				USBIN_INPUT_MASK, usb_cur_val);
++	if (rc < 0)
++		dev_err(chip->dev, "cannot write to config c rc = %d\n", rc);
++	return rc;
++}
++
+ /* if APSD results are used
+  *	if SDP is detected it will look at 500mA setting
+  *		if set it will draw 500mA
+@@ -1575,6 +1598,7 @@ static int smbchg_set_usb_current_max(struct smbchg_chip *chip,
+ 					USBIN_MODE_CHG_BIT | USB51_MODE_BIT,
+ 					USBIN_LIMITED_MODE | USB51_100MA);
+ 		chip->usb_max_current_ma = 100;
++		smbchg_set_usb_chg_current(chip, chip->usb_max_current_ma);
+ 		goto out;
+ 	}
+ 	/* specific current values */
+@@ -1586,6 +1610,7 @@ static int smbchg_set_usb_current_max(struct smbchg_chip *chip,
+ 					USBIN_MODE_CHG_BIT | USB51_MODE_BIT,
+ 					USBIN_LIMITED_MODE | USB51_100MA);
+ 		chip->usb_max_current_ma = 150;
++		smbchg_set_usb_chg_current(chip, chip->usb_max_current_ma);
+ 		goto out;
+ 	}
+ 	if (current_ma == CURRENT_500_MA) {
+@@ -1596,6 +1621,7 @@ static int smbchg_set_usb_current_max(struct smbchg_chip *chip,
+ 					USBIN_MODE_CHG_BIT | USB51_MODE_BIT,
+ 					USBIN_LIMITED_MODE | USB51_500MA);
+ 		chip->usb_max_current_ma = 500;
++		smbchg_set_usb_chg_current(chip, chip->usb_max_current_ma);
+ 		goto out;
+ 	}
+ 	if (current_ma == CURRENT_900_MA) {
+@@ -1606,6 +1632,7 @@ static int smbchg_set_usb_current_max(struct smbchg_chip *chip,
+ 					USBIN_MODE_CHG_BIT | USB51_MODE_BIT,
+ 					USBIN_LIMITED_MODE | USB51_500MA);
+ 		chip->usb_max_current_ma = 900;
++		smbchg_set_usb_chg_current(chip, chip->usb_max_current_ma);
+ 		goto out;
+ 	}
+ 
+-- 
+2.11.0
+

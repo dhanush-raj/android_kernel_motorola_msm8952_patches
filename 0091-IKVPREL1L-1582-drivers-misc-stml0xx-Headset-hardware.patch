@@ -1,0 +1,88 @@
+From 8e55ee151c17fd4f03defb0420dd3944a0de4c19 Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Wed, 5 Nov 2014 09:52:09 -0600
+Subject: [PATCH 091/959] IKVPREL1L-1582 drivers/misc/stml0xx: Headset hardware
+ type devtree setting
+
+A new device tree setting is needed to tell the sensor hub which
+version of the headset detect hardware is present.
+
+Change-Id: Iac9326045b05a5d1dac4c48052f06c4a37773417
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/684353
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c  |  3 +++
+ drivers/misc/stml0xx/stml0xx_reset.c | 10 ++++++++++
+ include/linux/stml0xx.h              |  2 ++
+ 3 files changed, 15 insertions(+)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index d8777f91467..87319bf2c07 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -408,6 +408,7 @@ static struct stml0xx_platform_data *stml0xx_of_init(struct spi_device *spi)
+ 			     &pdata->ct406_pulse_count);
+ 
+ 	pdata->headset_detect_enable = 0;
++	pdata->headset_hw_version = 0;
+ 	pdata->headset_insertion_debounce = 0x01F4;
+ 	pdata->headset_removal_debounce = 0x01F4;
+ 	pdata->headset_button_down_debounce = 0x0032;
+@@ -422,6 +423,8 @@ static struct stml0xx_platform_data *stml0xx_of_init(struct spi_device *spi)
+ 	pdata->headset_button_4_keycode = 0x0;
+ 	of_property_read_u32(np, "headset_detect_enable",
+ 			     &pdata->headset_detect_enable);
++	of_property_read_u32(np, "headset_hw_version",
++			     &pdata->headset_hw_version);
+ 	of_property_read_u32(np, "headset_insertion_debounce",
+ 			     &pdata->headset_insertion_debounce);
+ 	of_property_read_u32(np, "headset_removal_debounce",
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index 04211282868..52338464495 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -183,6 +183,16 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 			"unable to write headset settings %d", err);
+ 		ret_err = err;
+ 	} else {
++		buf[0] = pdata->headset_hw_version & 0xFF;
++		err = stml0xx_spi_send_write_reg_reset(HEADSET_HW_VER, buf,
++			1, RESET_NOT_ALLOWED);
++		if (err < 0) {
++			dev_err(&ps_stml0xx->spi->dev,
++				"Unable to wrie headset hw version");
++			ret_err = err;
++		}
++	}
++	if (err >= 0) {
+ 		buf[0] = pdata->headset_detect_enable & 0xFF;
+ 		err = stml0xx_spi_send_write_reg_reset(HEADSET_CONTROL, buf,
+ 			1, RESET_NOT_ALLOWED);
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 34d5469611d..38c3e6526d5 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -370,6 +370,7 @@ struct stm_response {
+ #define ALGO_INT_STATUS                 0x27
+ #define GENERIC_INT_STATUS              0x28
+ 
++#define HEADSET_HW_VER                  0x2B
+ #define HEADSET_CONTROL                 0x2C
+ 
+ #define MOTION_DATA                     0x2D
+@@ -546,6 +547,7 @@ struct stml0xx_platform_data {
+ 	int ct406_recalibrate_threshold;
+ 	int ct406_pulse_count;
+ 	int headset_detect_enable;
++	int headset_hw_version;
+ 	int headset_insertion_debounce;
+ 	int headset_removal_debounce;
+ 	int headset_button_down_debounce;
+-- 
+2.11.0
+

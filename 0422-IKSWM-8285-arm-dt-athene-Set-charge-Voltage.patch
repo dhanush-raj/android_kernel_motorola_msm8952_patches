@@ -1,0 +1,38 @@
+From ccfcb2190ab16d4858bd7d0884734519d5303271 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Wed, 21 Oct 2015 15:07:40 -0500
+Subject: [PATCH 422/959] IKSWM-8285: arm/dt: athene: Set charge Voltage
+
+Set Charge Voltage to 4.35V for P0
+
+Change-Id: I9579b4d007b7d4bbd44c4aac41d6a25071d2d0aa
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/793368
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-athene-p0.dts | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+index 1684dff6aae..8066e3ec8bd 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
++++ b/arch/arm/boot/dts/qcom/msm8952-athene-p0.dts
+@@ -70,3 +70,11 @@
+ 		};
+ 	};
+ };
++
++&pmi8950_charger {
++	qcom,float-voltage-mv = <4350>;
++};
++
++&pmi8950_fg {
++	qcom,fg-cc-cv-threshold-mv = <4340>;
++};
+-- 
+2.11.0
+

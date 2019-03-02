@@ -1,0 +1,25 @@
+From 2e0257ba71b9fa8721c40eaaac1cf7698b3b9228 Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Thu, 24 Sep 2015 23:22:29 -0700
+Subject: [PATCH 204/959] IKSWM-4458 motoconfig: Enable IPI lockup watchdog
+
+Enable feature: When IPI lockup, trigger watchdog to get more logs
+
+Change-Id: I4b5e44403c2e0b54bd7456299624c26c622a22b0
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+---
+ arch/arm/configs/ext_config/moto-msm8916.config | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/ext_config/moto-msm8916.config b/arch/arm/configs/ext_config/moto-msm8916.config
+index cd8039c948e..673b51ed2e9 100644
+--- a/arch/arm/configs/ext_config/moto-msm8916.config
++++ b/arch/arm/configs/ext_config/moto-msm8916.config
+@@ -34,3 +34,4 @@ CONFIG_BOOTINFO=y
+ CONFIG_MMI_SOC_INFO=y
+ CONFIG_MMI_RAM_INFO=y
+ CONFIG_SOFTLOCKUP_WATCHDOG_TEST=y
++CONFIG_LOCKUP_IPI_CALL_WDT=y
+-- 
+2.11.0
+

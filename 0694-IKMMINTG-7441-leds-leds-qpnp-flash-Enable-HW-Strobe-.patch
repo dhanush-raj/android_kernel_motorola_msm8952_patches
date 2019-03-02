@@ -1,0 +1,76 @@
+From 36ec55c2b654322e56e9c586db61ef8aa7465eda Mon Sep 17 00:00:00 2001
+From: Andrew Lenart <w16741@motorola.com>
+Date: Fri, 8 Jan 2016 14:47:32 -0600
+Subject: [PATCH 694/959] IKMMINTG-7441: leds: leds-qpnp-flash: Enable HW
+ Strobe control for led
+
+Force hw strobe type in pmic flash led driver
+
+Change-Id: Ibc18bc41a4539fab5446704f8b259f0f03f9a064
+Signed-off-by: Andrew Lenart <w16741@motorola.com>
+Reviewed-on: http://gerrit.mot.com/811844
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/leds/leds-qpnp-flash.c | 21 ++++++++++++++++++++-
+ 1 file changed, 20 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/leds/leds-qpnp-flash.c b/drivers/leds/leds-qpnp-flash.c
+index bb837d65f4d..ea5064e576e 100644
+--- a/drivers/leds/leds-qpnp-flash.c
++++ b/drivers/leds/leds-qpnp-flash.c
+@@ -72,7 +72,7 @@
+ #define FLASH_TMR_SAFETY					0x00
+ #define FLASH_SAFETY_TIMER_MASK					0x7F
+ #define FLASH_MODULE_ENABLE_MASK				0xE0
+-#define FLASH_STROBE_MASK					0xC0
++#define FLASH_STROBE_MASK					0xC7
+ #define FLASH_CURRENT_RAMP_MASK					0xBF
+ #define FLASH_VPH_PWR_DROOP_MASK				0xF3
+ #define FLASH_LED_HDRM_SNS_ENABLE_MASK				0x81
+@@ -127,6 +127,10 @@
+ #define FLASH_SUBTYPE_DUAL					0x01
+ #define FLASH_SUBTYPE_SINGLE					0x02
+ 
++#define FLASH_LED_HW_STROBE_SEL					0x04
++#define FLASH_LED_HW_STROBE_TRIG_EDGE				0x02
++#define FLASH_LED_HW_STROBE_ACT_HIGH				0x01
++
+ /*
+  * ID represents physical LEDs for individual control purpose.
+  */
+@@ -1302,6 +1306,11 @@ static void qpnp_flash_led_work(struct work_struct *work)
+ 			rc = qpnp_led_masked_write(led->spmi_dev,
+ 					led->current2_addr,
+ 					FLASH_CURRENT_MASK, val);
++
++			/* Set to 1280ms max duration to allow software to
++			   control the expiration */
++			flash_node->duration = 1280;
++
+ 			if (rc) {
+ 				dev_err(&led->spmi_dev->dev,
+ 					"Torch reg write failed\n");
+@@ -1479,6 +1488,16 @@ static void qpnp_flash_led_work(struct work_struct *work)
+ 					max_curr_avail_ma / total_curr_ma;
+ 			}
+ 
++			/* Enable HW strobe control for switch trigger,
++			   for main flash, not preflash.
++			   Leds will be on for the duration of
++			   flash_node->duration (safety timer).
++			   Set duration of strobe to be 70ms */
++			flash_node->trigger |= (FLASH_LED_HW_STROBE_SEL |
++						FLASH_LED_HW_STROBE_TRIG_EDGE |
++						FLASH_LED_HW_STROBE_ACT_HIGH);
++			flash_node->duration = 70;
++
+ 			val = (u8)(flash_node->prgm_current *
+ 				FLASH_MAX_LEVEL / flash_node->max_current);
+ 			rc = qpnp_led_masked_write(led->spmi_dev,
+-- 
+2.11.0
+

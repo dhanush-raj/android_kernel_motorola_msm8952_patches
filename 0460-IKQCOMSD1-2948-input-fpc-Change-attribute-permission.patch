@@ -1,0 +1,49 @@
+From c5c10611be015a43d93bc74ac7bc070bfabaeb06 Mon Sep 17 00:00:00 2001
+From: Xiaofei Ma <xiaofei@motorola.com>
+Date: Wed, 11 Nov 2015 14:53:18 -0600
+Subject: [PATCH 460/959] IKQCOMSD1-2948: input: fpc: Change attribute
+ permission
+
+FPC TAC need to access clk_enable and irq
+with system user id. So change the permission
+to group permission.
+
+Change-Id: I6c6a7ea0b4ead8d2882ba6d35155f7aaf915af1a
+Signed-off-by: Xiaofei Ma <xiaofei@motorola.com>
+Reviewed-on: http://gerrit.mot.com/799070
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Thomas Merrell <thomasmerrell@motorola.com>
+Reviewed-by: Elliot Stewart <elliot@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/input/misc/fpc1020_tee.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/input/misc/fpc1020_tee.c b/drivers/input/misc/fpc1020_tee.c
+index 102096a6d1f..eaa7910403d 100644
+--- a/drivers/input/misc/fpc1020_tee.c
++++ b/drivers/input/misc/fpc1020_tee.c
+@@ -173,7 +173,7 @@ static ssize_t clk_enable_set(struct device *dev,
+ 	return set_clks(fpc1020, (*buf == '1')) ? : count;
+ }
+ 
+-static DEVICE_ATTR(clk_enable, S_IWUSR, NULL, clk_enable_set);
++static DEVICE_ATTR(clk_enable, S_IWUSR | S_IWGRP, NULL, clk_enable_set);
+ 
+ static ssize_t irq_get(struct device *device,
+ 		       struct device_attribute *attribute,
+@@ -184,7 +184,7 @@ static ssize_t irq_get(struct device *device,
+ 
+ 	return scnprintf(buffer, PAGE_SIZE, "%i\n", irq);
+ }
+-static DEVICE_ATTR(irq, S_IRUSR, irq_get, NULL);
++static DEVICE_ATTR(irq, S_IRUSR | S_IRGRP, irq_get, NULL);
+ 
+ static struct attribute *attributes[] = {
+ 	&dev_attr_clk_enable.attr,
+-- 
+2.11.0
+

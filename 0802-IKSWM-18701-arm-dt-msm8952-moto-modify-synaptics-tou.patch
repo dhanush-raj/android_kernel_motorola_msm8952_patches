@@ -1,0 +1,60 @@
+From b8fbf1bd09ec7aa63abfdc93b1f13f8e48d9f08f Mon Sep 17 00:00:00 2001
+From: Konstantin Makariev <kmakariev@motorola.com>
+Date: Thu, 18 Feb 2016 14:48:33 -0600
+Subject: [PATCH 802/959] IKSWM-18701 arm/dt: msm8952-moto: modify synaptics
+ touch node
+
+Content of synaptics touch driver node needs to be adjusted to
+accommodate newly introduced config modifiers.
+
+Change-Id: I40375c8c54ae254f6cd310a656a6a50d00edfc9e
+Signed-off-by: Konstantin Makariev <kmakariev@motorola.com>
+Reviewed-on: http://gerrit.mot.com/823380
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 18 ++++++++++--------
+ 1 file changed, 10 insertions(+), 8 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index b2ee461f1b0..1c5337931f3 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -926,21 +926,23 @@
+ 		interrupts = <65 0>;
+ 		gpios = <&msm_gpio 65 0>, /* IRQ */
+ 			<&msm_gpio 64 0>; /* RESET */
+-		synaptics,touch-clip-area = <450 1875 610 1919>;
+ 		vdd_quirk-supply = <&pm8950_l6>;
+ 		synaptics,gpio-config;
+ 		/* pins used by touchscreen */
+ 		pinctrl-names = "default", "active";
+ 		pinctrl-0 = <&touch_reset_active &touch_int_default>;
+ 		pinctrl-1 = <&touch_reset_active &touch_int_active>;
+-		touchstate_modes {
+-			touchmode-default = <&default_active &default_suspended>;
++		config_modifier-names = "aod", "fps";
++		config_modifier-aod {
++			aod-suspended {
++				patch-data = "S"; /* Power->sleep */
++			};
+ 		};
+-		default_active: touchstate_default_active {
+-			patch-data = "";
+-		};
+-		default_suspended: touchstate_aod_suspended {
+-			patch-data = "F1@0=1&7";
++		config_modifier-fps {
++			enable-notification;
++			fps-active {
++				touch-clip-area = <450 1875 610 1919 1>;
++			};
+ 		};
+ 	};
+ };
+-- 
+2.11.0
+

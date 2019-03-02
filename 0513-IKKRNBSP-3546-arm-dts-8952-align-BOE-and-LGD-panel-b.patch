@@ -1,0 +1,90 @@
+From 5c135850549b24b4d6f1863a6baf897fc85d9ec7 Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Mon, 23 Nov 2015 19:07:48 -0800
+Subject: [PATCH 513/959] IKKRNBSP-3546: arm/dts: 8952: align BOE and LGD panel
+ brightness
+
+- set maximum wled current at 25 mA.
+- align both panel brightness to 450 nits at normal maximum, 585 nits
+at HBM.
+
+Change-Id: I6c8030e427debb97e8d9a6b1b8e12bfdcb2246ff
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/802584
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Shanshan Dai <daiss1@lenovo.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi | 6 +++---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi | 6 +++---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi                    | 2 +-
+ 3 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+index a5a38a4a3ea..bc5fdc07baa 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+@@ -51,7 +51,7 @@ qcom,mdss-dsi-on-command = [
+ 	/* CABC Moving Image mode setting */
+ 	29 01 00 00 00 00 07 BA 07 7A 64 18 30 8D
+ 	/* Set Max Brightness */
+-	15 01 00 00 00 00 02 51 BD
++	15 01 00 00 00 00 02 51 CD
+ 	/* Set Minimum Brightness */
+ 	15 01 00 00 00 00 02 5E 00
+ 	/* BLU control */
+@@ -66,8 +66,8 @@ qcom,mdss-dsi-off-command = [
+ qcom,mdss-dsi-cabc-ui-command = [15 01 00 00 00 00 02 55 01];
+ qcom,mdss-dsi-cabc-mv-command = [15 01 00 00 00 00 02 55 03];
+ qcom,mdss-dsi-cabc-dis-command = [15 01 00 00 00 00 02 55 00];
+-qcom,mdss-dsi-hbm-on-command = [15 01 00 00 00 00 02 51 EB];
+-qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 BD];
++qcom,mdss-dsi-hbm-on-command = [15 01 00 00 00 00 02 51 FF];
++qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 CD];
+ 
+ qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+ qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+index 78e6040129e..103b9268137 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -48,7 +48,7 @@ qcom,mdss-dsi-on-command = [
+ 	/* CABC Moving Image mode setting */
+ 	29 01 00 00 00 00 07 BA 07 7A 64 18 30 8D
+ 	/* Set Max Brightness */
+-	15 01 00 00 00 00 02 51 BD
++	15 01 00 00 00 00 02 51 A8
+ 	/* Set Minimum Brightness */
+ 	15 01 00 00 00 00 02 5E 00
+ 	/* BLU control */
+@@ -63,8 +63,8 @@ qcom,mdss-dsi-off-command = [
+ qcom,mdss-dsi-cabc-ui-command = [15 01 00 00 00 00 02 55 01];
+ qcom,mdss-dsi-cabc-mv-command = [15 01 00 00 00 00 02 55 03];
+ qcom,mdss-dsi-cabc-dis-command = [15 01 00 00 00 00 02 55 00];
+-qcom,mdss-dsi-hbm-on-command = [15 01 00 00 00 00 02 51 EB];
+-qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 BD];
++qcom,mdss-dsi-hbm-on-command = [15 01 00 00 00 00 02 51 D1];
++qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 A8];
+ 
+ qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+ qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index ce575a4f7ee..831ea42dc9a 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -777,7 +777,7 @@
+ 	qcom,pmi8950@3 {
+ 		qcom,leds@d800 {
+ 			qcom,en-cabc;
+-			qcom,fs-curr-ua = <20000>;
++			qcom,fs-curr-ua = <25000>;
+ 			/delete-property/ qcom,en-ext-pfet-sc-pro;
+ 		};
+ 	};
+-- 
+2.11.0
+

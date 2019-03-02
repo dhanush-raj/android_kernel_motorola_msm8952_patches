@@ -1,0 +1,70 @@
+From 2b23729c353be15273f4c829c0cc0453de12b01c Mon Sep 17 00:00:00 2001
+From: Hong-Mei Li <a21834@motorola.com>
+Date: Tue, 14 Jun 2016 17:06:25 -0700
+Subject: [PATCH 914/959] esdfs: Fix race when create file on lower entry
+
+Propagate from IKSWM-43295.
+
+When scan obb folder, esd may call into esdfs_derive_mkdir_contents
+in case no obb folder exist, which will create file onto lower fs.
+
+Lock lower entry's parent when creating file to avoid race condition
+as below:
+
+<4>[  702.347564,3] [<ffffffc0001b8a00>] d_instantiate+0x14/0x8c
+<4>[  702.353027,3] [<ffffffc0002c0058>] f2fs_create+0x1b0/0x218
+<4>[  702.358492,3] [<ffffffc0001ae4f4>] vfs_create+0x118/0x174
+<4>[  702.363881,3] [<ffffffc0002aa62c>] esdfs_derive_mkdir_contents+0x280/0x2ac
+<4>[  702.370733,3] [<ffffffc0002a91f8>] esdfs_lookup+0x1fc/0x278
+<4>[  702.376288,3] [<ffffffc0001acd04>] lookup_real+0x30/0x54
+<4>[  702.381583,3] [<ffffffc0001ad6b8>] __lookup_hash+0x30/0x48
+<4>[  702.387051,3] [<ffffffc0001af204>] lookup_slow+0x44/0xbc
+<4>[  702.392349,3] [<ffffffc0001b0138>] path_lookupat+0x14c/0x738
+<4>[  702.398004,3] [<ffffffc0001b074c>] filename_lookup.isra.30+0x28/0x74
+<4>[  702.404354,3] [<ffffffc0001b2614>] user_path_at_empty+0xa8/0xdc
+<4>[  702.410255,3] [<ffffffc0001b2654>] user_path_at+0xc/0x18
+<4>[  702.415552,3] [<ffffffc0001a354c>] SyS_faccessat+0xc0/0x1bc
+
+Mot-CRs-fixed: IKSWN-2255
+
+Change-Id: I0716dbac8aa2854e6e82e0b37d9db4153c432aaf
+Signed-off-by: Hong-Mei Li <a21834@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Sheng-Zhe Zhao <a18689@motorola.com>
+Reviewed-by: Jiang-Li Yuan <jlyuan@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/891989
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+---
+ fs/esdfs/derive.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/fs/esdfs/derive.c b/fs/esdfs/derive.c
+index 7f56bd93173..a15224b57e2 100644
+--- a/fs/esdfs/derive.c
++++ b/fs/esdfs/derive.c
+@@ -607,6 +607,7 @@ int esdfs_derive_mkdir_contents(struct dentry *dir_dentry)
+ 	struct qstr nomedia;
+ 	struct dentry *lower_dentry;
+ 	struct path lower_dir_path, lower_path;
++	struct dentry *lower_parent_dentry = NULL;
+ 	umode_t mode;
+ 	int err = 0;
+ 
+@@ -655,9 +656,11 @@ int esdfs_derive_mkdir_contents(struct dentry *dir_dentry)
+ 
+ 	/* Now create the lower file. */
+ 	mode = S_IFREG;
++	lower_parent_dentry = lock_parent(lower_dentry);
+ 	esdfs_set_lower_mode(ESDFS_SB(dir_dentry->d_sb), &mode);
+ 	err = vfs_create(lower_dir_path.dentry->d_inode, lower_dentry, mode,
+ 			 true);
++	unlock_dir(lower_parent_dentry);
+ 	dput(lower_dentry);
+ 
+ out:
+-- 
+2.11.0
+

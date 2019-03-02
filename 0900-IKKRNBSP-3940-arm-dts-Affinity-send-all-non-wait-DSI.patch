@@ -1,0 +1,163 @@
+From bcff12373b9151b7bab273b962c03a5bd9bad106 Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Wed, 1 Jun 2016 13:37:13 -0700
+Subject: [PATCH 900/959] IKKRNBSP-3940: arm/dts: Affinity: send all non-wait
+ DSI commands together
+
+To improve efficiency of DSI command transmission, set all non-wait panel
+commands with "last" flag = 0 to send them in one DSI controller DMA
+transmission.
+
+Change-Id: I4062e6d5b040005ac000bb50f0e08efcfe9a5ab4
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/863171
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Patrick Auchter <auchter@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ .../dsi-panel-mot-boe-546-1080p-cmd-common.dtsi    | 19 +++++----
+ .../dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi    | 19 +++++----
+ .../dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi    | 48 +++++++++++-----------
+ 3 files changed, 44 insertions(+), 42 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+index 5e9381c9e70..c63b321a0ea 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+@@ -41,23 +41,24 @@ qcom,mdss-dsi-border-color = <0>;
+ qcom,mdss-dsi-on-command = [
+ 	05 01 00 00 78 00 01 11
+ 	/* MCS Protect */
+-	23 01 00 00 00 00 02 B0 00
++	23 00 00 00 00 00 02 B0 00
+ 	/* CABC RGB full PWM */
+-	29 01 00 00 00 00 02 FA 20
++	29 00 00 00 00 00 02 FA 20
+ 	/* CABC PWM setting */
+-	29 01 00 00 00 00 18 CE 5D 40 43 49 55 62 71 82 94 A8 B9 CB DB E9 FE FE FF 03 15 04 04 00 00
++	29 00 00 00 00 00 18 CE 5D 40 43 49 55 62 71 82 94 A8 B9 CB DB E9 FE FE
++		FF 03 15 04 04 00 00
+ 	/* CABC UI mode setting */
+-	29 01 00 00 00 00 07 B8 07 8B 19 08 0C 21
++	29 00 00 00 00 00 07 B8 07 8B 19 08 0C 21
+ 	/* CABC Moving Image mode setting */
+-	29 01 00 00 00 00 07 BA 07 7A 64 18 30 8D
++	29 00 00 00 00 00 07 BA 07 7A 64 18 30 8D
+ 	/* Set Max Brightness */
+-	15 01 00 00 00 00 02 51 CC
++	15 00 00 00 00 00 02 51 CC
+ 	/* Set Minimum Brightness */
+-	15 01 00 00 00 00 02 5E 00
++	15 00 00 00 00 00 02 5E 00
+ 	/* BLU control */
+-	15 01 00 00 00 00 02 53 2C
++	15 00 00 00 00 00 02 53 2C
+ 	/* set defaut CABC to UI mode */
+-	15 01 00 00 00 00 02 55 01
++	15 00 00 00 00 00 02 55 01
+ 	05 01 00 00 00 00 01 29];
+ qcom,mdss-dsi-off-command = [
+ 	05 01 00 00 0a 00 01 28
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+index 8cd7d4ca6ec..d0d618a38af 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -39,22 +39,23 @@ qcom,mdss-dsi-underflow-color = <0xff>;
+ qcom,mdss-dsi-border-color = <0>;
+ qcom,mdss-dsi-on-command = [
+ 	05 01 00 00 78 00 01 11
+-	23 01 00 00 00 00 02 B0 00       /* MCS Protect */
+-	29 01 00 00 00 00 02 FA 20       /* CABC RGB full PWM */
++	23 00 00 00 00 00 02 B0 00       /* MCS Protect */
++	29 00 00 00 00 00 02 FA 20       /* CABC RGB full PWM */
+ 	/* CABC PWM setting */
+-	29 01 00 00 00 00 18 CE 5D 40 43 49 55 62 71 82 94 A8 B9 CB DB E9 FE FE FF 03 15 04 04 00 00
++	29 00 00 00 00 00 18 CE 5D 40 43 49 55 62 71 82 94 A8 B9 CB DB E9 FE FE
++		FF 03 15 04 04 00 00
+ 	/* CABC UI mode setting */
+-	29 01 00 00 00 00 07 B8 07 8B 19 08 0C 21
++	29 00 00 00 00 00 07 B8 07 8B 19 08 0C 21
+ 	/* CABC Moving Image mode setting */
+-	29 01 00 00 00 00 07 BA 07 7A 64 18 30 8D
++	29 00 00 00 00 00 07 BA 07 7A 64 18 30 8D
+ 	/* Set Max Brightness */
+-	15 01 00 00 00 00 02 51 AB
++	15 00 00 00 00 00 02 51 AB
+ 	/* Set Minimum Brightness */
+-	15 01 00 00 00 00 02 5E 00
++	15 00 00 00 00 00 02 5E 00
+ 	/* BLU control */
+-	15 01 00 00 00 00 02 53 2C
++	15 00 00 00 00 00 02 53 2C
+ 	/* set defaut CABC to UI mode */
+-	15 01 00 00 00 00 02 55 01
++	15 00 00 00 00 00 02 55 01
+ 	05 01 00 00 00 00 01 29];	/* display on */
+ qcom,mdss-dsi-off-command = [
+ 	05 01 00 00 0a 00 01 28		/* display_off */
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
+index 03fb93fb6f0..357c38eab54 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-tdi-546-1080p-cmd-common.dtsi
+@@ -38,31 +38,31 @@ qcom,mdss-dsi-bpp = <24>;
+ qcom,mdss-dsi-underflow-color = <0xff>;
+ qcom,mdss-dsi-border-color = <0>;
+ qcom,mdss-dsi-on-command = [
+-	15 01 00 00 00 00 02 FF 26 /* Touch improvements start */
+-	15 01 00 00 00 00 02 31 30
+-	15 01 00 00 00 00 02 52 30
+-	15 01 00 00 00 00 02 6c 30
+-	15 01 00 00 00 00 02 82 30
+-	15 01 00 00 00 00 02 FB 01
+-	15 01 00 00 00 00 02 FF 10 /* Touch improvements end */
+-	15 01 00 00 00 00 02 FF 23 /* CABC config start */
+-	15 01 00 00 00 00 02 13 FF
+-	15 01 00 00 00 00 02 14 F5
+-	15 01 00 00 00 00 02 15 ED
+-	15 01 00 00 00 00 02 16 E5
+-	15 01 00 00 00 00 02 FB 01
+-	15 01 00 00 00 00 02 39 95
+-	15 01 00 00 00 00 02 07 00
+-	15 01 00 00 00 00 02 08 02
+-	15 01 00 00 00 00 02 46 B8
+-	15 01 00 00 00 00 02 FF 10 /* CABC config end */
++	15 00 00 00 00 00 02 FF 26 /* Touch improvements start */
++	15 00 00 00 00 00 02 31 30
++	15 00 00 00 00 00 02 52 30
++	15 00 00 00 00 00 02 6c 30
++	15 00 00 00 00 00 02 82 30
++	15 00 00 00 00 00 02 FB 01
++	15 00 00 00 00 00 02 FF 10 /* Touch improvements end */
++	15 00 00 00 00 00 02 FF 23 /* CABC config start */
++	15 00 00 00 00 00 02 13 FF
++	15 00 00 00 00 00 02 14 F5
++	15 00 00 00 00 00 02 15 ED
++	15 00 00 00 00 00 02 16 E5
++	15 00 00 00 00 00 02 FB 01
++	15 00 00 00 00 00 02 39 95
++	15 00 00 00 00 00 02 07 00
++	15 00 00 00 00 00 02 08 02
++	15 00 00 00 00 00 02 46 B8
++	15 00 00 00 00 00 02 FF 10 /* CABC config end */
+ 	05 01 00 00 64 00 01 11
+-	15 01 00 00 00 00 02 36 03
+-	39 01 00 00 00 00 03 44 07 08
+-	15 01 00 00 00 00 02 35 00
+-	15 01 00 00 00 00 02 51 CC
+-	15 01 00 00 00 00 02 53 2C
+-	15 01 00 00 00 00 02 55 01
++	15 00 00 00 00 00 02 36 03
++	39 00 00 00 00 00 03 44 07 08
++	15 00 00 00 00 00 02 35 00
++	15 00 00 00 00 00 02 51 CC
++	15 00 00 00 00 00 02 53 2C
++	15 00 00 00 00 00 02 55 01
+ 	05 01 00 00 00 00 01 29];	/* display on */
+ qcom,mdss-dsi-off-command = [
+ 	05 01 00 00 0a 00 01 28		/* display_off */
+-- 
+2.11.0
+

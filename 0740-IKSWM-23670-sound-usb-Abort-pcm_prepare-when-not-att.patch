@@ -1,0 +1,41 @@
+From 790642e67089a5a6528a4ec0c31bce5cd03fa0c7 Mon Sep 17 00:00:00 2001
+From: Xuehui Ye <yexh1@motorola.com>
+Date: Fri, 4 Mar 2016 09:56:08 +0800
+Subject: [PATCH 740/959] IKSWM-23670: sound: usb: Abort pcm_prepare when not
+ attached.
+
+When the USB Audio Device is no longer attached, don't submit urbs
+via pcm_prepare. This can happen if the USB Controller is busy trying
+to shutdown and PCM userspace does not get the disconnection events
+on time and still continues to queue Audio data.
+Propagation of IKXREL3KK-10534
+
+Change-Id: Ibb4b6864da7e1792767c7c70637a6aaca99814a7
+Signed-off-by: Xuehui Ye <yexh1@motorola.com>
+Reviewed-on: http://gerrit.mot.com/829060
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ sound/usb/pcm.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/sound/usb/pcm.c b/sound/usb/pcm.c
+index 05f333ff9c7..94c8b6ed5f6 100644
+--- a/sound/usb/pcm.c
++++ b/sound/usb/pcm.c
+@@ -683,7 +683,8 @@ static int snd_usb_pcm_prepare(struct snd_pcm_substream *substream)
+ 	}
+ 
+ 	down_read(&subs->stream->chip->shutdown_rwsem);
+-	if (subs->stream->chip->shutdown) {
++	if (subs->stream->chip->shutdown ||
++			(subs->dev->state == USB_STATE_NOTATTACHED)) {
+ 		ret = -ENODEV;
+ 		goto unlock;
+ 	}
+-- 
+2.11.0
+

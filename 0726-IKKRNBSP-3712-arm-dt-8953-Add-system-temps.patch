@@ -1,0 +1,41 @@
+From f9284a97be07f1f99dc57a470a43a84c6930dfad Mon Sep 17 00:00:00 2001
+From: Jason Knopsnyder <jasonk@motorola.com>
+Date: Fri, 26 Feb 2016 16:04:44 -0600
+Subject: [PATCH 726/959] IKKRNBSP-3712: arm/dt:/ 8953: Add system temps
+
+Add front and back system temperature support.
+
+Change-Id: Ia3e4928ed9a64e4bc88df8b32c8b14f0e6ad7fce
+Signed-off-by: Jason Knopsnyder <jasonk@motorola.com>
+Reviewed-on: http://gerrit.mot.com/827704
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index b86e3fbb199..e931f05ad20 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -769,6 +769,14 @@
+ 	alsa_to_h2w {
+ 		compatible = "mmi,alsa-to-h2w";
+ 	};
++
++	sys_temp_support {
++		compatible = "mmi,sys-temp";
++		mmi,temperature-names = "front_temp",
++					"back_temp";
++		status = "ok";
++	};
++
+ };
+ 
+ &sdhc_1 {
+-- 
+2.11.0
+

@@ -1,0 +1,77 @@
+From 4686aeb532de5b41e45182ae9297fa394291f3db Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Tue, 31 Mar 2015 16:54:21 -0500
+Subject: [PATCH 122/959] IKSWL-5246 drivers/misc: stml0xx: Handle prox
+ saturation
+
+Pass the new prox gain setting from the devtree to
+the sensor hub.
+
+Change-Id: Ia40efca24b0d4611684e338ada5d9859cf3e3e4f
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/732591
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Jason Hrycay <jason.hrycay@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c  | 5 ++++-
+ drivers/misc/stml0xx/stml0xx_reset.c | 3 ++-
+ include/linux/stml0xx.h              | 1 +
+ 3 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index c0b58a480a5..2e55fb1f0c9 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -396,7 +396,8 @@ static struct stml0xx_platform_data *stml0xx_of_init(struct spi_device *spi)
+ 	pdata->ct406_detect_threshold = 0x00C8;
+ 	pdata->ct406_undetect_threshold = 0x00A5;
+ 	pdata->ct406_recalibrate_threshold = 0x0064;
+-	pdata->ct406_pulse_count = 0x04;
++	pdata->ct406_pulse_count = 0x02;
++	pdata->ct406_prox_gain = 0x02;
+ 	of_property_read_u32(np, "ct406_detect_threshold",
+ 			     &pdata->ct406_detect_threshold);
+ 	of_property_read_u32(np, "ct406_undetect_threshold",
+@@ -405,6 +406,8 @@ static struct stml0xx_platform_data *stml0xx_of_init(struct spi_device *spi)
+ 			     &pdata->ct406_recalibrate_threshold);
+ 	of_property_read_u32(np, "ct406_pulse_count",
+ 			     &pdata->ct406_pulse_count);
++	of_property_read_u32(np, "ct406_prox_gain",
++			     &pdata->ct406_prox_gain);
+ 
+ 	pdata->headset_detect_enable = 0;
+ 	pdata->headset_hw_version = 0;
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index 3d057f633dd..8be14d78f31 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -173,8 +173,9 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 	buf[4] = (pdata->ct406_recalibrate_threshold >> 8) & 0xff;
+ 	buf[5] = pdata->ct406_recalibrate_threshold & 0xff;
+ 	buf[6] = pdata->ct406_pulse_count & 0xff;
++	buf[7] = pdata->ct406_prox_gain & 0xff;
+ 	err = stml0xx_spi_send_write_reg_reset(PROX_SETTINGS, buf,
+-			7, RESET_NOT_ALLOWED);
++			8, RESET_NOT_ALLOWED);
+ 	if (err < 0) {
+ 		dev_err(&ps_stml0xx->spi->dev,
+ 			"unable to write proximity settings %d", err);
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 79ace513038..300be68cc21 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -616,6 +616,7 @@ struct stml0xx_platform_data {
+ 	int ct406_undetect_threshold;
+ 	int ct406_recalibrate_threshold;
+ 	int ct406_pulse_count;
++	int ct406_prox_gain;
+ 	int headset_detect_enable;
+ 	int headset_hw_version;
+ 	int headset_insertion_debounce;
+-- 
+2.11.0
+

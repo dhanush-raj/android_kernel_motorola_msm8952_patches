@@ -1,0 +1,38 @@
+From 253072942492863a6aa6d70fd437499d33f035bc Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Fri, 23 Oct 2015 16:44:14 -0500
+Subject: [PATCH 416/959] IKSWM-8062: power: qpnp-smbcharger-mmi: Wait on AICL
+
+If AICL looks stuck don't do anything unless the ICL
+is at 300 mA.
+
+Change-Id: I31ee997e5182f91779c0532c6a0e3ca5ffe991d8
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/794715
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index c7804467bb1..38f9047a1ea 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -7458,7 +7458,8 @@ static bool smbchg_check_and_kick_aicl(struct smbchg_chip *chip)
+ 		}
+ 	}
+ 
+-	if (!is_usb_present(chip) || smbchg_is_aicl_complete(chip)) {
++	if (!is_usb_present(chip) || smbchg_is_aicl_complete(chip) ||
++	    (smbchg_get_aicl_level_ma(chip) > 300)) {
+ 		chip->aicl_wait_retries = 0;
+ 		return false;
+ 	}
+-- 
+2.11.0
+

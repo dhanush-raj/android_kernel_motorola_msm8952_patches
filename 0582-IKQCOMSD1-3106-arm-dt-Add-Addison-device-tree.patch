@@ -1,0 +1,122 @@
+From 5a9c17c99306db22db1787f3100a543ad2b79d60 Mon Sep 17 00:00:00 2001
+From: Yueyi Li <liyy13@motorola.com>
+Date: Mon, 21 Dec 2015 15:49:28 +0800
+Subject: [PATCH 582/959] IKQCOMSD1-3106 arm/dt: Add Addison device tree
+
+Add Addison 8952 device tree based on Affinity.
+
+Change-Id: I1fbaf3b0bf8fcdd527908a39eff8d9b75cc6df12
+Signed-off-by: Yueyi Li <liyy13@motorola.com>
+Reviewed-on: http://gerrit.mot.com/808465
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+---
+ arch/arm/boot/dts/qcom/Makefile               |  3 +-
+ arch/arm/boot/dts/qcom/msm8952-addison-p0.dts | 20 +++++++++++
+ arch/arm/boot/dts/qcom/msm8952-addison.dtsi   | 50 +++++++++++++++++++++++++++
+ 3 files changed, 72 insertions(+), 1 deletion(-)
+ create mode 100644 arch/arm/boot/dts/qcom/msm8952-addison-p0.dts
+ create mode 100644 arch/arm/boot/dts/qcom/msm8952-addison.dtsi
+
+diff --git a/arch/arm/boot/dts/qcom/Makefile b/arch/arm/boot/dts/qcom/Makefile
+index a50faa4fab1..3fd256c2b77 100644
+--- a/arch/arm/boot/dts/qcom/Makefile
++++ b/arch/arm/boot/dts/qcom/Makefile
+@@ -171,7 +171,8 @@ endif # CONFIG_MMI_DEVICE_DTBS
+ dtb-$(CONFIG_ARCH_MSM8916) += msm8952-athene-p0.dtb \
+ 	msm8952-athene_16mp-p1.dtb \
+ 	msm8952-athene_13mp-p1.dtb \
+-	msm8952-athene_power-p1.dtb
++	msm8952-athene_power-p1.dtb \
++	msm8952-addison-p0.dtb
+ 
+ dtb-$(CONFIG_ARCH_MSM8226) += msm8226-sim.dtb \
+ 	msm8226-fluid.dtb \
+diff --git a/arch/arm/boot/dts/qcom/msm8952-addison-p0.dts b/arch/arm/boot/dts/qcom/msm8952-addison-p0.dts
+new file mode 100644
+index 00000000000..5ebd1e237e4
+--- /dev/null
++++ b/arch/arm/boot/dts/qcom/msm8952-addison-p0.dts
+@@ -0,0 +1,20 @@
++/* Copyright (c) 2015, Motorola Mobility Inc. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++
++/dts-v1/;
++
++#include "msm8952-addison.dtsi"
++#include "msm8952-moto-fps.dtsi"
++/ {
++	qcom,board-id = <0x51 0x8000>;
++};
+diff --git a/arch/arm/boot/dts/qcom/msm8952-addison.dtsi b/arch/arm/boot/dts/qcom/msm8952-addison.dtsi
+new file mode 100644
+index 00000000000..e359a9585e7
+--- /dev/null
++++ b/arch/arm/boot/dts/qcom/msm8952-addison.dtsi
+@@ -0,0 +1,50 @@
++/* Copyright (c) 2015, Motorola Mobility Inc. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++
++#include "msm8952-moto-common.dtsi"
++#include "dsi-panel-mot-lgd-546-1080p-cmd.dtsi"
++#include "dsi-panel-mot-boe-546-1080p-cmd.dtsi"
++
++/ {
++	model = "Addison";
++	compatible = "qcom,msm8952-addison", "qcom,msm8952-moto",
++			"qcom,msm8952";
++};
++
++&soc {
++	vddio_disp_vreg: vddio_disp_vreg {
++		compatible = "regulator-fixed";
++		regulator-name = "vddio_disp";
++		vin-supply = <&pm8950_l6>;
++		startup-delay-us = <300>;
++		regulator-boot-on;
++		regulator-always-on;
++	};
++};
++
++&mdss_dsi0 {
++	qcom,dsi-pref-prim-pan = <&mot_lgd_546_1080p_cmd_v0>;
++	vddio_disp-supply = <&vddio_disp_vreg>;
++	vsp_disp-supply = <&lab_regulator>;
++	vsn_disp-supply = <&ibb_regulator>;
++};
++
++/* display boost and inverting boost regulators */
++&labibb {
++	status = "ok";
++	qpnp,qpnp-labibb-mode = "lcd";
++};
++
++&ibb_regulator {
++	qcom,qpnp-ibb-discharge-resistor = <32>;
++};
+-- 
+2.11.0
+

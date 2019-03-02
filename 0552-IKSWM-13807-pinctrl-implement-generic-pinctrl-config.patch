@@ -1,0 +1,151 @@
+From d3a1be2f9578c83db1bde85ec7a94f90ff8339d3 Mon Sep 17 00:00:00 2001
+From: "Russ W. Knize" <Russ.Knize@motorola.com>
+Date: Fri, 27 Feb 2015 16:13:24 -0600
+Subject: [PATCH 552/959] IKSWM-13807 pinctrl: implement generic pinctrl-config
+ debugfs hook
+
+propagate from IKSWL-645
+
+The pinctrl-config interface allows interface tweaking, but kicks
+the can down to the platform pinctrl driver.  Implement generic
+handling of these changes if the platform driver doesn't support it.
+Also add support for configuring groups and a method to specify
+which config index to change in a map.
+
+Change-Id: Ia373bea427207a46cbfdca70f09d3384f50dc0a9
+Signed-off-by: Russ Knize <Russ.Knize@motorola.com>
+Reviewed-on: http://gerrit.mot.com/806880
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Reviewed-by: Russell Knize <rknize@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/pinctrl/pinconf.c | 58 ++++++++++++++++++++++++++++++++++++-----------
+ 1 file changed, 45 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/pinctrl/pinconf.c b/drivers/pinctrl/pinconf.c
+index 84c4432dde1..2c390accd2d 100644
+--- a/drivers/pinctrl/pinconf.c
++++ b/drivers/pinctrl/pinconf.c
+@@ -583,6 +583,7 @@ struct dbg_cfg {
+ 	enum pinctrl_map_type map_type;
+ 	char dev_name[MAX_NAME_LEN+1];
+ 	char state_name[MAX_NAME_LEN+1];
++	unsigned index;
+ 	char pin_name[MAX_NAME_LEN+1];
+ };
+ 
+@@ -635,8 +636,8 @@ static int pinconf_dbg_config_print(struct seq_file *s, void *d)
+ 		seq_printf(s, "Searched dev:%s\n", dbg->dev_name);
+ 		seq_printf(s, "Searched state:%s\n", dbg->state_name);
+ 		seq_printf(s, "Searched pin:%s\n", dbg->pin_name);
+-		seq_printf(s, "Use: modify config_pin <devname> "\
+-				"<state> <pinname> <value>\n");
++		seq_printf(s, "Use: modify config_pin|config_group <devname> "\
++				"<state> <pinname> <index> <value>\n");
+ 		goto exit;
+ 	}
+ 
+@@ -677,13 +678,14 @@ static ssize_t pinconf_dbg_config_write(struct file *file,
+ 	struct pinctrl_dev *pctldev;
+ 	const struct pinconf_ops *confops = NULL;
+ 	struct dbg_cfg *dbg = &pinconf_dbg_conf;
+-	const struct pinctrl_map_configs *configs;
+ 	char config[MAX_NAME_LEN+1];
+ 	char buf[128];
+ 	char *b = &buf[0];
+ 	int buf_size;
+ 	char *token;
+ 	int i;
++	unsigned long value;
++	int ret;
+ 
+ 	/* Get userspace string and assure termination */
+ 	buf_size = min(count, (sizeof(buf)-1));
+@@ -707,9 +709,12 @@ static ssize_t pinconf_dbg_config_write(struct file *file,
+ 	token = strsep(&b, " ");
+ 	if (!token)
+ 		return -EINVAL;
+-	if (strcmp(token, "config_pin"))
++	if (strcmp(token, "config_pin") == 0)
++		dbg->map_type = PIN_MAP_TYPE_CONFIGS_PIN;
++	else if (strcmp(token, "config_group") == 0)
++		dbg->map_type = PIN_MAP_TYPE_CONFIGS_GROUP;
++	else
+ 		return -EINVAL;
+-	dbg->map_type = PIN_MAP_TYPE_CONFIGS_PIN;
+ 
+ 	/* get arg 'device_name' */
+ 	token = strsep(&b, " ");
+@@ -735,6 +740,15 @@ static ssize_t pinconf_dbg_config_write(struct file *file,
+ 		return -EINVAL;
+ 	strncpy(dbg->pin_name, token, MAX_NAME_LEN);
+ 
++	/* get arg 'index' */
++	token = strsep(&b, " ");
++	if (token == NULL)
++		return -EINVAL;
++	if (strlen(token) >= MAX_NAME_LEN)
++		return -EINVAL;
++	if (kstrtouint(token, 0, &dbg->index))
++		return -EINVAL;
++
+ 	/* get new_value of config' */
+ 	token = strsep(&b, " ");
+ 	if (token == NULL)
+@@ -761,7 +775,7 @@ static ssize_t pinconf_dbg_config_write(struct file *file,
+ 		}
+ 	}
+ 
+-	if (!found) {
++	if (!found || dbg->index > found->data.configs.num_configs) {
+ 		count = -EINVAL;
+ 		goto exit;
+ 	}
+@@ -769,16 +783,34 @@ static ssize_t pinconf_dbg_config_write(struct file *file,
+ 	pctldev = get_pinctrl_dev_from_devname(found->ctrl_dev_name);
+ 	if (pctldev)
+ 		confops = pctldev->desc->confops;
+-
+ 	if (confops && confops->pin_config_dbg_parse_modify) {
+-		configs = &found->data.configs;
+-		for (i = 0; i < configs->num_configs; i++) {
+-			confops->pin_config_dbg_parse_modify(pctldev,
+-						     config,
+-						     &configs->configs[i]);
+-		}
++		confops->pin_config_dbg_parse_modify(pctldev, config,
++				&found->data.configs.configs[dbg->index]);
++		goto exit;
+ 	}
+ 
++	if (kstrtoul(config, 0, &value) < 0) {
++		count = -EINVAL;
++		goto exit;
++	}
++
++	pr_debug("setting %s type %d: %s to 0x%08lX\n", found->ctrl_dev_name,
++			found->type, found->data.configs.group_or_pin, value);
++	if (found->type == PIN_MAP_TYPE_CONFIGS_PIN)
++		ret = pin_config_set(found->ctrl_dev_name,
++				     found->data.configs.group_or_pin, value);
++	else
++		ret = pin_config_group_set(found->ctrl_dev_name,
++				     found->data.configs.group_or_pin, value);
++
++	if (ret < 0) {
++		count = ret;
++		pr_err("%s: failed to set %s: %s to 0x%08lX\n", __func__,
++			found->ctrl_dev_name,
++			found->data.configs.group_or_pin, value);
++	} else
++		found->data.configs.configs[dbg->index] = value;
++
+ exit:
+ 	mutex_unlock(&pinctrl_maps_mutex);
+ 
+-- 
+2.11.0
+

@@ -1,0 +1,107 @@
+From 8c306d7d8f6bb8c9ac35c59caf9bd107b4b6e5bb Mon Sep 17 00:00:00 2001
+From: Zac Crosby <zac@motorola.com>
+Date: Mon, 25 Aug 2014 15:36:31 -0500
+Subject: [PATCH 312/959] IKKRNBSP-3417 msm: mdss: Add display_issue dropbox
+ utility function
+
+Add a common utility function for reporting display_issue bug2gos.
+
+Port of 8309331 from 8996.
+
+Change-Id: Iae9b241d262e6fa91c4b06d50d6ac8a49ae4267c
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/786205
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Bang Nguyen <bangnguyen@motorola.com>
+Reviewed-by: Zachary Crosby <zac@motorola.com>
+Reviewed-by: Jared Suttles <jsuttles@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/video/msm/mdss/Makefile       |  1 +
+ drivers/video/msm/mdss/mdss_dropbox.c | 32 ++++++++++++++++++++++++++++++++
+ drivers/video/msm/mdss/mdss_dropbox.h | 19 +++++++++++++++++++
+ 3 files changed, 52 insertions(+)
+ create mode 100644 drivers/video/msm/mdss/mdss_dropbox.c
+ create mode 100644 drivers/video/msm/mdss/mdss_dropbox.h
+
+diff --git a/drivers/video/msm/mdss/Makefile b/drivers/video/msm/mdss/Makefile
+index 8839891a4ac..83bf08e7e58 100644
+--- a/drivers/video/msm/mdss/Makefile
++++ b/drivers/video/msm/mdss/Makefile
+@@ -42,6 +42,7 @@ obj-$(CONFIG_FB_MSM_MDSS_EDP_PANEL) += mdss_edp.o
+ obj-$(CONFIG_FB_MSM_MDSS_EDP_PANEL) += mdss_edp_aux.o
+ 
+ obj-$(CONFIG_FB_MSM_MDSS) += mdss_io_util.o
++obj-$(CONFIG_FB_MSM_MDSS) += mdss_dropbox.o
+ obj-$(CONFIG_FB_MSM_MDSS_HDMI_PANEL) += mdss_hdmi_tx.o
+ obj-$(CONFIG_FB_MSM_MDSS_HDMI_PANEL) += mdss_hdmi_hdcp.o
+ obj-$(CONFIG_FB_MSM_MDSS_HDMI_PANEL) += mdss_hdmi_cec.o
+diff --git a/drivers/video/msm/mdss/mdss_dropbox.c b/drivers/video/msm/mdss/mdss_dropbox.c
+new file mode 100644
+index 00000000000..b23ead6664c
+--- /dev/null
++++ b/drivers/video/msm/mdss/mdss_dropbox.c
+@@ -0,0 +1,32 @@
++/* Copyright (c) 2014 - 2015, Motorola Mobility LLC. All rights reserved.
++*
++* This program is free software; you can redistribute it and/or modify
++* it under the terms of the GNU General Public License version 2 and
++* only version 2 as published by the Free Software Foundation.
++*
++* This program is distributed in the hope that it will be useful,
++* but WITHOUT ANY WARRANTY; without even the implied warranty of
++* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++* GNU General Public License for more details.
++*/
++#include <linux/dropbox.h>
++#include <linux/string.h>
++
++#include "mdss_dropbox.h"
++
++#define DROPBOX_DISPLAY_ISSUE "display_issue"
++
++void mdss_dropbox_report_event(char *msg, int count)
++{
++	char dropbox_entry[256];
++
++	snprintf(dropbox_entry, sizeof(dropbox_entry), "%s\ncount: %d",
++		msg, count);
++
++	pr_err("%s: display issue detected[count: %d][%s], reporting dropbox\n",
++		__func__, count, msg);
++	dropbox_queue_event_text(DROPBOX_DISPLAY_ISSUE,
++				dropbox_entry, strlen(dropbox_entry));
++}
++
++
+diff --git a/drivers/video/msm/mdss/mdss_dropbox.h b/drivers/video/msm/mdss/mdss_dropbox.h
+new file mode 100644
+index 00000000000..4391278cfc9
+--- /dev/null
++++ b/drivers/video/msm/mdss/mdss_dropbox.h
+@@ -0,0 +1,19 @@
++/* Copyright (c) 2014 - 2015, Motorola Mobility LLC. All rights reserved.
++*
++* This program is free software; you can redistribute it and/or modify
++* it under the terms of the GNU General Public License version 2 and
++* only version 2 as published by the Free Software Foundation.
++*
++* This program is distributed in the hope that it will be useful,
++* but WITHOUT ANY WARRANTY; without even the implied warranty of
++* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++* GNU General Public License for more details.
++*/
++#ifndef MDSS_DROPBOX_H
++#define MDSS_DROPBOX_H
++
++#define MDSS_DROPBOX_MSG_ESD "ESD event detected"
++#define MDSS_DROPBOX_MSG_PWR_MODE_BLACK "PWR_MODE black screen detected"
++
++void mdss_dropbox_report_event(char *msg, int count);
++#endif /* MDSS_DROPBOX_H */
+-- 
+2.11.0
+

@@ -1,0 +1,207 @@
+From e2b871507224cd33d00540da810c8a817845b471 Mon Sep 17 00:00:00 2001
+From: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Date: Tue, 27 Oct 2015 16:54:31 -0500
+Subject: [PATCH 426/959] IKSWM-9257 drivers:misc:stml0xx: Flush stream sensor
+ queue on AP resume
+
+- Discard any streaming sensor data that was queued at the
+  sensorhub during suspend
+- Process other non-wake sensor data that may have updated
+  during suspend
+- Fix uncalibrated gyro flag check
+
+Signed-off-by: Jason Jae Hyun Koh <jason.koh@motorola.com>
+Change-Id: If66eda066f9a2add48d37b457bc4433b1aa4ea5e
+Reviewed-on: http://gerrit.mot.com/794911
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Robert Wiegand <Robert.P.Wiegand@motorola.com>
+Reviewed-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c     | 62 ++++++++-------------------------
+ drivers/misc/stml0xx/stml0xx_irq.c      |  4 ++-
+ drivers/misc/stml0xx/stml0xx_wake_irq.c |  7 ----
+ include/linux/stml0xx.h                 |  7 ++--
+ 4 files changed, 23 insertions(+), 57 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index b4886041ee3..7b9c6e4691f 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -691,33 +691,6 @@ static void stml0xx_gpio_free(struct stml0xx_platform_data *pdata)
+ 		gpio_free(pdata->gpio_sh_wake);
+ }
+ 
+-void clear_interrupt_status_work_func(struct work_struct *work)
+-{
+-	struct stml0xx_data *ps_stml0xx = container_of(work,
+-						struct stml0xx_data,
+-						clear_interrupt_status_work);
+-	uint8_t buf[3];
+-
+-	dev_dbg(&ps_stml0xx->spi->dev, "clear_interrupt_status_work_func");
+-	mutex_lock(&ps_stml0xx->lock);
+-
+-	if (ps_stml0xx->mode == BOOTMODE)
+-		goto EXIT;
+-
+-	if (ps_stml0xx->is_suspended)
+-		goto EXIT;
+-
+-	stml0xx_wake(ps_stml0xx);
+-
+-	/* read interrupt mask register to clear
+-	   any interrupt during suspend state */
+-	stml0xx_spi_send_read_reg(INTERRUPT_STATUS, buf, 3);
+-
+-	stml0xx_sleep(ps_stml0xx);
+-EXIT:
+-	mutex_unlock(&ps_stml0xx->lock);
+-}
+-
+ static int stml0xx_probe(struct spi_device *spi)
+ {
+ 	struct stml0xx_platform_data *pdata;
+@@ -845,8 +818,6 @@ static int stml0xx_probe(struct spi_device *spi)
+ 	/* clear the interrupt mask */
+ 	ps_stml0xx->intp_mask = 0x00;
+ 
+-	INIT_WORK(&ps_stml0xx->clear_interrupt_status_work,
+-		  clear_interrupt_status_work_func);
+ 	INIT_WORK(&ps_stml0xx->initialize_work, stml0xx_initialize_work_func);
+ 
+ 	ps_stml0xx->irq_work_queue =
+@@ -1095,7 +1066,7 @@ static int stml0xx_remove(struct spi_device *spi)
+ static int stml0xx_resume(struct device *dev)
+ {
+ 	static struct timespec ts;
+-	static struct stml0xx_delayed_work_struct *stm_ws;
++	static struct stml0xx_work_struct *stm_ws;
+ 	struct stml0xx_data *ps_stml0xx = spi_get_drvdata(to_spi_device(dev));
+ 
+ 	get_monotonic_boottime(&ts);
+@@ -1105,25 +1076,22 @@ static int stml0xx_resume(struct device *dev)
+ 	ps_stml0xx->is_suspended = false;
+ 	enable_irq(ps_stml0xx->irq);
+ 
+-	if (ps_stml0xx->pending_wake_work) {
+-		stm_ws = kmalloc(
+-			sizeof(struct stml0xx_delayed_work_struct),
+-			GFP_ATOMIC);
+-		if (!stm_ws) {
+-			dev_err(dev, "stml0xx_resume: unable to allocate work struct");
+-			return 0;
+-		}
+-		INIT_DELAYED_WORK((struct delayed_work *)stm_ws,
+-			stml0xx_irq_wake_work_func);
+-		stm_ws->ts_ns = ts_to_ns(ts);
+-		queue_delayed_work(ps_stml0xx->irq_work_queue,
+-			(struct delayed_work *)stm_ws, 0);
+-		ps_stml0xx->pending_wake_work = false;
++	stm_ws = kmalloc(
++		sizeof(struct stml0xx_work_struct),
++		GFP_ATOMIC);
++	if (!stm_ws) {
++		dev_err(&ps_stml0xx->spi->dev,
++			"stml0xx_resume: unable to allocate work struct");
++		return 0;
+ 	}
+ 
+-	if (stml0xx_irq_disable == 0)
+-		queue_work(ps_stml0xx->irq_work_queue,
+-			   &ps_stml0xx->clear_interrupt_status_work);
++	/* Discard any streaming sensor data that was queued at the sensorhub
++	   during suspend. Process other non-wake sensor data that may have
++	   updated. */
++	INIT_WORK((struct work_struct *)stm_ws, stml0xx_irq_work_func);
++	stm_ws->ts_ns = ts_to_ns(ts);
++	stm_ws->flags = IRQ_WORK_FLAG_DISCARD_SENSOR_QUEUE;
++	queue_work(ps_stml0xx->irq_work_queue, (struct work_struct *)stm_ws);
+ 
+ 	mutex_unlock(&ps_stml0xx->lock);
+ 
+diff --git a/drivers/misc/stml0xx/stml0xx_irq.c b/drivers/misc/stml0xx/stml0xx_irq.c
+index 1580ff67252..2abe120946f 100644
+--- a/drivers/misc/stml0xx/stml0xx_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_irq.c
+@@ -69,6 +69,7 @@ irqreturn_t stml0xx_isr(int irq, void *dev)
+ 
+ 	INIT_WORK((struct work_struct *)stm_ws, stml0xx_irq_work_func);
+ 	stm_ws->ts_ns = ts_to_ns(ts);
++	stm_ws->flags = IRQ_WORK_FLAG_NONE;
+ 
+ 	if (last_ts_ns > stm_ws->ts_ns)
+ 		dev_dbg(&ps_stml0xx->spi->dev,
+@@ -282,7 +283,8 @@ void stml0xx_irq_work_func(struct work_struct *work)
+ 	    (buf[IRQ_IDX_STATUS_MED] << 8) | buf[IRQ_IDX_STATUS_LO];
+ 
+ 	/* Check for streaming sensors */
+-	if (irq_status & (M_ACCEL | M_ACCEL2 | M_GYRO | M_GYRO)) {
++	if (((stm_ws->flags & IRQ_WORK_FLAG_DISCARD_SENSOR_QUEUE) == 0) &&
++	     (irq_status & (M_ACCEL | M_ACCEL2 | M_GYRO | M_UNCALIB_GYRO))) {
+ 		stml0xx_process_stream_sensor_queue(buf, stm_ws->ts_ns);
+ 	}
+ 	if (irq_status & M_ALS) {
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index 67829f7b6f8..f7318653b5a 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -126,13 +126,6 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 	if (ps_stml0xx->mode == BOOTMODE)
+ 		goto EXIT_NO_WAKE;
+ 
+-	if (ps_stml0xx->is_suspended) {
+-		dev_dbg(&stml0xx_misc_data->spi->dev,
+-			"setting pending_wake_work [true]");
+-		ps_stml0xx->pending_wake_work = true;
+-		goto EXIT_NO_WAKE;
+-	}
+-
+ 	stml0xx_wake(ps_stml0xx);
+ 
+ 	err = stml0xx_spi_read_msg_data(SPI_MSG_TYPE_READ_WAKE_IRQ_DATA,
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index bf13d706278..581d893531c 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -131,6 +131,10 @@ enum vmm_ids {
+ #define WAKE_IRQ_IDX_LOG_MSG               56
+ #define WAKE_IRQ_IDX_STOWED_ALS		(WAKE_IRQ_IDX_LOG_MSG + LOG_MSG_SIZE)
+ 
++/* Non-wake IRQ work function flags */
++#define IRQ_WORK_FLAG_NONE                   0x00
++#define IRQ_WORK_FLAG_DISCARD_SENSOR_QUEUE   0x01
++
+ /* stml0xx_readbuff offsets. */
+ #define IRQ_WAKE_LO  0
+ #define IRQ_WAKE_MED 1
+@@ -234,7 +238,6 @@ struct stml0xx_platform_data {
+ struct stml0xx_data {
+ 	struct stml0xx_platform_data *pdata;
+ 	struct mutex lock;
+-	struct work_struct clear_interrupt_status_work;
+ 	struct work_struct initialize_work;
+ 	struct workqueue_struct *irq_work_queue;
+ 	struct wake_lock wakelock;
+@@ -287,7 +290,6 @@ struct stml0xx_data {
+ 	struct regulator *regulator_3;
+ 
+ 	bool is_suspended;
+-	bool pending_wake_work;
+ #ifdef CONFIG_MMI_HALL_NOTIFICATIONS
+ 	struct mmi_hall_data *hall_data;
+ #endif
+@@ -301,6 +303,7 @@ struct stml0xx_work_struct {
+ 	struct work_struct ws;
+ 	/* Timestamp in nanoseconds */
+ 	uint64_t ts_ns;
++	uint8_t flags;
+ };
+ 
+ struct stml0xx_delayed_work_struct {
+-- 
+2.11.0
+

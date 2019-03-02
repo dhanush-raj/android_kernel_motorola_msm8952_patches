@@ -1,0 +1,97 @@
+From ac8a14d6759f695f1105a7dc6ff4040f1daad398 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Thu, 10 Mar 2016 11:53:41 -0600
+Subject: [PATCH 770/959] IKSWM-24765: power: qpnp-fg: Coulomb Counting Error
+
+32 bit wrap around due to large multiplication.
+Update the values to 64 bit to fix.
+
+Change-Id: Iea26c5fd4eb8d2960210ad028ed0c292ef7b613c
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/831782
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-fg.c | 30 ++++++++++++++----------------
+ 1 file changed, 14 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/power/qpnp-fg.c b/drivers/power/qpnp-fg.c
+index 3fbfef9e4ee..233612edca5 100644
+--- a/drivers/power/qpnp-fg.c
++++ b/drivers/power/qpnp-fg.c
+@@ -3446,7 +3446,7 @@ static int fg_get_cc_soc(struct fg_chip *chip, int *cc_soc)
+ static int fg_cap_learning_process_full_data(struct fg_chip *chip)
+ {
+ 	int cc_pc_val, rc = -EINVAL;
+-	unsigned int cc_soc_delta_pc;
++	int64_t cc_soc_delta_pc;
+ 	int64_t delta_cc_uah;
+ 
+ 	if (!chip->learning_data.active)
+@@ -3464,19 +3464,19 @@ static int fg_cap_learning_process_full_data(struct fg_chip *chip)
+ 		goto fail;
+ 	}
+ 
+-	cc_soc_delta_pc = DIV_ROUND_CLOSEST(
+-			abs(cc_pc_val - chip->learning_data.init_cc_pc_val)
+-			* 100, FULL_PERCENT_28BIT);
++	cc_soc_delta_pc = abs(cc_pc_val - chip->learning_data.init_cc_pc_val);
++	cc_soc_delta_pc *= 100;
++
++	cc_soc_delta_pc = div64_s64(cc_soc_delta_pc, FULL_PERCENT_28BIT);
+ 
+ 	delta_cc_uah = div64_s64(
+-			chip->learning_data.learned_cc_uah * cc_soc_delta_pc,
++			chip->nom_cap_uah * cc_soc_delta_pc,
+ 			100);
+ 	chip->learning_data.cc_uah = delta_cc_uah + chip->learning_data.cc_uah;
+ 
+-	if (fg_debug_mask & FG_AGING)
+-		pr_info("current cc_soc=%d cc_soc_pc=%d total_cc_uah = %lld\n",
+-				cc_pc_val, cc_soc_delta_pc,
+-				chip->learning_data.cc_uah);
++	pr_info("current cc_soc=%d cc_soc_pc=%lld total_cc_uah = %lld delta_cc_uah = %lld\n",
++		cc_pc_val, cc_soc_delta_pc,
++		chip->learning_data.cc_uah, delta_cc_uah);
+ 
+ 	return 0;
+ 
+@@ -3578,7 +3578,7 @@ static void fg_cap_learning_post_process(struct fg_chip *chip)
+ {
+ 	int64_t max_inc_val, min_dec_val, old_cap;
+ 
+-	max_inc_val = chip->learning_data.learned_cc_uah
++	max_inc_val = chip->nom_cap_uah
+ 			* (1000 + chip->learning_data.max_increment);
+ 	do_div(max_inc_val, 1000);
+ 
+@@ -3596,10 +3596,9 @@ static void fg_cap_learning_post_process(struct fg_chip *chip)
+ 			chip->learning_data.cc_uah;
+ 
+ 	fg_cap_learning_save_data(chip);
+-	if (fg_debug_mask & FG_AGING)
+-		pr_info("final cc_uah = %lld, learned capacity %lld -> %lld uah\n",
+-				chip->learning_data.cc_uah,
+-				old_cap, chip->learning_data.learned_cc_uah);
++	pr_info("final cc_uah = %lld, learned capacity %lld -> %lld uah\n",
++		chip->learning_data.cc_uah,
++		old_cap, chip->learning_data.learned_cc_uah);
+ }
+ 
+ static int get_vbat_est_diff(struct fg_chip *chip)
+@@ -3679,8 +3678,7 @@ static int fg_cap_learning_check(struct fg_chip *chip)
+ 
+ 			chip->learning_data.init_cc_pc_val = cc_pc_val;
+ 			chip->learning_data.active = true;
+-			if (fg_debug_mask & FG_AGING)
+-				pr_info("SW_CC_SOC based learning init_CC_SOC=%d\n",
++			pr_info("SW_CC_SOC based learning init_CC_SOC=%d\n",
+ 					chip->learning_data.init_cc_pc_val);
+ 		} else {
+ 			rc = fg_mem_masked_write(chip, CBITS_INPUT_FILTER_REG,
+-- 
+2.11.0
+

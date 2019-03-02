@@ -1,0 +1,51 @@
+From e25569bb8df619ec6c860fbc4a754d28db78fb98 Mon Sep 17 00:00:00 2001
+From: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Date: Thu, 28 Feb 2013 13:24:54 -0600
+Subject: [PATCH 004/959] IKKRNBSP-1406 kbuild: build using relative paths when
+ using O=
+
+KBUILD_RELSRC can now be set in the make environment to the relative
+path to the kernel source code from the path specified by O=. This is
+added so that absolute path names to the kernel source will not be
+encoded in the kernel and kernel module binaries. This is meant to aid
+the generation of binaries that are consistent across build machines.
+
+Change-Id: Iae3c75b33e33ebdc098d1e4ff6475a1f02238cea
+Signed-off-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.pcs.mot.com/521678
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <qcf001@motorola.com>
+Reviewed-by: Klocwork kwcheck <klocwork-kwcheck@sourceforge.mot.com>
+Reviewed-by: Check Patch <CHEKPACH@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+(cherry picked from commit 92dd22e9736316b9e8cc909585189f0e69512c4a)
+(cherry picked from commit 5c3edadb2361e804a57e71244ca75733e049673c)
+---
+ Makefile | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index aac0769c705..9e441e18a08 100644
+--- a/Makefile
++++ b/Makefile
+@@ -126,10 +126,15 @@ PHONY += $(MAKECMDGOALS) sub-make
+ $(filter-out _all sub-make $(CURDIR)/Makefile, $(MAKECMDGOALS)) _all: sub-make
+ 	@:
+ 
++# KBUILD_RELSRC is the relative path from output to source; this was added so
++# that the absolute path to source files wouldn't get encoded in vmlinux and
++# module binaries
++SUB_KBUILD_SRC = $(if $(KBUILD_RELSRC),$(KBUILD_RELSRC),$(CURDIR))
++
+ sub-make: FORCE
+ 	$(if $(KBUILD_VERBOSE:1=),@)$(MAKE) -C $(KBUILD_OUTPUT) \
+-	KBUILD_SRC=$(CURDIR) \
+-	KBUILD_EXTMOD="$(KBUILD_EXTMOD)" -f $(CURDIR)/Makefile \
++	KBUILD_SRC=$(SUB_KBUILD_SRC) \
++	KBUILD_EXTMOD="$(KBUILD_EXTMOD)" -f $(SUB_KBUILD_SRC)/Makefile \
+ 	$(filter-out _all sub-make,$(MAKECMDGOALS))
+ 
+ # Leave processing to above invocation of make
+-- 
+2.11.0
+

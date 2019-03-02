@@ -1,0 +1,339 @@
+From 145be2c7c28feada6001bc3d4d417d7e331ffca5 Mon Sep 17 00:00:00 2001
+From: Robert Wiegand <qa2113@motorola.com>
+Date: Mon, 2 Nov 2015 09:56:04 -0600
+Subject: [PATCH 441/959] IKLOCSEN-2436 drivers: stml0xx: Save gyro calibration
+ data
+
+Use the file system to save the calibration table for the
+gyroscope. This data will be restored when the phone
+next powers up.
+
+Change-Id: Iacab3741ec7adef38ddc71edfd702a372a7fe296
+Signed-off-by: Robert Wiegand <qa2113@motorola.com>
+Reviewed-on: http://gerrit.mot.com/796250
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Gabriel Burca <Gabriel.Burca@motorola.com>
+Reviewed-by: Jason Jae Hyun Koh <jasonkoh@motorola.com>
+Reviewed-by: Daniel Moore <dtmoore@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/stml0xx/stml0xx_core.c     |  1 +
+ drivers/misc/stml0xx/stml0xx_ioctl.c    | 58 +++++++++++++++++++++++++++++++-
+ drivers/misc/stml0xx/stml0xx_reset.c    | 59 ++++++++++++++++++++++-----------
+ drivers/misc/stml0xx/stml0xx_wake_irq.c |  7 +++-
+ include/linux/stml0xx.h                 |  3 ++
+ include/uapi/linux/motosh_vmm.h         | 19 ++++++++---
+ include/uapi/linux/stml0xx.h            | 11 ++++--
+ 7 files changed, 130 insertions(+), 28 deletions(-)
+
+diff --git a/drivers/misc/stml0xx/stml0xx_core.c b/drivers/misc/stml0xx/stml0xx_core.c
+index 7b9c6e4691f..b471f29404a 100644
+--- a/drivers/misc/stml0xx/stml0xx_core.c
++++ b/drivers/misc/stml0xx/stml0xx_core.c
+@@ -72,6 +72,7 @@ unsigned char stml0xx_g_motion_dur;
+ unsigned char stml0xx_g_zmotion_dur;
+ unsigned char stml0xx_g_control_reg[STML0XX_CONTROL_REG_SIZE];
+ unsigned char stml0xx_g_mag_cal[STML0XX_MAG_CAL_SIZE];
++unsigned char stml0xx_g_gyro_cal[STML0XX_GYRO_CAL_SIZE];
+ unsigned short stml0xx_g_control_reg_restore;
+ bool stml0xx_g_booted;
+ 
+diff --git a/drivers/misc/stml0xx/stml0xx_ioctl.c b/drivers/misc/stml0xx/stml0xx_ioctl.c
+index 9e8722f55af..80df15104db 100644
+--- a/drivers/misc/stml0xx/stml0xx_ioctl.c
++++ b/drivers/misc/stml0xx/stml0xx_ioctl.c
+@@ -59,6 +59,7 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 	bool cmd_handled;
+ 	unsigned int read_write;
+ 	unsigned int loop_count;
++	unsigned char gyro_buf[STML0XX_GYRO_CAL_SIZE];
+ 
+ 	if (!stml0xx_misc_data)
+ 		stml0xx_misc_data = file->private_data;
+@@ -705,7 +706,8 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 		}
+ 		break;
+ 	case STML0XX_IOCTL_SET_FLUSH:
+-		dev_dbg(&stml0xx_misc_data->spi->dev, "STML0XX_IOCTL_SET_FLUSH");
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++				"STML0XX_IOCTL_SET_FLUSH");
+ 		if (!stml0xx_g_booted)
+ 			break;
+ 		if (copy_from_user(&handle, argp, sizeof(unsigned int))) {
+@@ -720,6 +722,60 @@ long stml0xx_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 				(char *)&handle, 4, 0,
+ 				ts_to_ns(current_time));
+ 		break;
++	case STML0XX_IOCTL_GET_GYRO_CAL:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++				"STML0XX_IOCTL_GET_GYRO_CAL");
++		if (stml0xx_g_booted) {
++			err = stml0xx_spi_send_read_reg(GYRO_CAL,
++					gyro_buf, STML0XX_GYRO_CAL_FIRST);
++			if (err < 0) {
++				dev_err(&stml0xx_misc_data->spi->dev,
++					"Reading get gyro cal failed\n");
++				break;
++			}
++			err = stml0xx_spi_send_read_reg(GYRO_CAL_2,
++					gyro_buf + STML0XX_GYRO_CAL_FIRST,
++					STML0XX_GYRO_CAL_SECOND);
++			if (err < 0) {
++				dev_err(&stml0xx_misc_data->spi->dev,
++					"Reading get gyro cal failed\n");
++				break;
++			}
++			memcpy(stml0xx_g_gyro_cal, gyro_buf,
++					STML0XX_GYRO_CAL_SIZE);
++		}
++		if (copy_to_user(argp, stml0xx_g_gyro_cal,
++					STML0XX_GYRO_CAL_SIZE))
++			err = -EFAULT;
++		break;
++	case STML0XX_IOCTL_SET_GYRO_CAL:
++		dev_dbg(&stml0xx_misc_data->spi->dev,
++				"STML0XX_IOCTL_SET_GYRO_CAL");
++		if (copy_from_user(gyro_buf, argp, STML0XX_GYRO_CAL_SIZE)) {
++			dev_err(&stml0xx_misc_data->spi->dev,
++					"Copy set gyro cal returned error\n");
++			err = -EFAULT;
++			break;
++		}
++		memcpy(stml0xx_g_gyro_cal, gyro_buf,
++				STML0XX_GYRO_CAL_SIZE);
++		if (stml0xx_g_booted) {
++			err = stml0xx_spi_send_write_reg(GYRO_CAL,
++					gyro_buf, STML0XX_GYRO_CAL_FIRST);
++			if (err < 0) {
++				dev_err(&stml0xx_misc_data->spi->dev,
++					"Writing set gyro cal failed\n");
++				break;
++			}
++			err = stml0xx_spi_send_write_reg(GYRO_CAL_2,
++					gyro_buf + STML0XX_GYRO_CAL_FIRST,
++					STML0XX_GYRO_CAL_SECOND);
++			if (err < 0) {
++				dev_err(&stml0xx_misc_data->spi->dev,
++					"Writing set gyro cal failed\n");
++			}
++		}
++		break;
+ 	default:
+ 		dev_dbg(&stml0xx_misc_data->spi->dev,
+ 			"Invalid IOCTL [%d]", cmd);
+diff --git a/drivers/misc/stml0xx/stml0xx_reset.c b/drivers/misc/stml0xx/stml0xx_reset.c
+index d823174fef8..9ec72e2dcaf 100644
+--- a/drivers/misc/stml0xx/stml0xx_reset.c
++++ b/drivers/misc/stml0xx/stml0xx_reset.c
+@@ -128,22 +128,6 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 	if (err < 0)
+ 		ret_err = err;
+ 
+-	buf[0] = stml0xx_g_nonwake_sensor_state & 0xFF;
+-	buf[1] = (stml0xx_g_nonwake_sensor_state >> 8) & 0xFF;
+-	buf[2] = stml0xx_g_nonwake_sensor_state >> 16;
+-	err = stml0xx_spi_send_write_reg_reset(NONWAKESENSOR_CONFIG, buf,
+-			3, RESET_NOT_ALLOWED);
+-	if (err < 0)
+-		ret_err = err;
+-
+-	buf[0] = stml0xx_g_wake_sensor_state & 0xFF;
+-	buf[1] = (stml0xx_g_wake_sensor_state >> 8) & 0xFF;
+-	buf[2] = (stml0xx_g_wake_sensor_state >> 16) & 0xFF;
+-	err = stml0xx_spi_send_write_reg_reset(WAKESENSOR_CONFIG, buf,
+-			3, RESET_NOT_ALLOWED);
+-	if (err < 0)
+-		ret_err = err;
+-
+ 	buf[0] = stml0xx_g_algo_state & 0xFF;
+ 	buf[1] = stml0xx_g_algo_state >> 8;
+ 	err = stml0xx_spi_send_write_reg_reset(ALGO_CONFIG, buf, 2,
+@@ -259,7 +243,25 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 			ret_err = err;
+ 		}
+ 	}
+-
++	if (err >= 0) {
++		memcpy(buf, stml0xx_g_gyro_cal, STML0XX_GYRO_CAL_FIRST);
++		err = stml0xx_spi_send_write_reg_reset(GYRO_CAL, buf,
++				STML0XX_GYRO_CAL_FIRST, RESET_NOT_ALLOWED);
++		if (err < 0) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"Unable to write gyro calibration");
++			ret_err = err;
++		}
++		memcpy(buf, stml0xx_g_gyro_cal + STML0XX_GYRO_CAL_FIRST,
++				STML0XX_GYRO_CAL_SECOND);
++		err = stml0xx_spi_send_write_reg_reset(GYRO_CAL_2, buf,
++				STML0XX_GYRO_CAL_SECOND, RESET_NOT_ALLOWED);
++		if (err < 0) {
++			dev_err(&ps_stml0xx->spi->dev,
++					"Unable to write gyro calibration");
++			ret_err = err;
++		}
++	}
+ #ifdef CONFIG_SENSORHUB_DEBUG_LOGGING
+ 	buf[0] = SH_LOG_DEBUG;
+ 	err = stml0xx_spi_send_write_reg_reset(SH_LOG_LEVEL, buf,
+@@ -271,6 +273,23 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 	}
+ #endif
+ 
++	/* Enable sensors last after other initialization is done */
++	buf[0] = stml0xx_g_nonwake_sensor_state & 0xFF;
++	buf[1] = (stml0xx_g_nonwake_sensor_state >> 8) & 0xFF;
++	buf[2] = stml0xx_g_nonwake_sensor_state >> 16;
++	err = stml0xx_spi_send_write_reg_reset(NONWAKESENSOR_CONFIG, buf,
++			3, RESET_NOT_ALLOWED);
++	if (err < 0)
++		ret_err = err;
++
++	buf[0] = stml0xx_g_wake_sensor_state & 0xFF;
++	buf[1] = (stml0xx_g_wake_sensor_state >> 8) & 0xFF;
++	buf[2] = (stml0xx_g_wake_sensor_state >> 16) & 0xFF;
++	err = stml0xx_spi_send_write_reg_reset(WAKESENSOR_CONFIG, buf,
++			3, RESET_NOT_ALLOWED);
++	if (err < 0)
++		ret_err = err;
++
+ 	/* sending reset to slpc hal */
+ 	stml0xx_ms_data_buffer_write(ps_stml0xx, DT_RESET, NULL, 0);
+ 
+@@ -278,8 +297,10 @@ void stml0xx_initialize_work_func(struct work_struct *work)
+ 	wake_unlock(&ps_stml0xx->reset_wakelock);
+ 
+ 	if (ret_err >= 0)
+-		dev_err(&ps_stml0xx->spi->dev, "Sensor Hub initialization successful");
++		dev_err(&ps_stml0xx->spi->dev,
++				"Sensor Hub initialization successful");
+ 	else
+-		dev_err(&ps_stml0xx->spi->dev, "Sensor Hub initialization failed");
++		dev_err(&ps_stml0xx->spi->dev,
++				"Sensor Hub initialization failed");
+ 
+ }
+diff --git a/drivers/misc/stml0xx/stml0xx_wake_irq.c b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+index f7318653b5a..4d8664ee67d 100644
+--- a/drivers/misc/stml0xx/stml0xx_wake_irq.c
++++ b/drivers/misc/stml0xx/stml0xx_wake_irq.c
+@@ -364,7 +364,7 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 	}
+ 	if (irq_status & M_CHOPCHOP) {
+ 		stml0xx_as_data_buffer_write(ps_stml0xx, DT_CHOPCHOP,
+-						0,
++						NULL,
+ 						0, 0, stm_ws->ts_ns);
+ 
+ 		dev_dbg(&stml0xx_misc_data->spi->dev, "Sending Chopchop");
+@@ -400,6 +400,11 @@ void stml0xx_irq_wake_work_func(struct work_struct *work)
+ 			SH_TO_H32(buf + WAKE_IRQ_IDX_LIFT + LIFT_ROTATION),
+ 			SH_TO_H32(buf + WAKE_IRQ_IDX_LIFT + LIFT_GRAV_DIFF));
+ 	}
++	if (irq_status & M_UPDATE_GYRO_CAL) {
++		dev_dbg(&stml0xx_misc_data->spi->dev, "Save Gyro Cal Table");
++		stml0xx_as_data_buffer_write(ps_stml0xx, DT_GYRO_CAL,
++				NULL, 0, 0, stm_ws->ts_ns);
++	}
+ 	if (irq2_status & M_MMOVEME) {
+ 		unsigned char status;
+ 
+diff --git a/include/linux/stml0xx.h b/include/linux/stml0xx.h
+index 581d893531c..02e86ee5565 100644
+--- a/include/linux/stml0xx.h
++++ b/include/linux/stml0xx.h
+@@ -56,12 +56,14 @@ enum sh_spi_msg {
+ #include <linux/spi/spi.h>
+ 
+ /* STML0XX memory map */
++#define GYRO_CALIBRATION
+ #define VMM_ENTRY(reg, id, writable, addr, size) id,
+ #define DSP
+ enum vmm_ids {
+ #include <linux/motosh_vmm.h>
+ };
+ #undef VMM_ENTRY
++#undef GYRO_CALIBRATION
+ /* STML0XX memory map end */
+ 
+ #define LIGHTING_TABLE_SIZE 32
+@@ -425,6 +427,7 @@ extern unsigned char stml0xx_g_motion_dur;
+ extern unsigned char stml0xx_g_zmotion_dur;
+ extern unsigned char stml0xx_g_control_reg[STML0XX_CONTROL_REG_SIZE];
+ extern unsigned char stml0xx_g_mag_cal[STML0XX_MAG_CAL_SIZE];
++extern unsigned char stml0xx_g_gyro_cal[STML0XX_GYRO_CAL_SIZE];
+ extern unsigned short stml0xx_g_control_reg_restore;
+ extern bool stml0xx_g_booted;
+ 
+diff --git a/include/uapi/linux/motosh_vmm.h b/include/uapi/linux/motosh_vmm.h
+index 81fb76eb060..863ce63e9d5 100644
+--- a/include/uapi/linux/motosh_vmm.h
++++ b/include/uapi/linux/motosh_vmm.h
+@@ -223,12 +223,21 @@ VMM_ENTRY(0x3F, DOCKED_DATA,						FALSE,
+ VMM_ENTRY(0x40, COVER_DATA,						FALSE,
+ 		&vmm_cover_data,
+ 		sizeof(vmm_cover_data))
+-VMM_ENTRY(0x41, UNUSED_41,						FALSE,
+-		0,
+-		0)
+-VMM_ENTRY(0x42, GYRO_CAL,						TRUE,
++#ifdef GYRO_CALIBRATION
++VMM_ENTRY(0x41, GYRO_CAL,						TRUE,
+ 		vmm_gyro_cal,
+-		sizeof(vmm_gyro_cal))
++		GYRO_CAL_ARRAY_FIRST * sizeof(cal_value_t))
++VMM_ENTRY(0x42, GYRO_CAL_2,						TRUE,
++		&vmm_gyro_cal[GYRO_CAL_ARRAY_FIRST],
++		GYRO_CAL_ARRAY_SECOND * sizeof(cal_value_t))
++#else
++		VMM_ENTRY(0x41, UNUSED_41,				FALSE,
++				0,
++				0)
++		VMM_ENTRY(0x42, UNUSED_42,				FALSE,
++				0,
++				0)
++#endif
+ VMM_ENTRY(0x43, GYRO_DATA,						FALSE,
+ 		vmm_gyro_data,
+ 		sizeof(vmm_gyro_data))
+diff --git a/include/uapi/linux/stml0xx.h b/include/uapi/linux/stml0xx.h
+index 8955aba7e49..72a8096478c 100644
+--- a/include/uapi/linux/stml0xx.h
++++ b/include/uapi/linux/stml0xx.h
+@@ -111,7 +111,11 @@
+ 		_IOW(STML0XX_IOCTL_BASE, 38, char[FW_VERSION_SIZE])
+ #define STML0XX_IOCTL_SET_POSIX_TIME	\
+ 		_IOW(STML0XX_IOCTL_BASE, 39, unsigned long)
+-/* 40-42 unused */
++#define STML0XX_IOCTL_GET_GYRO_CAL \
++		_IOR(STML0XX_IOCTL_BASE, 40, char[STML0XX_GYRO_CAL_SIZE])
++#define STML0XX_IOCTL_SET_GYRO_CAL \
++		_IOR(STML0XX_IOCTL_BASE, 41, char[STML0XX_GYRO_CAL_SIZE])
++/* 42 unused */
+ #define STML0XX_IOCTL_SET_ALGO_REQ \
+ 		_IOR(STML0XX_IOCTL_BASE, 43, char[1])
+ #define STML0XX_IOCTL_GET_ALGO_EVT \
+@@ -148,7 +152,9 @@
+ #define STML0XX_TOUCH_REG_SIZE           8
+ #define STML0XX_POWER_REG_SIZE           3
+ #define STML0XX_MAG_CAL_SIZE             26
+-#define MOTOSH_GYRO_CAL_SIZE             198 /* 33 entries - 6 bytes each */
++#define STML0XX_GYRO_CAL_FIRST           102 /* 17 entries - 6 bytes each */
++#define STML0XX_GYRO_CAL_SECOND          96  /* 16 entries - 6 bytes each */
++#define STML0XX_GYRO_CAL_SIZE            198 /* 33 entries - 6 bytes each */
+ #define STML0XX_AS_DATA_BUFF_SIZE        20
+ #define STML0XX_MS_DATA_BUFF_SIZE        20
+ #define STML0XX_ALGO_SIZE                2
+@@ -290,6 +296,7 @@ enum STML0XX_data_types {
+ 	DT_FLUSH,
+ 	DT_LIFT,
+ 	DT_CHOPCHOP,
++	DT_GYRO_CAL,
+ };
+ 
+ enum {
+-- 
+2.11.0
+

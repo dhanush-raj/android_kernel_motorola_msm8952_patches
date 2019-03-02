@@ -1,0 +1,55 @@
+From ed14630a252e7ff13a70991938ac78dddd3abd49 Mon Sep 17 00:00:00 2001
+From: maxina <maxina@motorola.com>
+Date: Mon, 16 Nov 2015 17:03:54 +0800
+Subject: [PATCH 483/959] IKKRNBSP-3515: arm/dts: 8952: Athene: Enable USB Host
+ mode.
+
+Enabled USB Host mode only for revisions P0 and P1.
+The gpio 62 of msm8952 was used to detect USB_ID in P0 and P1 board.
+
+Change-Id: I3e2a55fe833646c61f2557f23b802ca68c2aaad8
+Signed-off-by: maxina <maxina@motorola.com>
+Reviewed-on: http://gerrit.mot.com/799656
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Ravikumar Vembu <raviv@motorola.com>
+Reviewed-by: Kenneth Kessler <kennykessler@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index bde093b3ee5..84cb45dd039 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -284,10 +284,25 @@
+ 			bias-disable; /* No PULL */
+ 		};
+ 	};
++	usb_id_pin {
++		qcom,pins = <&gp 62>;
++		qcom,num-grp-pins = <1>;
++		qcom,pin-func = <0>;
++		label = "usb-id-pin";
++		usbid_default: default {
++			drive-strength = <8>;
++			bias-pull-up;
++		};
++	};
+ };
+ 
+ &usb_otg {
+ 	qcom,usbin-vadc = <&pmi8950_vadc>;
++	qcom,hsusb-otg-mode = <3>;
++	qcom,usbid-gpio = <&msm_gpio 62 0>;
++	pinctrl-names = "default";
++	pinctrl-0 = <&usbid_default>;
++	vbus_otg-supply = <&smbcharger_charger_otg>;
+ };
+ 
+ &pmi8950_charger {
+-- 
+2.11.0
+

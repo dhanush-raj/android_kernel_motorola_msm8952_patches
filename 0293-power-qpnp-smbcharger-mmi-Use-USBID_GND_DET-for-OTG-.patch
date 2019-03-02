@@ -1,0 +1,40 @@
+From 3ad88f8a2031ff3a40bbe93acbe2594e3801dc2b Mon Sep 17 00:00:00 2001
+From: Anirudh Ghayal <aghayal@codeaurora.org>
+Date: Mon, 13 Apr 2015 19:20:42 +0530
+Subject: [PATCH 293/959] power: qpnp-smbcharger-mmi: Use USBID_GND_DET for OTG
+ detection
+
+The USB_ID_GND_DET is used for monitoring of the USBID.
+Read its RT_STS to detect OTG presence.
+
+Change-Id: Icfc133163fe86dec4a3ebb3d1091d578f45c279b
+Signed-off-by: Anirudh Ghayal <aghayal@codeaurora.org>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index e5639dad99f..1506bfbb2e6 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -689,7 +689,7 @@ static bool is_otg_present_schg(struct smbchg_chip *chip)
+ 	return (reg & RID_MASK) == 0;
+ }
+ 
+-#define RID_CHANGE_DET			BIT(3)
++#define RID_GND_DET_STS			BIT(2)
+ static bool is_otg_present_schg_lite(struct smbchg_chip *chip)
+ {
+ 	int rc;
+@@ -702,7 +702,7 @@ static bool is_otg_present_schg_lite(struct smbchg_chip *chip)
+ 		return false;
+ 	}
+ 
+-	return !!(reg & RID_CHANGE_DET);
++	return !!(reg & RID_GND_DET_STS);
+ }
+ 
+ static bool is_otg_present(struct smbchg_chip *chip)
+-- 
+2.11.0
+

@@ -1,0 +1,202 @@
+From 6fa3af46f5354d5ef28f23d2d5d3ffd83f23c5a6 Mon Sep 17 00:00:00 2001
+From: Nikit Sharma <nikitsharma92@gmail.com>
+Date: Sat, 17 Mar 2018 09:49:37 +0530
+Subject: [PATCH 774/959] =?UTF-8?q?Mot-CRs-fixed:IKSWM-24679:=20mm/page=5F?=
+ =?UTF-8?q?allo.c:=20restructure=20free-page=20stea=E2=80=A6?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+…ling code and fix a bug
+
+The free-page stealing code in __rmqueue_fallback() is somewhat hard to
+follow, and has an incredible amount of subtlety hidden inside!
+
+First off, there is a minor bug in the reporting of change-of-ownership of
+pageblocks.  Under some conditions, we try to move upto
+'pageblock_nr_pages' no.  of pages to the preferred allocation list.  But
+we change the ownership of that pageblock to the preferred type only if we
+manage to successfully move atleast half of that pageblock (or if
+page_group_by_mobility_disabled is set).
+
+However, the current code ignores the latter part and sets the
+'migratetype' variable to the preferred type, irrespective of whether we
+actually changed the pageblock migratetype of that block or not.  So, the
+page_alloc_extfrag tracepoint can end up printing incorrect info (i.e.,
+'change_ownership' might be shown as 1 when it must have been 0).
+
+So fixing this involves moving the update of the 'migratetype' variable to
+the right place.  But looking closer, we observe that the 'migratetype'
+variable is used subsequently for checks such as "is_migrate_cma()".
+Obviously the intent there is to check if the *fallback* type is
+MIGRATE_CMA, but since we already set the 'migratetype' variable to
+start_migratetype, we end up checking if the *preferred* type is
+MIGRATE_CMA!!
+
+To make things more interesting, this actually doesn't cause a bug in
+practice, because we never change *anything* if the fallback type is CMA.
+
+So, restructure the code in such a way that it is trivial to understand
+what is going on, and also fix the above mentioned bug.  And while at it,
+also add a comment explaining the subtlety behind the migratetype used in
+the call to expand().
+
+[akpm@linux-foundation.org: remove unneeded `inline', small coding-style fix]
+Signed-off-by: Srivatsa S. Bhat <srivatsa.bhat@linux.vnet.ibm.com>
+Cc: Mel Gorman <mel@csn.ul.ie>
+Cc: Minchan Kim <minchan@kernel.org>
+Cc: Cody P Schafer <cody@linux.vnet.ibm.com>
+Signed-off-by: Andrew Morton <akpm@linux-foundation.org>
+Signed-off-by: Linus Torvalds <torvalds@linux-foundation.org>
+(cherry picked from commit fef903e)
+
+Conflicts:
+
+	mm/page_alloc.c
+
+Change-Id: I9f9413259d837e98b4d0efa202b7b55d3f2b40c3
+Reviewed-on: http://gerrit.mot.com/750542
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.mot.com/831637
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ mm/page_alloc.c | 94 ++++++++++++++++++++++++++++++++++++---------------------
+ 1 file changed, 59 insertions(+), 35 deletions(-)
+
+diff --git a/mm/page_alloc.c b/mm/page_alloc.c
+index 4657bbac1e6..020c9009b4f 100644
+--- a/mm/page_alloc.c
++++ b/mm/page_alloc.c
+@@ -1080,6 +1080,52 @@ static void change_pageblock_range(struct page *pageblock_page,
+ 	}
+ }
+ 
++/*
++ * If breaking a large block of pages, move all free pages to the preferred
++ * allocation list. If falling back for a reclaimable kernel allocation, be
++ * more aggressive about taking ownership of free pages.
++ *
++ * On the other hand, never change migration type of MIGRATE_CMA pageblocks
++ * nor move CMA pages to different free lists. We don't want unmovable pages
++ * to be allocated from MIGRATE_CMA areas.
++ *
++ * Returns the new migratetype of the pageblock (or the same old migratetype
++ * if it was unchanged).
++ */
++static int try_to_steal_freepages(struct zone *zone, struct page *page,
++				  int start_type, int fallback_type)
++{
++	int current_order = page_order(page);
++
++	if (is_migrate_cma(fallback_type))
++		return fallback_type;
++
++	/* Take ownership for orders >= pageblock_order */
++	if (current_order >= pageblock_order) {
++		change_pageblock_range(page, current_order, start_type);
++		return start_type;
++	}
++
++	if (current_order >= pageblock_order / 2 ||
++	    start_type == MIGRATE_RECLAIMABLE ||
++	    page_group_by_mobility_disabled) {
++		int pages;
++
++		pages = move_freepages_block(zone, page, start_type);
++
++		/* Claim the whole block if over half of it is free */
++		if (pages >= (1 << (pageblock_order-1)) ||
++				page_group_by_mobility_disabled) {
++
++			set_pageblock_migratetype(page, start_type);
++			return start_type;
++		}
++
++	}
++
++	return fallback_type;
++}
++
+ /* Remove an element from the buddy allocator from the fallback list */
+ static inline struct page *
+ __rmqueue_fallback(struct zone *zone, int order, int start_migratetype)
+@@ -1087,7 +1133,7 @@ __rmqueue_fallback(struct zone *zone, int order, int start_migratetype)
+ 	struct free_area * area;
+ 	int current_order;
+ 	struct page *page;
+-	int migratetype, i;
++	int migratetype, new_type, i;
+ 
+ 	/* Find the largest possible block of pages in the other list */
+ 	for (current_order = MAX_ORDER-1; current_order >= order;
+@@ -1109,51 +1155,29 @@ __rmqueue_fallback(struct zone *zone, int order, int start_migratetype)
+ 			if (is_migrate_cma(migratetype))
+ 				area->nr_free_cma--;
+ 
+-			/*
+-			 * If breaking a large block of pages, move all free
+-			 * pages to the preferred allocation list. If falling
+-			 * back for a reclaimable kernel allocation, be more
+-			 * aggressive about taking ownership of free pages
+-			 *
+-			 * On the other hand, never change migration
+-			 * type of MIGRATE_CMA pageblocks nor move CMA
+-			 * pages on different free lists. We don't
+-			 * want unmovable pages to be allocated from
+-			 * MIGRATE_CMA areas.
+-			 */
+-			if (!is_migrate_cma(migratetype) &&
+-			    (unlikely(current_order >= pageblock_order / 2) ||
+-			     start_migratetype == MIGRATE_RECLAIMABLE ||
+-			     page_group_by_mobility_disabled)) {
+-				int pages;
+-				pages = move_freepages_block(zone, page,
+-								start_migratetype,0);
+-
+-				/* Claim the whole block if over half of it is free */
+-				if (pages >= (1 << (pageblock_order-1)) ||
+-						page_group_by_mobility_disabled)
+-					set_pageblock_migratetype(page,
+-								start_migratetype);
+-
+-				migratetype = start_migratetype;
+-			}
++			new_type = try_to_steal_freepages(zone, page,
++							  start_migratetype,
++							  migratetype);
+ 
+ 			/* Remove the page from the freelists */
+ 			list_del(&page->lru);
+ 			rmv_page_order(page);
+ 
+-			/* Take ownership for orders >= pageblock_order */
+-			if (current_order >= pageblock_order &&
+-			    !is_migrate_cma(migratetype))
+-				change_pageblock_range(page, current_order,
+-							start_migratetype);
++			/*
++			 * Borrow the excess buddy pages as well, irrespective
++			 * of whether we stole freepages, or took ownership of
++			 * the pageblock or not.
++			 *
++			 * Exception: When borrowing from MIGRATE_CMA, release
++			 * the excess buddy pages to CMA itself.
++			 */
+ 
+ 			expand(zone, page, order, current_order, area,
+ 			       is_migrate_cma(migratetype)
+ 			     ? migratetype : start_migratetype);
+ 
+ 			trace_mm_page_alloc_extfrag(page, order, current_order,
+-				start_migratetype, migratetype);
++				start_migratetype, new_type);
+ 
+ 			return page;
+ 		}
+-- 
+2.11.0
+

@@ -1,0 +1,43 @@
+From e2a40313390566de85d6378dfd8f221bfe8d4473 Mon Sep 17 00:00:00 2001
+From: Vignesh Mahadevan <vignesh@motorola.com>
+Date: Tue, 22 Nov 2016 22:13:30 -0500
+Subject: [PATCH 945/959] Revert "mmc: mmc: Add clk_hold/release pair before
+ caching host->ios"
+
+This reverts commit 445be96ac477ddb453200953617bbd55d9248e25.
+
+Change-Id: Icea06add8f1a9fb98fc1c7499212d6539b110f5e
+Reviewed-on: https://gerrit.mot.com/922725
+SME-Granted: SME Approvals Granted
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Vignesh Mahadevan <vignesh@motorola.com>
+SLTApproved: Vignesh Mahadevan <vignesh@motorola.com>
+---
+ drivers/mmc/core/mmc.c | 7 -------
+ 1 file changed, 7 deletions(-)
+
+diff --git a/drivers/mmc/core/mmc.c b/drivers/mmc/core/mmc.c
+index 6c763bd8acd..4a2d28e0992 100644
+--- a/drivers/mmc/core/mmc.c
++++ b/drivers/mmc/core/mmc.c
+@@ -2207,16 +2207,9 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
+ 		((host->caps2 & MMC_CAP2_FULL_PWR_CYCLE) || !is_suspend))
+ 		err = mmc_poweroff_notify(host->card, notify_type);
+ 	else if (mmc_can_sleepawake(host)) {
+-		/*
+-		 * For caching host->ios to cached_ios we need to
+-		 * make sure that clocks are not gated otherwise
+-		 * cached_ios->clock will be 0.
+-		 */
+-		mmc_host_clk_hold(host);
+ 		memcpy(&host->cached_ios, &host->ios, sizeof(host->cached_ios));
+ 		mmc_cache_card_ext_csd(host);
+ 		err = mmc_sleep(host);
+-		mmc_host_clk_release(host);
+ 	} else if (!mmc_host_is_spi(host))
+ 		err = mmc_deselect_cards(host);
+ 	host->card->state &= ~(MMC_STATE_HIGHSPEED | MMC_STATE_HIGHSPEED_200);
+-- 
+2.11.0
+

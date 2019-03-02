@@ -1,0 +1,78 @@
+From f2d15d63ea14f65ab72334a567236c385f5a4032 Mon Sep 17 00:00:00 2001
+From: Shiyong Li <a22381@motorola.com>
+Date: Fri, 22 Jan 2016 13:16:54 -0800
+Subject: [PATCH 649/959] IKKRNBSP-3589: arm/dts: msm8952: re-tune maximum
+ panel brightness
+
+Per DDC ALS curve V4, update BOE and LGD panel brightness as follows:
+
+- normal maximum brightness
+520 nits @ 20 mA for BOE
+520 nits @16.8 mA for LGD
+
+- HBM brightness
+650 nits @ 25 mA for BOE
+650 nits @ 21 mA for LGD
+
+Change-Id: I103e7ded5a1d4fd7593d5063117c174b49e95c0c
+Signed-off-by: Shiyong Li <a22381@motorola.com>
+Reviewed-on: http://gerrit.mot.com/810012
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Joseph Swantek <jswantek@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi | 4 ++--
+ arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi | 6 +++---
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+index 57874cc6e6e..27e5676eddb 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-boe-546-1080p-cmd-common.dtsi
+@@ -51,7 +51,7 @@ qcom,mdss-dsi-on-command = [
+ 	/* CABC Moving Image mode setting */
+ 	29 01 00 00 00 00 07 BA 07 7A 64 18 30 8D
+ 	/* Set Max Brightness */
+-	15 01 00 00 00 00 02 51 CD
++	15 01 00 00 00 00 02 51 CC
+ 	/* Set Minimum Brightness */
+ 	15 01 00 00 00 00 02 5E 00
+ 	/* BLU control */
+@@ -67,7 +67,7 @@ qcom,mdss-dsi-cabc-ui-command = [15 01 00 00 00 00 02 55 01];
+ qcom,mdss-dsi-cabc-mv-command = [15 01 00 00 00 00 02 55 03];
+ qcom,mdss-dsi-cabc-dis-command = [15 01 00 00 00 00 02 55 00];
+ qcom,mdss-dsi-hbm-on-command = [15 01 00 00 00 00 02 51 FF];
+-qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 CD];
++qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 CC];
+ 
+ qcom,mdss-dsi-use-blank-in-progress-notifier;
+ qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+diff --git a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+index 904eb16acf0..31a50ef6821 100644
+--- a/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
++++ b/arch/arm/boot/dts/qcom/dsi-panel-mot-lgd-546-1080p-cmd-common.dtsi
+@@ -48,7 +48,7 @@ qcom,mdss-dsi-on-command = [
+ 	/* CABC Moving Image mode setting */
+ 	29 01 00 00 00 00 07 BA 07 7A 64 18 30 8D
+ 	/* Set Max Brightness */
+-	15 01 00 00 00 00 02 51 A8
++	15 01 00 00 00 00 02 51 AB
+ 	/* Set Minimum Brightness */
+ 	15 01 00 00 00 00 02 5E 00
+ 	/* BLU control */
+@@ -63,8 +63,8 @@ qcom,mdss-dsi-off-command = [
+ qcom,mdss-dsi-cabc-ui-command = [15 01 00 00 00 00 02 55 01];
+ qcom,mdss-dsi-cabc-mv-command = [15 01 00 00 00 00 02 55 03];
+ qcom,mdss-dsi-cabc-dis-command = [15 01 00 00 00 00 02 55 00];
+-qcom,mdss-dsi-hbm-on-command = [15 01 00 00 00 00 02 51 D1];
+-qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 A8];
++qcom,mdss-dsi-hbm-on-command = [15 01 00 00 00 00 02 51 D6];
++qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 AB];
+ 
+ qcom,mdss-dsi-use-blank-in-progress-notifier;
+ qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+-- 
+2.11.0
+

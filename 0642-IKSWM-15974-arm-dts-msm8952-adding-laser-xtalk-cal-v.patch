@@ -1,0 +1,36 @@
+From 7c1becca8fa5ef47234e4572bdb356084c903c0f Mon Sep 17 00:00:00 2001
+From: Jingnan Zhu <e3334c@motorola.com>
+Date: Fri, 22 Jan 2016 11:24:18 -0600
+Subject: [PATCH 642/959] IKSWM-15974: arm/dts: msm8952: adding laser xtalk cal
+ value
+
+xtalk cal value put it to device tree for per product config
+
+Change-Id: I3ff5f091bd07e5a2b0e74a2ffd9565c6fd225f56
+Signed-off-by: Jingnan Zhu <e3334c@motorola.com>
+Reviewed-on: http://gerrit.mot.com/815487
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Hideki Yoshino <hideki.yoshino@motorola.com>
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Yun Ma <yunma@motorola.com>
+---
+ arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+index 65f27d2e53f..a790d9afe2c 100644
+--- a/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
++++ b/arch/arm/boot/dts/qcom/msm8952-moto-common.dtsi
+@@ -951,6 +951,7 @@
+ 		pinctrl-0 = <&laser_active >;
+ 		pinctrl-1 = <&laser_suspend >;
+ 		st,sensorthreshold = <40 50>;
++		st,xtalkval = <26214>;
+ 	};
+ 
+ 	elan@49 {
+-- 
+2.11.0
+

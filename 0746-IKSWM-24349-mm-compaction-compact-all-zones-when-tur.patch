@@ -1,0 +1,152 @@
+From 0d0769d796e2c82b29f5bfdebb6ab390458021ee Mon Sep 17 00:00:00 2001
+From: Yuanyuan Zhong <zyy@motorola.com>
+Date: Mon, 10 Nov 2014 16:49:23 -0600
+Subject: [PATCH 746/959] IKSWM-24349 mm: compaction: compact all zones when
+ turning off screen
+
+Register to fb notifier to compact all zones when turning off screen.
+Also do the compaction periodically if screen is kept on.
+
+Change-Id: I6b022c5d9cf4ebbcec7e60e667ce7b3abf20a7a4
+Signed-off-by: Yuanyuan Zhong <zyy@motorola.com>
+(cherry picked from commit 1adb25f6aab388e54877d7242c2314dbcf92ad35)
+Reviewed-on: http://gerrit.mot.com/697881
+Reviewed-by: Jeffrey Carlyle <jeff.carlyle@motorola.com>
+Reviewed-on: http://gerrit.mot.com/725474
+Submit-Approved: Jason Hrycay <jason.hrycay@motorola.com>
+Tested-by: Jason Hrycay <jason.hrycay@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+(cherry picked from commit c8765f1fd274ad999a26333d10a27e8dc953fdeb)
+
+Conflicts:
+
+	mm/compaction.c
+
+Change-Id: I7af2e05f442fe3fdbf5ebb796236b5de5a5ff236
+Reviewed-on: http://gerrit.mot.com/830877
+SME-Granted: SME Approvals Granted
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Russell Knize <rknize@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ mm/compaction.c | 91 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 91 insertions(+)
+
+diff --git a/mm/compaction.c b/mm/compaction.c
+index 554624bda57..bddfdd33b07 100644
+--- a/mm/compaction.c
++++ b/mm/compaction.c
+@@ -17,6 +17,10 @@
+ #include <linux/balloon_compaction.h>
+ #include <linux/page-isolation.h>
+ #include <linux/kasan.h>
++#include <linux/fb.h>
++#include <linux/kthread.h>
++#include <linux/freezer.h>
++#include <linux/module.h>
+ #include "internal.h"
+ 
+ #ifdef CONFIG_COMPACTION
+@@ -1137,6 +1141,77 @@ unsigned long try_to_compact_pages(struct zonelist *zonelist,
+ 	return rc;
+ }
+ 
++static struct compact_thread {
++	wait_queue_head_t waitqueue;
++	struct task_struct *task;
++	struct timer_list timer;
++	atomic_t should_run;
++} compact_thread;
++
++static uint compact_interval_sec = 1800;
++module_param_named(interval, compact_interval_sec, uint,
++			S_IRUGO | S_IWUSR | S_IWGRP);
++
++static void compact_nodes(void);
++
++static int compact_thread_should_run(void)
++{
++	return atomic_read(&compact_thread.should_run);
++}
++
++static void compact_thread_wakeup(void)
++{
++	atomic_set(&compact_thread.should_run, 1);
++	wake_up(&compact_thread.waitqueue);
++}
++
++static void compact_thread_timer_func(unsigned long data)
++{
++	compact_thread_wakeup();
++	mod_timer(&compact_thread.timer,
++			jiffies + (HZ * compact_interval_sec));
++}
++
++static int compact_thread_func(void *data)
++{
++	set_freezable();
++	for (;;) {
++		wait_event_freezable(compact_thread.waitqueue,
++				compact_thread_should_run());
++		if (compact_thread_should_run()) {
++			compact_nodes();
++			atomic_set(&compact_thread.should_run, 0);
++		}
++	}
++	return 0;
++}
++
++static int compact_notifier(struct notifier_block *self,
++				unsigned long event, void *data)
++{
++	struct fb_event *evdata = (struct fb_event *)data;
++
++	if ((event == FB_EVENT_BLANK) && evdata && evdata->data) {
++		int blank = *(int *)evdata->data;
++
++		if (blank == FB_BLANK_POWERDOWN) {
++			del_timer_sync(&compact_thread.timer);
++			compact_thread_wakeup();
++			return NOTIFY_OK;
++		} else if (blank == FB_BLANK_UNBLANK) {
++			if (!timer_pending(&compact_thread.timer))
++				mod_timer(&compact_thread.timer, jiffies +
++						(HZ * compact_interval_sec));
++			return NOTIFY_OK;
++		}
++	}
++	return NOTIFY_DONE;
++}
++
++static struct notifier_block compact_notifier_block = {
++	.notifier_call = compact_notifier,
++	.priority = -1,
++};
+ 
+ /* Compact all zones within a node */
+ static void __compact_pgdat(pg_data_t *pgdat, struct compact_control *cc)
+@@ -1256,4 +1331,20 @@ void compaction_unregister_node(struct node *node)
+ }
+ #endif /* CONFIG_SYSFS && CONFIG_NUMA */
+ 
++static int  __init mem_compaction_init(void)
++{
++	struct sched_param param = { .sched_priority = 0 };
++
++	init_timer_deferrable(&compact_thread.timer);
++	compact_thread.timer.function = compact_thread_timer_func;
++	init_waitqueue_head(&compact_thread.waitqueue);
++	compact_thread.task = kthread_run(compact_thread_func, NULL,
++				"%s", "kcompact");
++	if (!IS_ERR(compact_thread.task))
++		sched_setscheduler(compact_thread.task, SCHED_IDLE, &param);
++
++	fb_register_client(&compact_notifier_block);
++	return 0;
++}
++late_initcall(mem_compaction_init);
+ #endif /* CONFIG_COMPACTION */
+-- 
+2.11.0
+

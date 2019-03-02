@@ -1,0 +1,48 @@
+From 7c06e800e04d86c549fd63c30b66f8aa61ecfab2 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Tue, 5 May 2015 17:10:50 -0500
+Subject: [PATCH 250/959] IKKRNBSP-2833: power: smbchrg-mmi: Battery Age
+
+Add the Full over Design Capacity to the Battery
+Age property for Service Center Battery Age
+determination.
+
+Change-Id: Id8932fd0bfaa6cfff852d6f1dc5b0b57f6d0d0e0
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/744706
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Reviewed-by: Vidyadhar Gurram <rnh786@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 31133ace8f2..762d644af6d 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -768,6 +768,7 @@ static enum power_supply_property smbchg_battery_properties[] = {
+ 	POWER_SUPPLY_PROP_CHARGE_FULL,
+ 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+ 	POWER_SUPPLY_PROP_CYCLE_COUNT,
++	POWER_SUPPLY_PROP_AGE,
+ };
+ 
+ #define CHGR_STS			0x0E
+@@ -2980,6 +2981,10 @@ static int smbchg_battery_get_property(struct power_supply *psy,
+ 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+ 		val->intval = get_prop_charge_full_design(chip);
+ 		break;
++	case POWER_SUPPLY_PROP_AGE:
++		val->intval = ((get_prop_charge_full(chip) / 10) /
++			       (get_prop_charge_full_design(chip) / 1000));
++		break;
+ 	default:
+ 		return -EINVAL;
+ 	}
+-- 
+2.11.0
+

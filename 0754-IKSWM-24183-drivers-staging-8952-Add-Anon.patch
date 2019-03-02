@@ -1,0 +1,45 @@
+From fb0d15c790eef9261892a44a72a96e508501eca1 Mon Sep 17 00:00:00 2001
+From: Andrew Tzakis <atzakis@motorola.com>
+Date: Thu, 5 Feb 2015 09:20:11 -0600
+Subject: [PATCH 754/959] IKSWM-24183: drivers/staging: 8952: Add Anon
+
+Add global anonymous memory state to LMK logging
+
+Change-Id: I8b444056fe19bf256ee752435e65b650a9a094a3
+Signed-off-by: Andrew Tzakis <atzakis@motorola.com>
+Reviewed-on: http://gerrit.mot.com/712393
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+Reviewed-on: http://gerrit.mot.com/830269
+SME-Granted: SME Approvals Granted
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+---
+ drivers/staging/android/lowmemorykiller.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/staging/android/lowmemorykiller.c b/drivers/staging/android/lowmemorykiller.c
+index 1ea57f294f9..21b8b574aec 100644
+--- a/drivers/staging/android/lowmemorykiller.c
++++ b/drivers/staging/android/lowmemorykiller.c
+@@ -576,6 +576,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 				"   Total reserve is %ldkB\n" \
+ 				"   Total free pages is %ldkB\n" \
+ 				"   Total file cache is %ldkB\n" \
++				"   Total anon is %ldkB\n" \
+ 				"   Slab Reclaimable is %ldkB\n" \
+ 				"   Slab UnReclaimable is %ldkB\n" \
+ 				"   Total Slab is %ldkB\n" \
+@@ -596,6 +597,8 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+ 				(long)(PAGE_SIZE / 1024),
+ 			     global_page_state(NR_FILE_PAGES) *
+ 				(long)(PAGE_SIZE / 1024),
++			     global_page_state(NR_ANON_PAGES) *
++				(long)(PAGE_SIZE / 1024),
+ 			     global_page_state(NR_SLAB_RECLAIMABLE) *
+ 				(long)(PAGE_SIZE / 1024),
+ 			     global_page_state(NR_SLAB_UNRECLAIMABLE) *
+-- 
+2.11.0
+

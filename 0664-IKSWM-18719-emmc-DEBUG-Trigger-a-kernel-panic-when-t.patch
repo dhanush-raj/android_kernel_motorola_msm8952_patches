@@ -1,0 +1,43 @@
+From 04f300b07156a528818eab746bd6775797908e13 Mon Sep 17 00:00:00 2001
+From: Jiangli Yuan <jlyuan@motorola.com>
+Date: Fri, 29 Jan 2016 12:11:28 -0800
+Subject: [PATCH 664/959] IKSWM-18719:emmc:DEBUG: Trigger a kernel panic when
+ timeout count hit 10
+
+ DEBUG: Trigger a kernel panic when eMMC request timeout count hit 10
+
+Change-Id: I723b7ed3e6d83f9da9a74411aac1d59fd88e079e
+Signed-off-by: Jiangli Yuan <jlyuan@motorola.com>
+Reviewed-on: http://gerrit.mot.com/817343
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Zhi-Ming Yuan <a14194@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/mmc/card/queue.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/mmc/card/queue.c b/drivers/mmc/card/queue.c
+index 9ff67261f3b..84ef0e13866 100644
+--- a/drivers/mmc/card/queue.c
++++ b/drivers/mmc/card/queue.c
+@@ -659,10 +659,15 @@ static void mmc_cmdq_error_work(struct work_struct *work)
+ enum blk_eh_timer_return mmc_cmdq_rq_timed_out(struct request *req)
+ {
+ 	struct mmc_queue *mq = req->q->queuedata;
++	static int mmc_cmdq_req_timeout_count;
+ 
+ 	pr_err("%s: request with tag: %d flags: 0x%x timed out\n",
+ 	       mmc_hostname(mq->card->host), req->tag, req->cmd_flags);
+ 
++	mmc_cmdq_req_timeout_count++;
++	if (mmc_cmdq_req_timeout_count >= 10)
++		BUG();
++
+ 	return mq->cmdq_req_timed_out(req);
+ }
+ 
+-- 
+2.11.0
+

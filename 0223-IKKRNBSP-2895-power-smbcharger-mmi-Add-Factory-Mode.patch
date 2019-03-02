@@ -1,0 +1,79 @@
+From 0539b3f893f51939567b5c2a3149523040819278 Mon Sep 17 00:00:00 2001
+From: Kenny Kessler <kenny.kessler@motorola.com>
+Date: Thu, 22 Jan 2015 11:00:40 -0600
+Subject: [PATCH 223/959] IKKRNBSP-2895: power: smbcharger-mmi: Add Factory
+ Mode
+
+Prevent Writes in Factory Mode.  Factory mode needs
+to prevents writes so that if a Factory Cable is
+present the Power Path set by the Bootloader is not
+disturbed.
+
+Change-Id: I272d2fdbc45e4f5f650ce0e6b728a79b682e0f2c
+Signed-off-by: Kenny Kessler <kenny.kessler@motorola.com>
+Reviewed-on: http://gerrit.mot.com/706889
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Jason Knopsnyder <jasonk@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/power/qpnp-smbcharger-mmi.c | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+diff --git a/drivers/power/qpnp-smbcharger-mmi.c b/drivers/power/qpnp-smbcharger-mmi.c
+index 5ca86bc2706..07bf9768edc 100644
+--- a/drivers/power/qpnp-smbcharger-mmi.c
++++ b/drivers/power/qpnp-smbcharger-mmi.c
+@@ -219,6 +219,7 @@ struct smbchg_chip {
+ 	/* aicl deglitch workaround */
+ 	unsigned long			first_aicl_seconds;
+ 	int				aicl_irq_count;
++	bool				factory_mode;
+ };
+ 
+ enum print_reason {
+@@ -319,6 +320,9 @@ static int smbchg_write(struct smbchg_chip *chip, u8 *val,
+ 	int rc = 0;
+ 	struct spmi_device *spmi = chip->spmi;
+ 
++	if (chip->factory_mode)
++		return 0;
++
+ 	if (addr == 0) {
+ 		dev_err(chip->dev, "addr cannot be zero addr=0x%02x sid=0x%02x rc=%d\n",
+ 			addr, spmi->sid, rc);
+@@ -5143,6 +5147,19 @@ static int create_debugfs_entries(struct smbchg_chip *chip)
+ 	return 0;
+ }
+ 
++static bool smbchg_charger_mmi_factory(void)
++{
++	struct device_node *np = of_find_node_by_path("/chosen");
++	bool factory = false;
++
++	if (np)
++		factory = of_property_read_bool(np, "mmi,factory-cable");
++
++	of_node_put(np);
++
++	return factory;
++}
++
+ static int smbchg_probe(struct spmi_device *spmi)
+ {
+ 	int rc;
+@@ -5173,6 +5190,11 @@ static int smbchg_probe(struct spmi_device *spmi)
+ 		return -ENOMEM;
+ 	}
+ 
++	chip->factory_mode = smbchg_charger_mmi_factory();
++	if (chip->factory_mode)
++		dev_warn(&spmi->dev,
++			 "Entering Factory Mode SMB Writes Disabled\n");
++
+ 	INIT_WORK(&chip->usb_set_online_work, smbchg_usb_update_online_work);
+ 	INIT_DELAYED_WORK(&chip->parallel_en_work,
+ 			smbchg_parallel_usb_en_work);
+-- 
+2.11.0
+

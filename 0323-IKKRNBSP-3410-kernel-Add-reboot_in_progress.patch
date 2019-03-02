@@ -1,0 +1,68 @@
+From aa5efb5ad13b95fcc794440f51d9f70ca9420858 Mon Sep 17 00:00:00 2001
+From: Ravi Vembu <raviv@motorola.com>
+Date: Thu, 20 Aug 2015 13:29:41 -0500
+Subject: [PATCH 323/959] IKKRNBSP-3410: kernel: Add reboot_in_progress
+
+Add an API to check if system has been rebooted.
+
+Change-Id: Ic0b2b3fdd7466e89a92f9ff647f9ebb76009cf78
+Signed-off-by: Ravi Vembu <raviv@motorola.com>
+Reviewed-on: http://gerrit.mot.com/778132
+SLTApproved: Slta Waiver <sltawvr@motorola.com>
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Christopher Fries <cfries@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ include/linux/reboot.h | 1 +
+ kernel/sys.c           | 8 ++++++++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/include/linux/reboot.h b/include/linux/reboot.h
+index a883888bec9..a5e18af6548 100644
+--- a/include/linux/reboot.h
++++ b/include/linux/reboot.h
+@@ -42,6 +42,7 @@ extern void kernel_restart_prepare(char *cmd);
+ extern void kernel_restart(char *cmd);
+ extern void kernel_halt(void);
+ extern void kernel_power_off(void);
++extern int reboot_in_progress(void);
+ 
+ extern int C_A_D; /* for sysctl */
+ void ctrl_alt_del(void);
+diff --git a/kernel/sys.c b/kernel/sys.c
+index d5a81205cc1..713133b34fe 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -126,6 +126,7 @@ int C_A_D = 1;
+ struct pid *cad_pid;
+ EXPORT_SYMBOL(cad_pid);
+ 
++atomic_t reboot_triggered;
+ /*
+  * If set, this is used for preparing the system to power off.
+  */
+@@ -461,6 +462,12 @@ void kernel_power_off(void)
+ }
+ EXPORT_SYMBOL_GPL(kernel_power_off);
+ 
++int reboot_in_progress(void)
++{
++	return atomic_read(&reboot_triggered);
++}
++EXPORT_SYMBOL_GPL(reboot_in_progress);
++
+ static DEFINE_MUTEX(reboot_mutex);
+ 
+ /*
+@@ -499,6 +506,7 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
+ 	if (ret)
+ 		return ret;
+ 
++	atomic_set(&reboot_triggered, 1);
+ 	/* Instead of trying to make the power_off code look like
+ 	 * halt when pm_power_off is not set do it the easy way.
+ 	 */
+-- 
+2.11.0
+

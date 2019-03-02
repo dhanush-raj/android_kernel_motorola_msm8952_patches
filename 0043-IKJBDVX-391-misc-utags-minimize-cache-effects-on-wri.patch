@@ -1,0 +1,37 @@
+From 4fcdcd3ad0fc616ca022a58c6509476c1a0409d2 Mon Sep 17 00:00:00 2001
+From: Dmitry Ornatsky <cdo021c@motorola.com>
+Date: Thu, 6 Jun 2013 17:07:10 -0500
+Subject: [PATCH 043/959] IKJBDVX-391 misc: utags: minimize cache effects on
+ write
+
+Add O_SYNC to assure synchronous I/O for utags
+
+Signed-off-by: Dmitry Ornatsky <cdo021c@motorola.com>
+
+Change-Id: Id164135299b067f8e367ba84d5d61de783c3932b
+Reviewed-on: http://gerrit.pcs.mot.com/544773
+SLT-Approved: Slta Waiver <sltawvr@motorola.com>
+Tested-by: Jira Key <jirakey@motorola.com>
+Reviewed-by: Dmitry Ornatsky <cdo021c@motorola.com>
+Reviewed-by: Jason Hrycay <jason.hrycay@motorola.com>
+Submit-Approved: Jira Key <jirakey@motorola.com>
+---
+ drivers/misc/utag/utags.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/misc/utag/utags.c b/drivers/misc/utag/utags.c
+index a6a185d3c59..fcc431a0e13 100644
+--- a/drivers/misc/utag/utags.c
++++ b/drivers/misc/utag/utags.c
+@@ -579,7 +579,7 @@ flash_partition(const char *partition_name, const struct utag *tags)
+ 	fs = get_fs();
+ 	set_fs(KERNEL_DS);
+ 
+-	filep = filp_open(partition_name, O_RDWR, 0);
++	filep = filp_open(partition_name, O_RDWR|O_SYNC, 0);
+ 	if (IS_ERR_OR_NULL(filep)) {
+ 		file_errno = -PTR_ERR(filep);
+ 		pr_err("%s ERROR opening file (%s) errno=%d\n", __func__,
+-- 
+2.11.0
+
